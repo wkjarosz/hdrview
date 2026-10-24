@@ -10,6 +10,8 @@
 #include "box.h"
 #include "edit/progress.h"
 
+#include <vector>
+
 /**
     Neighborhood filters over one channel.
 
@@ -108,3 +110,34 @@ Array2Df zapped_gremlins(const Array2Df &src, const Box2i &region, float replace
 */
 Array2Df unsharp_masked(const Array2Df &src, const Box2i &region, float sigma, float amount,
                         AtomicProgress progress = {});
+
+/// How a mip level is filtered from the one before it.
+enum MipFilter : int
+{
+    MipFilter_Box = 0,  ///< The average of what each sample covers
+    MipFilter_Mitchell, ///< Mitchell and Netravali's cubic, which stb's resampler shrinks with by default
+    MipFilter_Gaussian, ///< A Gaussian of a given width, in the level's own samples
+
+    MipFilter_COUNT
+};
+
+/// The name the mip dialog shows for \p filter, a MipFilter.
+const char *mip_filter_name(int filter);
+
+/// The sizes of the levels below an image of \p size, \p per_octave of them to each halving, down to a single sample.
+/**
+    Level l is the size times 2^(-l / per_octave), rounded down, so a level a whole number of octaves down is the
+    image halved that many times, as repeated halving rounds it. A level that would come out the size of the one
+    before it, as small sizes do several to an octave, is left out.
+*/
+std::vector<int2> mip_level_sizes(int2 size, int per_octave);
+
+/// The mip level of \p size below \p previous, filtered from it by \p filter, a MipFilter.
+/**
+    Box and Mitchell are stb's resampler's. A Gaussian blurs the level by \p sigma of its own samples, which are r of
+    \p previous's, given that \p previous is already blurred by \p blurred of its own. The level is read bilinearly
+    from \p previous at its sample centers, which blurs by a variance v of its own, so \p previous is first blurred by
+    what that lacks, sqrt((r sigma)^2 - blurred^2 - v). Gaussians compose, so along a chain of these each level is as
+    if filtered from the image itself, whose own blur is none.
+*/
+Array2Df mip_level(const Array2Df &previous, int2 size, int filter, float sigma = 0.5f, float blurred = 0.f);

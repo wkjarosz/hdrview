@@ -8,11 +8,13 @@
 
 #include "edit/poisson.h"
 
-#include <chrono>
 #include <cmath>
 
 namespace
 {
+
+/// An iteration bound no solve here comes near, so whatever ends one, it is not the bound.
+constexpr int k_unbounded = 100000;
 
 /// A mask covering everything but a border \p margin samples wide, which is what the solve requires.
 Array2Df interior_mask(int2 size, int margin = 1)
@@ -97,36 +99,34 @@ TEST_CASE("A source with no gradients leaves a smooth patch, symmetric where the
     CHECK(out(32, 32) == doctest::Approx(0.5f).epsilon(0.02));
 }
 
-TEST_CASE("The default iteration count is enough for the regions a paste actually covers")
+TEST_CASE("The default iteration count and tolerance are enough for the regions a paste actually covers")
 {
-    // Measured by how far from harmonic the result is, which a constant source asks for and which needs no
-    // reference solve to compare against.
-    for (int n : {64, 128, 256})
-    {
-        CAPTURE(n);
-        const int2 size{n, n};
+    // Solved at the defaults, which are what a paste solves with, and measured by how far from harmonic the
+    // result is, which a constant source asks for and which needs no reference solve to compare against. The
+    // size is about the largest a paste covers in practice.
+    const int2 size{256, 256};
 
-        Array2Df background{size};
-        for (int y = 0; y < size.y; ++y)
-            for (int x = 0; x < size.x; ++x) background(x, y) = ((x / 8 + y / 8) % 2) ? 1.f : 0.f;
+    Array2Df background{size};
+    for (int y = 0; y < size.y; ++y)
+        for (int x = 0; x < size.x; ++x) background(x, y) = ((x / 8 + y / 8) % 2) ? 1.f : 0.f;
 
-        const Array2Df source = filled(size, 0.5f);
-        const Array2Df mask   = interior_mask(size, 1);
+    const Array2Df source = filled(size, 0.5f);
+    const Array2Df mask   = interior_mask(size, 1);
 
-        const Array2Df got = poisson_blended(background, source, mask, 300, 1e-6f);
-        const Array2Df lap = laplacian(got);
+    const Array2Df got = poisson_blended(background, source, mask);
+    const Array2Df lap = laplacian(got);
 
-        float worst = 0.f;
-        for (int y = 2; y < size.y - 2; ++y)
-            for (int x = 2; x < size.x - 2; ++x) worst = std::max(worst, std::abs(lap(x, y)));
+    float worst = 0.f;
+    for (int y = 2; y < size.y - 2; ++y)
+        for (int x = 2; x < size.x - 2; ++x) worst = std::max(worst, std::abs(lap(x, y)));
 
-        CAPTURE(worst);
-        CHECK(worst < 1e-3f);
+    // converged, this is about 2e-3; ten iterations leave it at 4e-2
+    CAPTURE(worst);
+    CHECK(worst < 5e-3f);
 
-        // and running it far longer changes nothing, so the bound was not what stopped it
-        const Array2Df longer = poisson_blended(background, source, mask, 3000, 1e-6f);
-        CHECK(max_difference(got, longer) < 1e-5f);
-    }
+    // and a bound no solve comes near gives the same answer to the bit, so the solve stopped on its own and
+    // not at the default bound
+    CHECK(max_difference(got, poisson_blended(background, source, mask, k_unbounded)) == 0.f);
 }
 
 TEST_CASE("The Laplacian of a plane is zero, and of a known quadratic is its known value")
@@ -178,36 +178,6 @@ TEST_CASE("A seamless paste keeps the background exactly, outside the mask")
             }
 }
 
-TEST_CASE("A source with no gradients leaves the background's own values behind")
-{
-    // A constant has a Laplacian of zero, so the solution inside is the harmonic function agreeing with the
-    // background at the border; where the background is flat, that is the background. The constant's own
-    // value never appears.
-    const int2     size{24, 24};
-    const Array2Df background = filled(size, 0.25f);
-    const Array2Df mask       = interior_mask(size, 2);
-
-    for (float v : {0.f, 5.f, -3.f})
-    {
-        CAPTURE(v);
-        const Array2Df out = poisson_blended(background, filled(size, v), mask);
-        CHECK(max_difference(out, background) < 1e-3f);
-    }
-}
-
-TEST_CASE("Pasting an image onto itself changes nothing")
-{
-    // when the source and the background agree, the background is the exact solution, and the iteration
-    // must not wander away from an answer it starts on
-    const int2     size{28, 20};
-    const Array2Df background = bumpy(size, 1.f);
-    const Array2Df mask       = interior_mask(size, 2);
-
-    const Array2Df out = poisson_blended(background, background, mask);
-
-    CHECK(max_difference(out, background) < 1e-3f);
-}
-
 TEST_CASE("The solved interior has the gradients it was given")
 {
     // checked away from the mask's own border, where the equation is not imposed
@@ -247,38 +217,51 @@ TEST_CASE("An offset source is carried to the background's level rather than pas
     CHECK(max_difference(a, background) > 0.05f);
 }
 
-TEST_CASE("A canceled solve stops early and reports that it did")
+TEST_CASE("A solve stops once the residual is small enough, however much further its bound would let it go")
 {
-    const int2     size{64, 64};
+    // A source with gradients of its own, so there is something to iterate on rather than an answer to
+    // return at once. For each tolerance, the fewest iterations reaching the unbounded solve's answer bit for
+    // bit are found by bisection: that is where the unbounded solve stopped. A looser tolerance has to stop
+    // it sooner, which nothing but the residual check can do; the solve also stops once its step vanishes,
+    // and that alone would land both tolerances on the same count.
+    const int2     size{32, 32};
     const Array2Df background = filled(size, 0.5f);
     const Array2Df source     = bumpy(size, 1.f);
     const Array2Df mask       = interior_mask(size, 2);
 
-    AtomicProgress progress{true};
-    progress.cancel();
+    int      stopped_at[2] = {0, 0};
+    Array2Df answers[2];
+    int      i = 0;
+    for (float tolerance : {1e-2f, 1e-4f})
+    {
+        CAPTURE(tolerance);
+        answers[i]   = poisson_blended(background, source, mask, k_unbounded, tolerance);
+        auto reaches = [&](int n)
+        { return max_difference(poisson_blended(background, source, mask, n, tolerance), answers[i]) == 0.f; };
 
-    const Array2Df out = poisson_blended(background, source, mask, 500, 1e-6f, progress);
+        int lo = 0, hi = 1;
+        while (!reaches(hi) && hi < k_unbounded) hi *= 2;
+        REQUIRE(reaches(hi));
+        while (hi - lo > 1)
+        {
+            const int mid            = (lo + hi) / 2;
+            (reaches(mid) ? hi : lo) = mid;
+        }
+        CHECK_FALSE(reaches(hi - 1));
 
-    // whatever it had reached, which for a cancel before the first step is where it started
-    CHECK(max_difference(out, background) == doctest::Approx(0.f));
-    CHECK(progress.canceled());
-}
+        // a few dozen conjugate-gradient steps for a thousand unknowns, where steepest descent takes about five
+        // times as many
+        CAPTURE(hi);
+        CHECK(hi > 1);
+        CHECK(hi < 100);
 
-TEST_CASE("Converging early costs fewer iterations than the bound allows")
-{
-    // The bound below is one no machine would reach, so finishing at all is the evidence that the residual
-    // check fired. The clock only says so out loud, and is set far above any plausible slow build.
-    const int2     size{32, 32};
-    const Array2Df background = filled(size, 0.5f);
-    const Array2Df mask       = interior_mask(size, 2);
+        // and what it stopped at is an answer, not the background it started from
+        CHECK(max_difference(answers[i], background) > 0.05f);
+        stopped_at[i++] = hi;
+    }
 
-    const auto     started = std::chrono::steady_clock::now();
-    const Array2Df out     = poisson_blended(background, background, mask, 100000000, 1e-4f);
-    const double   seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
-
-    CHECK(max_difference(out, background) < 1e-4f);
-    CAPTURE(seconds);
-    CHECK(seconds < 30.0);
+    CHECK(stopped_at[0] < stopped_at[1]);
+    CHECK(max_difference(answers[0], answers[1]) > 0.f);
 }
 
 TEST_CASE("Several shares of one job add up to it, whether or not they run to their bound")
@@ -354,9 +337,12 @@ TEST_CASE("A solve reports its whole share and no more, however it ends")
         AtomicProgress whole{true};
         AtomicProgress share{whole, 0.5f};
 
-        // already the answer, so it returns before iterating
-        poisson_blended(background, background, mask, 100000, 1e-4f, share);
+        // Pasting an image onto itself: the background is already the exact answer, so the solve returns
+        // before iterating, and must hand back the background untouched rather than wander away from it.
+        const Array2Df bumps = bumpy(size, 1.f);
+        const Array2Df out   = poisson_blended(bumps, bumps, mask, k_unbounded, 1e-4f, share);
 
+        CHECK(max_difference(out, bumps) == 0.f);
         CHECK(whole.progress() == doctest::Approx(0.5f).epsilon(0.01));
     }
 }

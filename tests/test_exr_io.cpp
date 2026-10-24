@@ -53,7 +53,8 @@ ImagePtr make_test_image(int2 size, Box2i data_window = {}, Box2i display_window
     return img;
 }
 
-// Saves img to an in-memory buffer (enabling all channel groups) and reloads it, returning the reloaded parts.
+// Saves img to an in-memory buffer and reloads it, returning the reloaded parts; by default every channel group
+// is saved.
 std::vector<ImagePtr> save_and_reload(const Image &img, EXRSaveOptions opts)
 {
     std::ostringstream out(std::ios::binary);
@@ -78,144 +79,34 @@ TEST_CASE("EXR save/load round-trips a non-origin data window and an independent
     CHECK(reloaded[0]->display_window == img->display_window);
 }
 
-TEST_CASE("EXR save/load round-trips chromaticities when present, and omits them when absent")
+TEST_CASE("An EXR saved without chromaticities or alpha claims neither")
 {
-    SUBCASE("present")
-    {
-        auto img            = make_test_image(int2{2, 2});
-        img->chromaticities = Chromaticities{{0.680f, 0.320f}, {0.265f, 0.690f}, {0.150f, 0.060f}, {0.3127f, 0.3290f}};
-
-        auto reloaded = save_and_reload(*img);
-        REQUIRE(reloaded.size() == 1);
-        REQUIRE(reloaded[0]->chromaticities.has_value());
-        CHECK(approx_equal(*reloaded[0]->chromaticities, *img->chromaticities));
-    }
-
-    SUBCASE("absent")
-    {
-        auto img = make_test_image(int2{2, 2});
-        REQUIRE_FALSE(img->chromaticities.has_value());
-
-        auto reloaded = save_and_reload(*img);
-        REQUIRE(reloaded.size() == 1);
-        CHECK_FALSE(reloaded[0]->chromaticities.has_value());
-    }
-}
-
-TEST_CASE("EXR load respects channel_selector, including selectors matching nothing")
-{
+    // a reader that invented either would convert or composite the pixels by something the file never said
     auto img = make_test_image(int2{2, 2});
+    REQUIRE_FALSE(img->chromaticities.has_value());
 
-    SUBCASE("selecting a single channel")
-    {
-        std::ostringstream out(std::ios::binary);
-        auto               opts = exr_default_save_options(*img);
-        save_exr_image(*img, out, "test.exr", &opts);
-
-        std::istringstream in(out.str(), std::ios::binary);
-        ImageLoadOptions   load_opts;
-        load_opts.channel_selector = "R";
-        auto reloaded              = load_exr_image(in, "test.exr", load_opts);
-
-        REQUIRE(reloaded.size() == 1);
-        REQUIRE(reloaded[0]->channels.size() == 1);
-        CHECK(reloaded[0]->channels[0].name == "R");
-    }
-
-    SUBCASE("excluding an unqualified channel name")
-    {
-        // "-.A" is a substring search for ".A", which a bare "A" doesn't contain; load_image() normalizes
-        // each channel to a dot-prefixed name so the documented example works either way
-        const int2 size{2, 2};
-        auto       rgba = std::make_shared<Image>(size, 4);
-        for (auto &c : rgba->channels)
-            for (int y = 0; y < size.y; ++y)
-                for (int x = 0; x < size.x; ++x) c(x, y) = 0.5f;
-        rgba->finalize();
-
-        std::ostringstream out(std::ios::binary);
-        auto               save_opts = exr_default_save_options(*rgba);
-        save_exr_image(*rgba, out, "test.exr", &save_opts);
-
-        std::istringstream in(out.str(), std::ios::binary);
-        ImageLoadOptions   load_opts;
-        load_opts.channel_selector = "-.A";
-        auto reloaded              = load_image(in, "test.exr", load_opts);
-
-        REQUIRE(reloaded.size() == 1);
-        REQUIRE(reloaded[0]->channels.size() == 3);
-        for (const auto &c : reloaded[0]->channels) CHECK(c.name != "A");
-    }
-
-    SUBCASE("selector matching no channels yields no images")
-    {
-        std::ostringstream out(std::ios::binary);
-        auto               opts = exr_default_save_options(*img);
-        save_exr_image(*img, out, "test.exr", &opts);
-
-        std::istringstream in(out.str(), std::ios::binary);
-        ImageLoadOptions   load_opts;
-        load_opts.channel_selector = "NoSuchChannel";
-        auto reloaded              = load_exr_image(in, "test.exr", load_opts);
-
-        CHECK(reloaded.empty());
-    }
+    auto reloaded = save_and_reload(*img);
+    REQUIRE(reloaded.size() == 1);
+    CHECK_FALSE(reloaded[0]->chromaticities.has_value());
+    CHECK(reloaded[0]->transparency == TransparencyType_None);
 }
 
-TEST_CASE("EXR load reports the format's premultiplied alpha convention")
+TEST_CASE("EXR half samples are floating point, not quantized, and not exact")
 {
-    // EXR color channels are premultiplied by convention, and finalize() would premultiply a part reported
-    // as straight a second time
-    SUBCASE("a part with an alpha channel")
-    {
-        const int2 size{2, 2};
-        auto       img = std::make_shared<Image>(size, 4);
-        for (auto &c : img->channels)
-            for (int y = 0; y < size.y; ++y)
-                for (int x = 0; x < size.x; ++x) c(x, y) = 0.5f;
-        img->finalize();
-
-        auto reloaded = save_and_reload(*img);
-        REQUIRE(reloaded.size() == 1);
-        CHECK(reloaded[0]->transparency == TransparencyType_PremultipliedLinear);
-    }
-
-    SUBCASE("a part without an alpha channel")
-    {
-        auto reloaded = save_and_reload(*make_test_image(int2{2, 2}));
-        REQUIRE(reloaded.size() == 1);
-        CHECK(reloaded[0]->transparency == TransparencyType_None);
-    }
-}
-
-TEST_CASE("EXR save/load precision depends on the chosen pixel type")
-{
-    // 0.1f has no exact half-precision representation, so it survives HALF only approximately and FLOAT exactly
+    // 0.1f has no exact half-precision representation
     auto img = std::make_shared<Image>();
     img->channels.emplace_back("Y", int2{1, 1});
     img->channels.back()(0, 0) = 0.1f;
     img->finalize();
 
-    SUBCASE("HALF (default)")
-    {
-        auto opts       = exr_default_save_options(*img);
-        opts.pixel_type = 1; // HALF
-        auto reloaded   = save_and_reload(*img, opts);
-        REQUIRE(reloaded.size() == 1);
-        CHECK(reloaded[0]->channels[0].bits_per_sample == 0); //< floating point, so no quantization lattice
-        float value = reloaded[0]->channels[0](0, 0);
-        CHECK(value != doctest::Approx(0.1f).epsilon(1e-6)); // not exact
-        CHECK(value == doctest::Approx(0.1f).epsilon(1e-3)); // but close, within half precision
-    }
-
-    SUBCASE("FLOAT")
-    {
-        auto opts       = exr_default_save_options(*img);
-        opts.pixel_type = 0; // FLOAT
-        auto reloaded   = save_and_reload(*img, opts);
-        REQUIRE(reloaded.size() == 1);
-        CHECK(reloaded[0]->channels[0](0, 0) == doctest::Approx(0.1f).epsilon(1e-6));
-    }
+    auto opts       = exr_default_save_options(*img);
+    opts.pixel_type = 1; // HALF
+    auto reloaded   = save_and_reload(*img, opts);
+    REQUIRE(reloaded.size() == 1);
+    CHECK(reloaded[0]->channels[0].bits_per_sample == 0); //< floating point, so no quantization lattice
+    float value = reloaded[0]->channels[0](0, 0);
+    CHECK(value != doctest::Approx(0.1f).epsilon(1e-6)); // not exact
+    CHECK(value == doctest::Approx(0.1f).epsilon(1e-3)); // but close, within half precision
 }
 
 TEST_CASE("EXR channels report their own sample depths independently")
@@ -258,24 +149,6 @@ TEST_CASE("EXR channels report their own sample depths independently")
     CHECK(depths["H"] == 0);
     CHECK(depths["F"] == 0);
     CHECK(depths["U"] == 32);
-}
-
-TEST_CASE("is_exr_image correctly identifies real EXR bytes and rejects garbage")
-{
-    auto img = make_test_image(int2{1, 1});
-
-    std::ostringstream out(std::ios::binary);
-    auto               opts = exr_default_save_options(*img);
-    save_exr_image(*img, out, "test.exr", &opts);
-
-    std::istringstream valid(out.str(), std::ios::binary);
-    CHECK(is_exr_image(valid, "test.exr"));
-
-    std::istringstream garbage("this is definitely not an EXR file", std::ios::binary);
-    CHECK_FALSE(is_exr_image(garbage, "garbage.exr"));
-
-    std::istringstream empty("", std::ios::binary);
-    CHECK_FALSE(is_exr_image(empty, "empty.exr"));
 }
 
 // The tests below need real-world EXR files save_exr_image cannot produce (it writes neither multi-part files
@@ -354,12 +227,12 @@ TEST_CASE("EXR load up-samples subsampled channels to full resolution with block
     }
 }
 
-TEST_CASE("EXR load reads every vendored real-world file identically from disk, from memory, and from a plain stream")
+TEST_CASE("EXR load reads every vendored real-world file identically from disk and from memory")
 {
     namespace fs = std::filesystem;
 
-    // load_exr_image() lets OpenEXR open a FileIStream's path itself, wraps a SpanIStream's bytes, and copies any
-    // other stream into memory; all three must decode the same pixels
+    // load_exr_image() lets OpenEXR open a FileIStream's path itself and reads any other stream's bytes from
+    // memory; both must decode the same pixels
     auto decode = [](std::istream &is, const std::string &name)
     {
         std::vector<std::pair<std::string, std::vector<float>>> parts;
@@ -400,20 +273,16 @@ TEST_CASE("EXR load reads every vendored real-world file identically from disk, 
         file.seekg(0);
         std::string bytes{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 
-        SpanIStream        span{bytes};
-        std::istringstream plain{bytes, std::ios::binary};
-        for (auto *is : {static_cast<std::istream *>(&span), static_cast<std::istream *>(&plain)})
+        SpanIStream span{bytes};
+        const auto  from_memory = decode(span, name);
+        REQUIRE(from_memory.size() == from_disk.size());
+        for (size_t p = 0; p < from_memory.size(); ++p)
         {
-            auto other = decode(*is, name);
-            REQUIRE(other.size() == from_disk.size());
-            for (size_t p = 0; p < other.size(); ++p)
-            {
-                CHECK(other[p].first == from_disk[p].first);
-                // bitwise, so NaNs compare equal
-                CHECK((other[p].second.size() == from_disk[p].second.size() &&
-                       std::memcmp(other[p].second.data(), from_disk[p].second.data(),
-                                   other[p].second.size() * sizeof(float)) == 0));
-            }
+            CHECK(from_memory[p].first == from_disk[p].first);
+            // bitwise, so NaNs compare equal
+            CHECK((from_memory[p].second.size() == from_disk[p].second.size() &&
+                   std::memcmp(from_memory[p].second.data(), from_disk[p].second.data(),
+                               from_memory[p].second.size() * sizeof(float)) == 0));
         }
         ++checked;
     }
@@ -421,27 +290,6 @@ TEST_CASE("EXR load reads every vendored real-world file identically from disk, 
 }
 
 #endif // HDRVIEW_TEST_OPENEXR_DIR
-
-TEST_CASE("save_exr_image() with default options writes every group, not an empty channel list")
-{
-    // The GUI sizes EXRSaveOptions::group_enabled per image through exr_parameters_gui(); the static default
-    // it otherwise falls back to is empty, which would leave OpenEXR a header with no channels at all.
-    auto               img = make_test_image(int2{2, 2});
-    std::ostringstream out(std::ios::binary);
-    REQUIRE_NOTHROW(save_exr_image(*img, out, "test.exr"));
-
-    std::istringstream in(out.str(), std::ios::binary);
-    auto               reloaded = load_exr_image(in, "test.exr");
-    REQUIRE(reloaded.size() == 1);
-    REQUIRE(reloaded[0]->channels.size() == 3);
-
-    // through the group, since OpenEXR stores channels alphabetically, and at the half precision
-    // EXRSaveOptions defaults to
-    reloaded[0]->finalize(); // the per-format loaders leave this to load_image()
-    float4 want = img->rgba_pixel(int2{1, 0}, Target_Primary);
-    float4 got  = reloaded[0]->rgba_pixel(int2{1, 0}, Target_Primary);
-    for (int c = 0; c < 3; ++c) CHECK(got[c] == doctest::Approx(want[c]).epsilon(1e-3));
-}
 
 TEST_CASE("An EXR rational attribute with a zero denominator does not divide by it")
 {

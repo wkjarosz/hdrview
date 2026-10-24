@@ -10,7 +10,11 @@
 #include "ipc/ipc_packet.h"
 #include "ipc_test_helpers.h"
 
+#include <algorithm>
 #include <cstring>
+#include <functional>
+#include <string>
+#include <utility>
 
 namespace
 {
@@ -41,107 +45,260 @@ void append_string(std::vector<char> &v, std::string_view s)
 
 IpcPacket parse(const std::vector<char> &bytes) { return IpcPacket{bytes.data(), bytes.size()}; }
 
-} // namespace
-
-TEST_CASE("IPC packets round-trip through the wire format")
+/// An UpdateImage (v1) packet, which carried one channel and did not say so.
+std::vector<char> update_v1(std::string_view channel, int2 size, const std::vector<float> &plane)
 {
-    SUBCASE("OpenImage keeps the path and selector apart")
-    {
-        auto p = ipc_test::open_image("/tmp/render.exr", "diffuse", true);
-        CHECK(p.type() == IpcPacketType::OpenImageV2);
+    std::vector<char> payload;
+    payload.push_back(0); // grab_focus
+    append_string(payload, "img");
+    append_string(payload, channel);
+    append<int32_t>(payload, 0);
+    append<int32_t>(payload, 0);
+    append<int32_t>(payload, size.x);
+    append<int32_t>(payload, size.y);
+    for (float v : plane) append<float>(payload, v);
+    return framed(IpcPacketType::UpdateImage, payload);
+}
 
-        auto info = parse(p.bytes()).as_open_image();
-        CHECK(info.path == "/tmp/render.exr");
-        CHECK(info.channel_selector == "diffuse");
-        CHECK(info.grab_focus);
+/// An UpdateImageV2 packet, which added a channel count but kept one contiguous plane per channel.
+std::vector<char> update_v2(const std::vector<std::string> &channels, int2 size, const std::vector<float> &planes)
+{
+    std::vector<char> payload;
+    payload.push_back(0); // grab_focus
+    append_string(payload, "img");
+    append<int32_t>(payload, int32_t(channels.size()));
+    for (const auto &c : channels) append_string(payload, c);
+    append<int32_t>(payload, 0);
+    append<int32_t>(payload, 0);
+    append<int32_t>(payload, size.x);
+    append<int32_t>(payload, size.y);
+    for (float v : planes) append<float>(payload, v);
+    return framed(IpcPacketType::UpdateImageV2, payload);
+}
+
+/// Every drawing command, with the number of floats tev's own VgCommand::bytes() says each one carries.
+/**
+    Transcribed from tev's include/tev/VectorGraphics.h rather than derived from VgCommand::num_floats(), so
+    the reader and the builder below cannot agree with each other on a count tev does not use.
+*/
+const std::vector<std::pair<VgCommand::Type, int>> &tev_arity()
+{
+    using T = VgCommand::Type;
+    static const std::vector<std::pair<T, int>> table{
+        {T::Save, 0},
+        {T::Restore, 0},
+        {T::FillColor, 4},
+        {T::Fill, 0},
+        {T::StrokeColor, 4},
+        {T::Stroke, 0},
+        {T::BeginPath, 0},
+        {T::ClosePath, 0},
+        {T::PathWinding, 1},
+        {T::DebugDumpPathCache, 0},
+        {T::MoveTo, 2},
+        {T::LineTo, 2},
+        {T::ArcTo, 5},
+        {T::Arc, 6},
+        {T::BezierTo, 6},
+        {T::Circle, 3},
+        {T::Ellipse, 4},
+        {T::QuadTo, 4},
+        {T::Rect, 4},
+        {T::RoundedRect, 5},
+        {T::RoundedRectVarying, 8},
+        {T::Text, 2},
+        {T::TextAlign, 1},
+        {T::FontFace, 0},
+        {T::FontSize, 2},
+        {T::StrokeWidth, 2},
+    };
+    return table;
+}
+
+/// One command of every type, each carrying data no other one does.
+std::vector<VgCommand> one_command_of_each_type()
+{
+    std::vector<VgCommand> commands;
+    for (const auto &[type, n] : tev_arity())
+    {
+        VgCommand c{type, {}, {}};
+        for (int k = 0; k < n; ++k) c.data.push_back(100.f * float(int(type)) + float(k) + 0.5f);
+        if (type == VgCommand::Type::Text || type == VgCommand::Type::FontFace)
+            c.text = "text of " + std::to_string(int(type));
+        commands.push_back(std::move(c));
     }
+    return commands;
+}
 
-    SUBCASE("CloseImage carries just a name")
+/// Checks that an UpdateImage's addressing reaches `sample(c, px)` for each pixel `px` of channel `c`.
+template <typename F>
+void check_update(const IpcUpdateImage &info, const std::vector<std::string> &names, const Box2i &bounds, F &&sample)
+{
+    CHECK(info.name == "img");
+    CHECK(info.bounds == bounds);
+    CHECK(info.channel_names == names);
+    REQUIRE(info.num_channels() == int(names.size()));
+    REQUIRE(info.channel_offsets.size() == names.size());
+    REQUIRE(info.channel_strides.size() == names.size());
+
+    // the addressing IpcUpdateImage documents, which is all the rest of the code reads, lands on each channel's
+    // own samples; row_stride() has to agree with it, since upload_tile() is driven by that pair
+    const int n_pixels = bounds.size().x * bounds.size().y;
+    REQUIRE(info.data.size() == size_t(n_pixels) * names.size());
+    for (int c = 0; c < info.num_channels(); ++c)
     {
-        auto info = parse(ipc_test::close_image("beauty").bytes()).as_close_image();
-        CHECK(info.name == "beauty");
-    }
-
-    SUBCASE("ReloadImage")
-    {
-        auto info = parse(ipc_test::reload_image("beauty", false).bytes()).as_reload_image();
-        CHECK(info.name == "beauty");
-        CHECK_FALSE(info.grab_focus);
-    }
-
-    SUBCASE("CreateImage names every channel")
-    {
-        const std::vector<std::string> names{"R", "G", "B", "albedo.R"};
-        auto info = parse(ipc_test::create_image("render", true, int2{64, 32}, names).bytes()).as_create_image();
-
-        CHECK(info.name == "render");
-        CHECK(info.size == int2{64, 32});
-        CHECK(info.channel_names == names);
-    }
-
-    SUBCASE("UpdateImage preserves the interleaved payload and how to address it")
-    {
-        // three channels interleaved, as a renderer hands over an RGB bucket
-        const Box2i                    bounds{int2{4, 8}, int2{8, 12}};
-        const std::vector<std::string> names{"R", "G", "B"};
-        const std::vector<int64_t>     offsets{0, 1, 2};
-        const std::vector<int64_t>     strides{3, 3, 3};
-
-        std::vector<float> data(size_t(bounds.size().x) * bounds.size().y * 3);
-        for (size_t i = 0; i < data.size(); ++i) data[i] = float(i) * 0.5f;
-
-        auto info = parse(ipc_test::update_image("render", false, names, offsets, strides, bounds, data).bytes())
-                        .as_update_image();
-
-        CHECK(info.name == "render");
-        CHECK(info.bounds == bounds);
-        CHECK(info.channel_names == names);
-        CHECK(info.channel_offsets == offsets);
-        CHECK(info.channel_strides == strides);
-        REQUIRE(info.data.size() == data.size());
-        CHECK(info.data == data);
-
-        // the addressing the struct documents has to land on the right samples
-        const int n_pixels = bounds.size().x * bounds.size().y;
-        for (int c = 0; c < info.num_channels(); ++c)
-            for (int px = 0; px < n_pixels; ++px)
-                CHECK(info.data[size_t(info.channel_offsets[c] + px * info.channel_strides[c])] ==
-                      data[size_t(px * 3 + c)]);
-
-        // ...and row_stride() has to agree with it, since upload_tile() is driven by that pair
-        CHECK(info.row_stride(0) == int64_t(bounds.size().x) * 3);
+        CAPTURE(c);
+        CHECK(info.row_stride(c) == int64_t(bounds.size().x) * info.channel_strides[c]);
+        for (int px = 0; px < n_pixels; ++px)
+        {
+            CAPTURE(px);
+            CHECK(info.data[size_t(info.channel_offsets[c] + px * info.channel_strides[c])] == sample(c, px));
+        }
     }
 }
 
-TEST_CASE("VectorGraphics packets round-trip, including the per-type argument counts")
+/// A well-formed packet of one type, and what reading it back has to yield.
+struct PacketCase
 {
-    // the stream carries no per-command length, so a command's type is the only thing that says where the
-    // next one starts
-    std::vector<VgCommand> commands{
-        {VgCommand::Type::BeginPath, {}},
-        {VgCommand::Type::StrokeColor, {1.f, 0.5f, 0.f, 1.f}},
-        {VgCommand::Type::StrokeWidth, {2.f, float(VgCommand::Relative)}},
-        {VgCommand::Type::Rect, {4.f, 8.f, 16.f, 32.f}},
-        {VgCommand::Type::MoveTo, {1.f, 2.f}},
-        {VgCommand::Type::BezierTo, {3.f, 4.f, 5.f, 6.f, 7.f, 8.f}},
-        {VgCommand::Type::Stroke, {}},
-        {VgCommand::Type::FontSize, {20.f, float(VgCommand::Relative)}},
-        {VgCommand::Type::TextAlign, {float(VgCommand::AlignLeft | VgCommand::AlignBaseline)}},
-        {VgCommand::Type::FontFace, {}, "sans-bold"},
-        {VgCommand::Type::Text, {5.f, 9.f}, "Tile 7"},
+    IpcPacket                              packet;
+    std::function<void(const IpcPacket &)> check;
+};
+
+/// A packet of every type the builders can make, and of the UpdateImage and OpenImage versions they cannot.
+/**
+    The UpdateImage versions carry the same samples three ways: one channel (v1, which did not say how many),
+    one contiguous plane per channel (v2), and interleaved (v3, as a renderer hands over an RGB bucket). Each
+    has to arrive as offsets and strides that address them.
+*/
+std::vector<PacketCase> packets_of_every_type()
+{
+    const Box2i              bounds{int2{4, 8}, int2{7, 10}};
+    const int                n_pixels = bounds.size().x * bounds.size().y;
+    std::vector<float>       data(size_t(n_pixels) * 3);
+    std::vector<std::string> names{"R", "G", "B"};
+    for (size_t i = 0; i < data.size(); ++i) data[i] = float(i);
+    const std::vector<float> plane(data.begin(), data.begin() + n_pixels);
+    const Box2i              tile{int2{0}, bounds.size()}; // where v1 and v2 put theirs
+
+    std::vector<char> open_v1;
+    open_v1.push_back(1); // grab_focus
+    append_string(open_v1, "/tmp/render.exr:diffuse");
+
+    const std::vector<std::string> create_names{"R", "G", "B", "albedo.R"};
+    const auto                     commands = one_command_of_each_type();
+
+    return {
+        {parse(framed(IpcPacketType::OpenImage, open_v1)),
+         [](const IpcPacket &p)
+         {
+             // v1 packed the selector into the path, which is left unsplit
+             const auto info = p.as_open_image();
+             CHECK(info.path == "/tmp/render.exr:diffuse");
+             CHECK(info.channel_selector.empty());
+             CHECK(info.grab_focus);
+         }},
+        {ipc_test::open_image("/tmp/render.exr", "diffuse", true),
+         [](const IpcPacket &p)
+         {
+             CHECK(p.type() == IpcPacketType::OpenImageV2);
+             const auto info = p.as_open_image();
+             CHECK(info.path == "/tmp/render.exr");
+             CHECK(info.channel_selector == "diffuse");
+             CHECK(info.grab_focus);
+         }},
+        {ipc_test::reload_image("beauty", false),
+         [](const IpcPacket &p)
+         {
+             const auto info = p.as_reload_image();
+             CHECK(info.name == "beauty");
+             CHECK_FALSE(info.grab_focus);
+         }},
+        {ipc_test::close_image("beauty"), [](const IpcPacket &p) { CHECK(p.as_close_image().name == "beauty"); }},
+        {ipc_test::create_image("render", true, int2{64, 32}, create_names),
+         [create_names](const IpcPacket &p)
+         {
+             const auto info = p.as_create_image();
+             CHECK(info.name == "render");
+             CHECK(info.grab_focus);
+             CHECK(info.size == int2{64, 32});
+             CHECK(info.channel_names == create_names);
+         }},
+        {parse(update_v1("Y", bounds.size(), plane)), [tile](const IpcPacket &p)
+         { check_update(p.as_update_image(), {"Y"}, tile, [](int, int px) { return float(px); }); }},
+        {parse(update_v2(names, bounds.size(), data)),
+         [tile, names, n_pixels](const IpcPacket &p)
+         {
+             check_update(p.as_update_image(), names, tile,
+                          [n_pixels](int c, int px) { return float(c * n_pixels + px); });
+         }},
+        {ipc_test::update_image("img", true, names, {0, 1, 2}, {3, 3, 3}, bounds, data),
+         [bounds, names](const IpcPacket &p)
+         {
+             const auto info = p.as_update_image();
+             CHECK(info.grab_focus);
+             check_update(info, names, bounds, [](int c, int px) { return float(px * 3 + c); });
+         }},
+        {ipc_test::vector_graphics("render", true, true, commands),
+         [commands](const IpcPacket &p)
+         {
+             const auto info = p.as_vector_graphics();
+             CHECK(info.name == "render");
+             CHECK(info.grab_focus);
+             CHECK(info.append);
+             REQUIRE(info.commands.size() == commands.size());
+             for (size_t i = 0; i < commands.size(); ++i)
+             {
+                 CAPTURE(int(commands[i].type));
+                 CHECK(info.commands[i].type == commands[i].type);
+                 CHECK(info.commands[i].data == commands[i].data);
+                 CHECK(info.commands[i].text == commands[i].text);
+             }
+         }},
     };
+}
 
-    auto info = parse(ipc_test::vector_graphics("render", false, true, commands).bytes()).as_vector_graphics();
-
-    CHECK(info.name == "render");
-    CHECK(info.append);
-    REQUIRE(info.commands.size() == commands.size());
-    for (size_t i = 0; i < commands.size(); ++i)
+/// Read \p p's payload with the reader its type calls for.
+void read_payload(const IpcPacket &p)
+{
+    switch (p.type())
     {
-        CAPTURE(i);
-        CHECK(info.commands[i].type == commands[i].type);
-        CHECK(info.commands[i].data == commands[i].data);
-        CHECK(info.commands[i].text == commands[i].text);
+    case IpcPacketType::OpenImage:
+    case IpcPacketType::OpenImageV2: p.as_open_image(); break;
+    case IpcPacketType::ReloadImage: p.as_reload_image(); break;
+    case IpcPacketType::CloseImage: p.as_close_image(); break;
+    case IpcPacketType::CreateImage: p.as_create_image(); break;
+    case IpcPacketType::UpdateImage:
+    case IpcPacketType::UpdateImageV2:
+    case IpcPacketType::UpdateImageV3: p.as_update_image(); break;
+    case IpcPacketType::VectorGraphics: p.as_vector_graphics(); break;
+    default: FAIL("no reader for packet type ", int(p.type()));
+    }
+}
+
+} // namespace
+
+TEST_CASE("IPC packets of every type round-trip through the wire format")
+{
+    for (const auto &[packet, check] : packets_of_every_type())
+    {
+        CAPTURE(int(packet.type()));
+        check(parse(packet.bytes()));
+    }
+}
+
+TEST_CASE("Every drawing command has tev's argument count")
+{
+    // The stream carries no per-command length, so a command's type is the only thing that says where the
+    // next one starts, and the count has to be tev's own or neither side can read what the other wrote.
+    for (int t = -128; t <= 127; ++t)
+    {
+        CAPTURE(t);
+        const auto type     = VgCommand::Type(int8_t(t));
+        const auto in_table = std::find_if(tev_arity().begin(), tev_arity().end(),
+                                           [type](const auto &entry) { return entry.first == type; });
+        // anything else, Invalid included, is a type whose length is unknown
+        CHECK(VgCommand::num_floats(type) == (in_table == tev_arity().end() ? -1 : in_table->second));
+        CHECK(VgCommand::has_text(type) == (type == VgCommand::Type::Text || type == VgCommand::Type::FontFace));
     }
 }
 
@@ -173,26 +330,6 @@ TEST_CASE("A VectorGraphics packet with an unreadable command stream is refused"
         CHECK_THROWS_AS(parse(framed_vg(tail)).as_vector_graphics(), std::runtime_error);
     }
 
-    SUBCASE("a command whose arguments run off the end")
-    {
-        std::vector<char> tail;
-        append<int32_t>(tail, 1);
-        tail.push_back(char(VgCommand::Type::BezierTo)); // wants six floats
-        append<float>(tail, 1.f);                        // only one follows
-        CHECK_THROWS_AS(parse(framed_vg(tail)).as_vector_graphics(), std::runtime_error);
-    }
-
-    SUBCASE("a text command with no terminator on its string")
-    {
-        std::vector<char> tail;
-        append<int32_t>(tail, 1);
-        tail.push_back(char(VgCommand::Type::Text));
-        append<float>(tail, 0.f);
-        append<float>(tail, 0.f);
-        tail.insert(tail.end(), {'h', 'i'}); // no NUL
-        CHECK_THROWS_AS(parse(framed_vg(tail)).as_vector_graphics(), std::runtime_error);
-    }
-
     SUBCASE("an empty command list is legitimate -- it clears the overlay")
     {
         std::vector<char> tail;
@@ -200,58 +337,6 @@ TEST_CASE("A VectorGraphics packet with an unreadable command stream is refused"
         auto info = parse(framed_vg(tail)).as_vector_graphics();
         CHECK(info.commands.empty());
         CHECK(info.append);
-    }
-}
-
-TEST_CASE("Older UpdateImage versions are read as the newer one's equivalent")
-{
-    // V1 had no channel count and one channel; V2 added the count but kept the planes contiguous. Both have
-    // to arrive as offsets/strides, which is all the rest of the code reads.
-    const int32_t      w = 2, h = 2;
-    std::vector<float> plane_a{1.f, 2.f, 3.f, 4.f};
-    std::vector<float> plane_b{5.f, 6.f, 7.f, 8.f};
-
-    SUBCASE("v1 implies a single channel")
-    {
-        std::vector<char> payload;
-        payload.push_back(0); // grab_focus
-        append_string(payload, "img");
-        append_string(payload, "Y");
-        append<int32_t>(payload, 0);
-        append<int32_t>(payload, 0);
-        append<int32_t>(payload, w);
-        append<int32_t>(payload, h);
-        for (float v : plane_a) append<float>(payload, v);
-
-        auto info = parse(framed(IpcPacketType::UpdateImage, payload)).as_update_image();
-        CHECK(info.num_channels() == 1);
-        CHECK(info.channel_offsets == std::vector<int64_t>{0});
-        CHECK(info.channel_strides == std::vector<int64_t>{1});
-        CHECK(info.data == plane_a);
-    }
-
-    SUBCASE("v2 concatenates one plane per channel")
-    {
-        std::vector<char> payload;
-        payload.push_back(0);
-        append_string(payload, "img");
-        append<int32_t>(payload, 2);
-        append_string(payload, "Y");
-        append_string(payload, "A");
-        append<int32_t>(payload, 0);
-        append<int32_t>(payload, 0);
-        append<int32_t>(payload, w);
-        append<int32_t>(payload, h);
-        for (float v : plane_a) append<float>(payload, v);
-        for (float v : plane_b) append<float>(payload, v);
-
-        auto info = parse(framed(IpcPacketType::UpdateImageV2, payload)).as_update_image();
-        CHECK(info.num_channels() == 2);
-        // a plane per channel, so the second starts a whole tile in and both step by one
-        CHECK(info.channel_offsets == std::vector<int64_t>{0, w * h});
-        CHECK(info.channel_strides == std::vector<int64_t>{1, 1});
-        CHECK(info.data.size() == plane_a.size() + plane_b.size());
-        CHECK(info.data[size_t(info.channel_offsets[1])] == plane_b[0]);
     }
 }
 
@@ -279,56 +364,55 @@ TEST_CASE("Malformed IPC packets are refused rather than believed")
         CHECK_THROWS_AS(p.as_create_image(), std::runtime_error);
     }
 
-    SUBCASE("a string with no terminator")
+    SUBCASE("a packet cut short anywhere")
     {
-        std::vector<char> payload{'n', 'a', 'm', 'e'}; // runs off the end
-        CHECK_THROWS_AS(parse(framed(IpcPacketType::CloseImage, payload)).as_close_image(), std::runtime_error);
+        // Every field a packet carries is one its reader needs, so any prefix of a well-formed packet, framed
+        // with a length that agrees with it, is missing something: a string's terminator, a count, an
+        // argument, a sample.
+        for (const auto &[whole, check] : packets_of_every_type())
+        {
+            CAPTURE(int(whole.type()));
+            REQUIRE_NOTHROW(read_payload(whole));
+
+            const auto &bytes = whole.bytes();
+            for (size_t n = sizeof(uint32_t) + 1; n < bytes.size(); ++n)
+            {
+                CAPTURE(n);
+                std::vector<char> cut(bytes.begin(), bytes.begin() + n);
+                write_as(reinterpret_cast<unsigned char *>(cut.data()), uint32_t(n), Endian::Little);
+                CHECK_THROWS_AS(read_payload(parse(cut)), std::runtime_error);
+            }
+        }
     }
 
-    SUBCASE("a channel count that would be an allocation attack")
+    SUBCASE("a channel count or tile size no update can have")
     {
-        std::vector<char> payload;
-        payload.push_back(0);
-        append_string(payload, "img");
-        append<int32_t>(payload, 1 << 30);
-        CHECK_THROWS_AS(parse(framed(IpcPacketType::UpdateImageV2, payload)).as_update_image(), std::runtime_error);
-    }
+        // A count that would be an allocation attack, a negative one, tiles negative along both axes and along
+        // one, and one whose 2^32 pixels wrap to 0 in 32 bits. Each is followed by the samples believing it
+        // would read, where those are few enough to send, so nothing but the check on the header refuses it.
+        const struct
+        {
+            int32_t channels;
+            int2    size;
+            int     samples;
+        } headers[] = {{1 << 30, {}, 0}, {-1, {}, 0}, {1, {-4, -4}, 16}, {1, {-4, 4}, 16}, {1, {65536, 65536}, 0}};
 
-    SUBCASE("a negative channel count")
-    {
-        std::vector<char> payload;
-        payload.push_back(0);
-        append_string(payload, "img");
-        append<int32_t>(payload, -1);
-        CHECK_THROWS_AS(parse(framed(IpcPacketType::UpdateImageV2, payload)).as_update_image(), std::runtime_error);
-    }
-
-    SUBCASE("negative tile dimensions")
-    {
-        std::vector<char> payload;
-        payload.push_back(0);
-        append_string(payload, "img");
-        append<int32_t>(payload, 1);
-        append_string(payload, "Y");
-        append<int32_t>(payload, 0);
-        append<int32_t>(payload, 0);
-        append<int32_t>(payload, -4);
-        append<int32_t>(payload, -4);
-        CHECK_THROWS_AS(parse(framed(IpcPacketType::UpdateImageV2, payload)).as_update_image(), std::runtime_error);
-    }
-
-    SUBCASE("dimensions that overflow into a plausible pixel count")
-    {
-        std::vector<char> payload;
-        payload.push_back(0);
-        append_string(payload, "img");
-        append<int32_t>(payload, 1);
-        append_string(payload, "Y");
-        append<int32_t>(payload, 0);
-        append<int32_t>(payload, 0);
-        append<int32_t>(payload, 65536);
-        append<int32_t>(payload, 65536); // 2^32 pixels: wraps to 0 in 32 bits
-        CHECK_THROWS_AS(parse(framed(IpcPacketType::UpdateImageV2, payload)).as_update_image(), std::runtime_error);
+        for (const auto &h : headers)
+        {
+            CAPTURE(h.channels);
+            CAPTURE(h.size);
+            std::vector<char> payload;
+            payload.push_back(0);
+            append_string(payload, "img");
+            append<int32_t>(payload, h.channels);
+            if (h.channels == 1)
+            {
+                append_string(payload, "Y");
+                for (int32_t v : {0, 0, h.size.x, h.size.y}) append<int32_t>(payload, v);
+                for (int i = 0; i < h.samples; ++i) append<float>(payload, 1.f);
+            }
+            CHECK_THROWS_AS(parse(framed(IpcPacketType::UpdateImageV2, payload)).as_update_image(), std::runtime_error);
+        }
     }
 
     SUBCASE("an offset or stride that would read outside the payload")
@@ -358,71 +442,5 @@ TEST_CASE("Malformed IPC packets are refused rather than believed")
         CHECK_THROWS_AS(parse(with(0, -1)).as_update_image(), std::runtime_error);
         // multiplying these overflows int64 instead of exceeding the payload
         CHECK_THROWS_AS(parse(with(0, std::numeric_limits<int64_t>::max())).as_update_image(), std::runtime_error);
-    }
-
-    SUBCASE("update data that stops short")
-    {
-        std::vector<char> payload;
-        payload.push_back(0);
-        append_string(payload, "img");
-        append<int32_t>(payload, 1);
-        append_string(payload, "Y");
-        append<int32_t>(payload, 0);
-        append<int32_t>(payload, 0);
-        append<int32_t>(payload, 4);
-        append<int32_t>(payload, 4);
-        append<float>(payload, 1.f); // one sample where sixteen were promised
-        CHECK_THROWS_AS(parse(framed(IpcPacketType::UpdateImageV2, payload)).as_update_image(), std::runtime_error);
-    }
-}
-
-TEST_CASE("A byte stream is split back into the packets that were written into it")
-{
-    // what a socket delivers: whatever has arrived, split wherever the network chose
-    std::vector<char> stream;
-    for (const auto &p : {ipc_test::close_image("a"), ipc_test::close_image("bb"), ipc_test::close_image("ccc")})
-        stream.insert(stream.end(), p.bytes().begin(), p.bytes().end());
-
-    SUBCASE("all at once")
-    {
-        std::vector<std::string> names;
-        auto                     buffer = stream;
-        extract_ipc_packets(buffer, [&](const IpcPacket &p) { names.push_back(p.as_close_image().name); });
-
-        CHECK(names == std::vector<std::string>{"a", "bb", "ccc"});
-        CHECK(buffer.empty());
-    }
-
-    SUBCASE("one byte at a time, which is the case that exercises the buffering")
-    {
-        std::vector<std::string> names;
-        std::vector<char>        buffer;
-        for (char c : stream)
-        {
-            buffer.push_back(c);
-            extract_ipc_packets(buffer, [&](const IpcPacket &p) { names.push_back(p.as_close_image().name); });
-        }
-
-        CHECK(names == std::vector<std::string>{"a", "bb", "ccc"});
-        CHECK(buffer.empty());
-    }
-
-    SUBCASE("a trailing partial packet is kept for the next read")
-    {
-        std::vector<std::string> names;
-        auto                     buffer = stream;
-        buffer.resize(buffer.size() - 1); // cut the last packet short
-
-        extract_ipc_packets(buffer, [&](const IpcPacket &p) { names.push_back(p.as_close_image().name); });
-
-        CHECK(names == std::vector<std::string>{"a", "bb"});
-        CHECK_FALSE(buffer.empty()); // the remainder of "ccc" is still waiting
-    }
-
-    SUBCASE("an impossible length is unrecoverable, since nothing marks a packet boundary")
-    {
-        std::vector<char> buffer(sizeof(uint32_t));
-        write_as(reinterpret_cast<unsigned char *>(buffer.data()), uint32_t(2), Endian::Little);
-        CHECK_THROWS_AS(extract_ipc_packets(buffer, [](const IpcPacket &) {}), std::runtime_error);
     }
 }

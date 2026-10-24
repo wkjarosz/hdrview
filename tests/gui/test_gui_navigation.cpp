@@ -81,7 +81,7 @@ static void use_flat_list_mode(ImGuiTestContext *ctx)
     ctx->Yield(2);
 }
 
-/// The channel-group rows named "(R,G,B,A)", one per fixture, matched by name rather than by depth.
+/// The channel-group rows named "(R,G,B,A)", one per fixture, matched by name since header cells share their depth.
 static std::vector<ImGuiID> gather_rgba_group_rows(ImGuiTestContext *ctx)
 {
     ImGuiTestItemList all_items;
@@ -119,48 +119,13 @@ void RegisterTests_Navigation(ImGuiTestEngine *engine)
         IM_CHECK_EQ(hdrview()->current_image_index(), 1);
     };
 
-    t           = IM_REGISTER_TEST(engine, "navigation", "mouse_click_select");
-    t->TestFunc = [](ImGuiTestContext *ctx)
-    {
-        load_both_fixtures(ctx);
-
-        std::vector<ImGuiID> row_ids = gather_image_rows(ctx);
-        IM_CHECK_EQ((int)row_ids.size(), 2);
-
-        ctx->ItemClick(row_ids[1]);
-        IM_CHECK_EQ(hdrview()->current_image_index(), 1);
-
-        ctx->KeyDown(ImGuiMod_Shift);
-        ctx->ItemClick(row_ids[0]);
-        ctx->KeyUp(ImGuiMod_Shift);
-        IM_CHECK_EQ(hdrview()->reference_image_index(), 0);
-    };
-
     t           = IM_REGISTER_TEST(engine, "navigation", "shift_click_toggles_reference_group_off");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
         load_both_fixtures(ctx);
+        use_flat_list_mode(ctx);
 
-        // channel-group rows only exist in the "flat list" file-list mode, and the mode persists in the app
-        // settings, so drive the combo. Its entries are icon-prefixed: address them by position, 1 = flat list.
-        ctx->SetRef("");
-        ctx->ItemClick("//Images/##channel list mode");
-        ImGuiTestItemList modes;
-        ctx->GatherItems(&modes, "//$FOCUSED", -1);
-        IM_CHECK(modes.GetSize() > 1);
-        ctx->ItemClick(modes[1]->ID);
-        ctx->Yield();
-
-        // group rows and the table's header cells are both depth-3 items drawn with a leading icon glyph,
-        // so match the group name instead; each RGBA fixture contributes one row named "(R,G,B,A)"
-        ImGuiTestItemList all_items;
-        ctx->GatherItems(&all_items, "//Images", -1);
-
-        std::vector<ImGuiID> group_ids;
-        for (const ImGuiTestItemInfo &item : all_items)
-            if (item.Depth == 3 && item.Window && strstr(item.Window->Name, "ImageList") != nullptr &&
-                strstr(item.DebugLabel, "(R,G,B,A)") != nullptr)
-                group_ids.push_back(item.ID);
+        std::vector<ImGuiID> group_ids = gather_rgba_group_rows(ctx);
         IM_CHECK_EQ((int)group_ids.size(), 2);
 
         // shift-click adopts the clicked group as this image's reference group and makes it the reference
@@ -182,8 +147,8 @@ void RegisterTests_Navigation(ImGuiTestEngine *engine)
         IM_CHECK_EQ(img->reference_group, -1);
     };
 
-    // the whole click state machine in one walk: a plain click collapses the selection or moves current
-    // through it, ctrl/cmd toggles, and neither may empty the selection or put current outside it
+    // the whole click state machine in one walk: a plain click selects its row alone, inside the selection or not,
+    // ctrl/cmd toggles, and neither may empty the selection or put current outside it
     t           = IM_REGISTER_TEST(engine, "navigation", "ctrl_click_multi_selection");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
@@ -207,11 +172,18 @@ void RegisterTests_Navigation(ImGuiTestEngine *engine)
         IM_CHECK(image_is_selected(1));
         IM_CHECK_EQ(hdrview()->current_image_index(), 0);
 
-        // a plain click inside the selection keeps it, and only moves current
+        // and a plain click inside the selection narrows it to that row, as it would anywhere else
         ctx->ItemClick(row_ids[1]);
         IM_CHECK_EQ(hdrview()->current_image_index(), 1);
-        IM_CHECK(image_is_selected(0));
+        IM_CHECK(!image_is_selected(0));
         IM_CHECK(image_is_selected(1));
+
+        // ctrl/cmd adds the other back, leaving current where it is
+        ctx->KeyDown(ImGuiMod_Ctrl);
+        ctx->ItemClick(row_ids[0]);
+        ctx->KeyUp(ImGuiMod_Ctrl);
+        IM_CHECK(image_is_selected(0));
+        IM_CHECK_EQ(hdrview()->current_image_index(), 1);
 
         // taking the current row out of the selection hands current to what is left of it
         ctx->KeyDown(ImGuiMod_Ctrl);
@@ -276,19 +248,30 @@ void RegisterTests_Navigation(ImGuiTestEngine *engine)
         ctx->KeyUp(ImGuiMod_Ctrl);
         for (int i = 0; i < 2; ++i) IM_CHECK(image_is_selected(i));
 
+        // a plain click on a group inside the selection narrows it to that group, and ctrl/cmd adds the other back
+        ctx->ItemClick(group_ids[1]);
+        IM_CHECK(!image_is_selected(0));
+        IM_CHECK(image_is_selected(1));
+        ctx->KeyDown(ImGuiMod_Ctrl);
+        ctx->ItemClick(group_ids[0]);
+        ctx->KeyUp(ImGuiMod_Ctrl);
+        for (int i = 0; i < 2; ++i) IM_CHECK(image_is_selected(i));
+
         // right-clicking a row inside the selection covers the whole selection
         ctx->ItemClick(group_ids[1], ImGuiMouseButton_Right);
         ctx->ItemClick("//$FOCUSED/Ungroup channels");
         // the action is posted to the main thread, since it rebuilds the layer list the panel is walking
         ctx->Yield(4);
 
+        // each image's group taken apart, and of its pieces only the one on screen selected
         for (int i = 0; i < 2; ++i)
         {
             IM_CHECK_EQ((int)hdrview()->image(i)->groups.size(), 4);
             IM_CHECK_EQ((int)hdrview()->image(i)->history.size(), 1);
+            IM_CHECK((hdrview()->image(i)->selected_groups() == std::vector<int>{hdrview()->image(i)->selected_group}));
         }
 
-        // edited images left loaded would make the next test's close_all_images() prompt
+        // edited images left loaded would make a later test's close_all_images() prompt
         reset_images(ctx);
     };
 

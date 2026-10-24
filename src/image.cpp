@@ -838,44 +838,29 @@ void Image::set_null_texture(Target_ target)
     for (int c = 0; c < 4; ++c) s->set_texture(fmt::format("{}_{}_texture", t, c), black_texture());
 }
 
+int4 Image::shader_slots(Target_ target) const
+{
+    const ChannelGroup &group = groups[active_group_index(target)];
+    switch (group.num_channels)
+    {
+    case 1: return int4{0, 0, 0, k_slot_white};
+    case 2: return group.type == ChannelGroup::YA_Channels ? int4{0, 0, 0, 1} : int4{0, 1, k_slot_black, k_slot_white};
+    case 3: return int4{0, 1, 2, k_slot_white};
+    default: return int4{0, 1, 2, 3};
+    }
+}
+
 void Image::set_as_texture(Target_ target)
 {
-    auto                s         = hdrview()->shader();
-    auto                t         = target_name(target);
-    int                 group_idx = active_group_index(target);
-    const ChannelGroup &group     = groups[group_idx];
-
-    for (int c = 0; c < group.num_channels; ++c)
-        s->set_texture(fmt::format("{}_{}_texture", t, c), channels[group.channels[c]].get_texture());
-
-    if (group.num_channels == 4)
-        return;
-
-    if (group.num_channels == 1) // if group has 1 channel, replicate it across RGB, and set A=1
-    {
-        s->set_texture(fmt::format("{}_{}_texture", t, 1), channels[group.channels[0]].get_texture());
-        s->set_texture(fmt::format("{}_{}_texture", t, 2), channels[group.channels[0]].get_texture());
-        s->set_texture(fmt::format("{}_{}_texture", t, 3), Image::white_texture());
-    }
-    else if (group.num_channels == 2) // if group has 2 channels, depends on the type
-    {
-        if (group.type == ChannelGroup::YA_Channels)
-        {
-            // if group is YA, replicate the Y channel across RGB, and put A in the 4th channel
-            s->set_texture(fmt::format("{}_{}_texture", t, 1), channels[group.channels[0]].get_texture());
-            s->set_texture(fmt::format("{}_{}_texture", t, 2), channels[group.channels[0]].get_texture());
-            s->set_texture(fmt::format("{}_{}_texture", t, 3), channels[group.channels[1]].get_texture());
-        }
-        else
-        {
-            // for other x-channel groups, set 3rd channel to black, and set A=1
-            s->set_texture(fmt::format("{}_{}_texture", t, 1), channels[group.channels[1]].get_texture());
-            s->set_texture(fmt::format("{}_{}_texture", t, 2), Image::black_texture());
-            s->set_texture(fmt::format("{}_{}_texture", t, 3), Image::white_texture());
-        }
-    }
-    else if (group.num_channels == 3) // if group has 3 channels, set A=1
-        s->set_texture(fmt::format("{}_{}_texture", t, 3), Image::white_texture());
+    auto        s     = hdrview()->shader();
+    auto        t     = target_name(target);
+    const auto &group = groups[active_group_index(target)];
+    const int4  slots = shader_slots(target);
+    for (int k = 0; k < 4; ++k)
+        s->set_texture(fmt::format("{}_{}_texture", t, k), slots[k] >= 0
+                                                               ? channels[group.channels[slots[k]]].get_texture()
+                                                           : slots[k] == k_slot_white ? Image::white_texture()
+                                                                                      : Image::black_texture());
 }
 
 Image::Image() : id(s_next_image_id++) {}

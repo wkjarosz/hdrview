@@ -42,167 +42,144 @@ bool matches_original(const ImagePtr &img)
     return true;
 }
 
-// Everything the geometric operations preserve or change, as one description.
-struct Shape
+/// The channel names, and the layers and groups built from them, as one comparable value.
+std::vector<std::string> structure_of(const ImagePtr &img)
 {
-    int2  size;
-    Box2i data_window, display_window;
-};
-
-Shape shape_of(const ImagePtr &img) { return {img->size(), img->data_window, img->display_window}; }
-
-bool operator==(const Shape &a, const Shape &b)
-{
-    return a.size == b.size && a.data_window == b.data_window && a.display_window == b.display_window;
+    std::vector<std::string> out;
+    for (const auto &c : img->channels) out.push_back("channel " + c.name);
+    for (const auto &g : img->groups)
+    {
+        std::string group = "group " + g.name + ":";
+        for (int i = 0; i < g.num_channels; ++i) group += " " + std::to_string(g.channels[i]);
+        out.push_back(group);
+    }
+    out.push_back("layers " + std::to_string(img->layers.size()));
+    return out;
 }
 
 } // namespace
 
-TEST_CASE("Each geometric operation is undone exactly by its opposite")
+TEST_CASE("Each geometric operation moves every sample where it says, and its opposite brings it back")
 {
     // Undoing a flip or quarter turn stores no pixels, which is sound only while the round trip is
-    // bit-identical: no sample lost, none resampled.
+    // bit-identical: no sample lost, none resampled. A round trip alone passes a no-op, though, or a pair
+    // that is the wrong way round consistently, so each is held to its closed form first.
     struct Case
     {
         const char *name;
         void (Image::*forward)();
         void (Image::*backward)();
+        int2 (*to)(int2 p, int2 size); ///< where the sample at \p p of a \p size image lands
     };
     const Case cases[] = {
-        {"flip horizontally", &Image::flip_horizontal, &Image::flip_horizontal},
-        {"flip vertically", &Image::flip_vertical, &Image::flip_vertical},
-        {"transpose", &Image::transpose, &Image::transpose},
-        {"rotate 90 cw", &Image::rotate_90_cw, &Image::rotate_90_ccw},
-        {"rotate 90 ccw", &Image::rotate_90_ccw, &Image::rotate_90_cw},
+        {"flip horizontally", &Image::flip_horizontal, &Image::flip_horizontal,
+         [](int2 p, int2 s) { return int2{s.x - 1 - p.x, p.y}; }},
+        {"flip vertically", &Image::flip_vertical, &Image::flip_vertical,
+         [](int2 p, int2 s) { return int2{p.x, s.y - 1 - p.y}; }},
+        {"transpose", &Image::transpose, &Image::transpose, [](int2 p, int2) { return int2{p.y, p.x}; }},
+        // clockwise, the top-left sample ends at the top right, and counter-clockwise at the bottom left
+        {"rotate 90 cw", &Image::rotate_90_cw, &Image::rotate_90_ccw,
+         [](int2 p, int2 s) { return int2{s.y - 1 - p.y, p.x}; }},
+        {"rotate 90 ccw", &Image::rotate_90_ccw, &Image::rotate_90_cw,
+         [](int2 p, int2 s) { return int2{p.y, s.x - 1 - p.x}; }},
     };
+
+    // off center both ways and not square, so a window left in place, or moved by the wrong formula, shows:
+    // the shape of a raw CFA part, whose display window is the sensor's active area
+    const Box2i display{int2{0, 1}, int2{3, 3}};
 
     for (const auto &c : cases)
     {
         CAPTURE(c.name);
-        auto        img      = make_test_image();
-        const Shape original = shape_of(img);
+        auto img            = make_test_image();
+        img->display_window = display;
+
+        const auto structure = structure_of(img);
 
         (img.get()->*c.forward)();
-        (img.get()->*c.backward)();
 
-        CHECK(shape_of(img) == original);
+        // the size is the box two opposite corners land in: the image's, transposed or not
+        const int2 size = la::max(c.to(int2{0}, k_size), c.to(k_size - 1, k_size)) + 1;
+        REQUIRE(img->size() == size);
+        CHECK(img->data_window == Box2i{int2{0}, size});
+
+        for (int ch = 0; ch < 3; ++ch)
+            for (int y = 0; y < k_size.y; ++y)
+                for (int x = 0; x < k_size.x; ++x)
+                {
+                    CAPTURE(ch);
+                    CAPTURE(x);
+                    CAPTURE(y);
+                    const int2 q = c.to(int2{x, y}, k_size);
+                    CHECK(img->channels[size_t(ch)](q.x, q.y) == expected(ch, x, y));
+                }
+
+        // the display window goes where its samples did
+        const int2 lo = c.to(display.min, k_size), hi = c.to(display.max - 1, k_size);
+        CHECK(img->display_window == Box2i{la::min(lo, hi), la::max(lo, hi) + 1});
+
+        // moving samples touches neither the channel set nor the layers built from it
+        CHECK(structure_of(img) == structure);
+
+        (img.get()->*c.backward)();
         CHECK(matches_original(img));
+        CHECK(img->data_window == Box2i{int2{0}, k_size});
+        CHECK(img->display_window == display);
+        CHECK(structure_of(img) == structure);
     }
 }
 
-TEST_CASE("A quarter turn transposes the image and four of them return it")
+TEST_CASE("A rectangle entry swaps exactly the samples it covers, clipped to the image, in both directions")
 {
-    auto img = make_test_image();
+    // channels 0 and 2 of three, so restoring the channel in between, or the wrong one, shows
+    const std::vector<int> saved{0, 2};
+    const struct
+    {
+        const char *what;
+        Box2i       bounds;
+    } cases[] = {
+        {"inside", Box2i{{1, 1}, {3, 2}}},
+        {"hanging off the bottom right", Box2i{{3, 2}, {99, 99}}},
+        {"hanging off the top left", Box2i{{-2, -1}, {2, 2}}},
+        {"the whole image", Box2i{{0, 0}, k_size}},
+    };
 
-    img->rotate_90_cw();
-    // not square, so a turn that failed to swap the axes shows here
-    CHECK(img->size() == int2{k_size.y, k_size.x});
+    for (const auto &c : cases)
+    {
+        CAPTURE(c.what);
+        auto            img = make_test_image();
+        ChannelRectUndo entry{*img, saved, c.bounds, "Test"};
 
-    img->rotate_90_cw();
-    CHECK(img->size() == k_size);
+        // overwrite more than the entry covers, every sample of every channel, so undoing has to leave the
+        // excess alone
+        for (auto &ch : img->channels)
+            for (int i = 0; i < ch.num_elements(); ++i) ch(i) = -1.f;
 
-    img->rotate_90_cw();
-    img->rotate_90_cw();
-    CHECK(img->size() == k_size);
-    CHECK(matches_original(img));
-}
-
-TEST_CASE("Turning one way then the other is the same as not turning at all")
-{
-    // the two directions have to be each other's inverse for LambdaUndo to be sound, and each is composed
-    // out of a transpose and a flip
-    auto cw_then_ccw = make_test_image();
-    cw_then_ccw->rotate_90_cw();
-    cw_then_ccw->rotate_90_ccw();
-    CHECK(matches_original(cw_then_ccw));
-
-    auto ccw_then_cw = make_test_image();
-    ccw_then_cw->rotate_90_ccw();
-    ccw_then_cw->rotate_90_cw();
-    CHECK(matches_original(ccw_then_cw));
-}
-
-TEST_CASE("A flip carries the display window with the samples")
-{
-    // a display window narrower than the data window is the shape of a raw CFA part
-    auto img            = make_test_image(1);
-    img->data_window    = Box2i{{0, 0}, k_size};
-    img->display_window = Box2i{{0, 0}, {2, k_size.y}};
-
-    img->flip_horizontal();
-    CHECK(img->display_window.min.x == k_size.x - 2);
-    CHECK(img->display_window.max.x == k_size.x);
-
-    img->flip_horizontal();
-    CHECK(img->display_window.min.x == 0);
-    CHECK(img->display_window.max.x == 2);
-}
-
-TEST_CASE("A rectangle entry restores the channels it saved and nothing else")
-{
-    auto img = make_test_image();
-
-    const Box2i     bounds{{1, 1}, {3, 2}}; // half-open: x in [1,3), y in [1,2)
-    const int       edited_channel = 1;
-    ChannelRectUndo entry{*img, {edited_channel}, bounds, "Test"};
-
-    // overwrite more than the entry covers, so undoing has to leave the excess alone
-    auto &ch = img->channels[size_t(edited_channel)];
-    for (int y = 0; y < k_size.y; ++y)
-        for (int x = 0; x < k_size.x; ++x) ch(x, y) = -1.f;
-
-    entry.undo(*img);
-
-    for (int y = 0; y < k_size.y; ++y)
-        for (int x = 0; x < k_size.x; ++x)
+        auto check = [&](bool restored)
         {
-            CAPTURE(x);
-            CAPTURE(y);
-            const bool covered = x >= bounds.min.x && x < bounds.max.x && y >= bounds.min.y && y < bounds.max.y;
-            CHECK(ch(x, y) == (covered ? expected(edited_channel, x, y) : -1.f));
-        }
+            for (int ch = 0; ch < 3; ++ch)
+                for (int y = 0; y < k_size.y; ++y)
+                    for (int x = 0; x < k_size.x; ++x)
+                    {
+                        CAPTURE(ch);
+                        CAPTURE(x);
+                        CAPTURE(y);
+                        const bool covered =
+                            c.bounds.contains(int2{x, y}) && std::find(saved.begin(), saved.end(), ch) != saved.end();
+                        CHECK(img->channels[size_t(ch)](x, y) == (restored && covered ? expected(ch, x, y) : -1.f));
+                    }
+        };
 
-    // untouched channels stay untouched
-    CHECK(img->channels[0](2, 1) == expected(0, 2, 1));
-    CHECK(img->channels[2](2, 1) == expected(2, 2, 1));
-}
+        entry.undo(*img);
+        check(true);
 
-TEST_CASE("Undoing and redoing a rectangle entry cycles between the two states")
-{
-    auto  img = make_test_image(1);
-    auto &ch  = img->channels[0];
+        // the entry came out of undo() holding what it displaced, so redo is the same swap
+        entry.redo(*img);
+        check(false);
 
-    const Box2i     bounds{{0, 0}, k_size};
-    ChannelRectUndo entry{*img, {0}, bounds, "Test"};
-
-    ch(2, 1) = -5.f;
-
-    entry.undo(*img);
-    CHECK(ch(2, 1) == expected(0, 2, 1));
-
-    // the entry came out of undo() holding what it displaced, so redo is the same swap
-    entry.redo(*img);
-    CHECK(ch(2, 1) == -5.f);
-
-    entry.undo(*img);
-    CHECK(ch(2, 1) == expected(0, 2, 1));
-}
-
-TEST_CASE("A rectangle entry clipped to the image saves only the part that lands")
-{
-    auto img = make_test_image(1);
-
-    // hangs off the right and bottom edges
-    ChannelRectUndo entry{*img, {0}, Box2i{{3, 2}, {99, 99}}, "Test"};
-
-    auto &ch = img->channels[0];
-    ch(4, 2) = -1.f;
-    ch(0, 0) = -2.f;
-
-    entry.undo(*img);
-
-    CHECK(ch(4, 2) == expected(0, 4, 2)); // inside the clipped rectangle
-    CHECK(ch(0, 0) == -2.f);              // outside it
+        entry.undo(*img);
+        check(true);
+    }
 }
 
 TEST_CASE("The history cursor tracks what can be undone and redone")
@@ -237,30 +214,11 @@ TEST_CASE("The history cursor tracks what can be undone and redone")
     CHECK(applied == 2);
     CHECK_FALSE(history.has_redo());
 
-    // walking off either end does nothing, and does not run an entry twice
+    // walking off the oldest end does nothing, and runs no entry an extra time
     CHECK(history.undo(*img));
     CHECK(history.undo(*img));
     CHECK_FALSE(history.undo(*img));
     CHECK(applied == 4);
-}
-
-TEST_CASE("A new edit discards what had been undone")
-{
-    auto           img = make_test_image(1);
-    CommandHistory history;
-
-    auto noop = [](std::string name)
-    { return std::make_unique<LambdaUndo>(std::move(name), [](Image &) {}, [](Image &) {}); };
-
-    history.add(noop("First"));
-    history.add(noop("Second"));
-    history.undo(*img);
-    REQUIRE(history.has_redo());
-
-    history.add(noop("Third"));
-    CHECK_FALSE(history.has_redo());
-    CHECK(history.size() == 2);
-    CHECK(history.undo_name() == "Third");
 }
 
 TEST_CASE("The modified flag follows the distance from the last save in both directions")
@@ -295,7 +253,7 @@ TEST_CASE("The modified flag follows the distance from the last save in both dir
     CHECK_FALSE(history.is_modified());
 }
 
-TEST_CASE("A save point that is discarded cannot be returned to")
+TEST_CASE("A new edit discards what had been undone, save point included")
 {
     auto           img = make_test_image(1);
     CommandHistory history;
@@ -308,30 +266,26 @@ TEST_CASE("A save point that is discarded cannot be returned to")
     history.mark_saved();
     REQUIRE_FALSE(history.is_modified());
 
-    // undoing and then editing drops the entry the save point sat on, so no amount of undoing gets back to a
-    // state that matches the file
+    // undoing and then editing drops the entry the save point sat on
     history.undo(*img);
+    REQUIRE(history.has_redo());
     history.add(noop("Third"));
+    CHECK_FALSE(history.has_redo());
+    CHECK(history.size() == 2);
+    CHECK(history.undo_name() == "Third");
     CHECK(history.is_modified());
 
+    // so no amount of undoing gets back to a state that matches the file
     history.undo(*img);
     CHECK(history.is_modified());
     history.undo(*img);
     CHECK(history.is_modified());
-}
-
-TEST_CASE("An image starts unmodified and stays that way until something edits it")
-{
-    auto img = make_test_image();
-    CHECK_FALSE(img->history.is_modified());
-    CHECK_FALSE(img->history.has_undo());
-    CHECK_FALSE(img->history.has_redo());
 }
 
 TEST_CASE("Rebuilding an image's layers replaces them rather than adding to them")
 {
-    // finalize() appends as it walks the channels, so anything left from an earlier build is duplicated: a
-    // second leaf per node, and channel counts that no longer agree with the channels themselves
+    // finalize() appends as it walks the channels, so a build that kept an earlier one's results would
+    // duplicate them: a second leaf per node, and channel counts that no longer agree with the channels
     auto img = make_test_image();
     img->finalize();
 
@@ -347,111 +301,101 @@ TEST_CASE("Rebuilding an image's layers replaces them rather than adding to them
     CHECK(img->groups.size() == groups);
 }
 
-TEST_CASE("A geometric edit leaves the layer and group structure alone")
+TEST_CASE("Cropping keeps the samples where the box meets the image and makes them the whole image")
 {
-    // flips and quarter turns move samples without touching the channel set, so nothing about the layers
-    // changes and nothing needs rebuilding
-    auto img = make_test_image();
-    img->finalize();
+    // A box inside the image, one hanging over its far corner, one only touching its edge, and one past it. The
+    // box is half-open, so the edge it touches has no samples in common with it; a box meeting none is no crop.
+    const Box2i boxes[] = {{{1, 1}, {4, 3}}, {{3, 1}, {9, 9}}, {{5, 0}, {8, 3}}, {{20, 20}, {30, 30}}};
 
-    const size_t layers   = img->layers.size();
-    const size_t groups   = img->groups.size();
-    const size_t channels = img->channels.size();
-
-    img->rotate_90_cw();
-    img->flip_vertical();
-
-    CHECK(img->layers.size() == layers);
-    CHECK(img->groups.size() == groups);
-    CHECK(img->channels.size() == channels);
-}
-
-TEST_CASE("Cropping keeps the samples inside the box and makes them the whole image")
-{
-    auto img = make_test_image();
-    img->finalize();
-
-    const Box2i box{{1, 1}, {4, 3}}; // half-open: 3 wide, 2 tall
-    img->crop(box);
-
-    CHECK(img->size() == int2{3, 2});
-    CHECK(img->data_window == box);
-    // what is left is the whole image, not a crop sitting inside the old canvas
-    CHECK(img->display_window == box);
-
-    for (int c = 0; c < int(img->channels.size()); ++c)
+    for (const Box2i &box : boxes)
     {
-        CHECK(img->channels[size_t(c)].size() == int2{3, 2});
-        for (int y = 0; y < 2; ++y)
-            for (int x = 0; x < 3; ++x)
-            {
-                CAPTURE(x);
-                CAPTURE(y);
-                // the sample that was at box.min + (x,y) before
-                CHECK(img->channels[size_t(c)](x, y) == expected(c, x + box.min.x, y + box.min.y));
-            }
+        CAPTURE(box);
+        auto img = make_test_image();
+        img->finalize();
+        img->crop(box);
+
+        Box2i kept = box;
+        kept.intersect(Box2i{int2{0}, k_size});
+        if (!kept.has_volume())
+        {
+            CHECK(img->size() == k_size);
+            CHECK(matches_original(img));
+            continue;
+        }
+
+        CHECK(img->size() == kept.size());
+        CHECK(img->data_window == kept);
+        // what is left is the whole image, not a crop sitting inside the old canvas
+        CHECK(img->display_window == kept);
+
+        for (int c = 0; c < int(img->channels.size()); ++c)
+        {
+            REQUIRE(img->channels[size_t(c)].size() == kept.size());
+            for (int y = 0; y < kept.size().y; ++y)
+                for (int x = 0; x < kept.size().x; ++x)
+                {
+                    CAPTURE(x);
+                    CAPTURE(y);
+                    // the sample that was at kept.min + (x,y) before
+                    CHECK(img->channels[size_t(c)](x, y) == expected(c, x + kept.min.x, y + kept.min.y));
+                }
+        }
     }
 }
 
-TEST_CASE("Cropping to nothing leaves the image alone")
+TEST_CASE("Resizing the canvas puts the old samples where the anchor says, cutting or zero-filling the rest")
 {
-    auto img = make_test_image();
-    img->finalize();
+    // Even changes, so a centered anchor has an exact middle. Grown, shrunk, and grown one way while shrunk
+    // the other, since an anchor that confuses its row with its column only shows when the two differ.
+    const int2 changes[] = {{4, 2}, {-2, -2}, {2, -2}};
 
-    // entirely outside the data window, so the intersection is empty
-    img->crop(Box2i{{20, 20}, {30, 30}});
-
-    CHECK(img->size() == k_size);
-    CHECK(matches_original(img));
-}
-
-TEST_CASE("Growing the canvas keeps the samples and zero-fills the rest")
-{
-    auto img = make_test_image(1);
-    img->finalize();
-
-    // anchored top-left, so the old samples stay at the origin and the new space is added right and below
-    img->resize_canvas(int2{k_size.x + 2, k_size.y + 1}, Image::Anchor_TopLeft);
-
-    CHECK(img->size() == int2{k_size.x + 2, k_size.y + 1});
-
-    const auto &ch = img->channels[0];
-    for (int y = 0; y < ch.size().y; ++y)
-        for (int x = 0; x < ch.size().x; ++x)
+    for (const int2 change : changes)
+        for (int anchor = 0; anchor < Image::Anchor_COUNT; ++anchor)
         {
-            CAPTURE(x);
-            CAPTURE(y);
-            const bool inside = x < k_size.x && y < k_size.y;
-            CHECK(ch(x, y) == (inside ? expected(0, x, y) : 0.f));
+            CAPTURE(change.x);
+            CAPTURE(change.y);
+            CAPTURE(anchor);
+
+            // where the old top-left lands: nothing taken off the anchored edge, half off each side of a
+            // centered one, all of it off the far side
+            int2 offset{0};
+            switch (Image::CanvasAnchor(anchor))
+            {
+            case Image::Anchor_TopLeft: offset = {0, 0}; break;
+            case Image::Anchor_TopCenter: offset = {change.x / 2, 0}; break;
+            case Image::Anchor_TopRight: offset = {change.x, 0}; break;
+            case Image::Anchor_MiddleLeft: offset = {0, change.y / 2}; break;
+            case Image::Anchor_MiddleCenter: offset = {change.x / 2, change.y / 2}; break;
+            case Image::Anchor_MiddleRight: offset = {change.x, change.y / 2}; break;
+            case Image::Anchor_BottomLeft: offset = {0, change.y}; break;
+            case Image::Anchor_BottomCenter: offset = {change.x / 2, change.y}; break;
+            case Image::Anchor_BottomRight: offset = {change.x, change.y}; break;
+            default: FAIL("an anchor this test does not know");
+            }
+
+            auto img = make_test_image(2);
+            img->resize_canvas(k_size + change, Image::CanvasAnchor(anchor));
+
+            const int2 size = k_size + change;
+            REQUIRE(img->size() == size);
+            CHECK(img->data_window == Box2i{int2{0}, size});
+            CHECK(img->display_window == img->data_window);
+
+            for (int c = 0; c < 2; ++c)
+            {
+                CHECK(img->channels[size_t(c)].size() == size);
+                for (int y = 0; y < size.y; ++y)
+                    for (int x = 0; x < size.x; ++x)
+                    {
+                        CAPTURE(c);
+                        CAPTURE(x);
+                        CAPTURE(y);
+                        const int2 from = int2{x, y} - offset;
+                        CHECK(img->channels[size_t(c)](x, y) ==
+                              (Box2i{int2{0}, k_size}.contains(from) ? expected(c, from.x, from.y) : 0.f));
+                    }
+            }
         }
-}
-
-TEST_CASE("The anchor decides which edges absorb the change")
-{
-    // grown by two columns anchored right, so the new space lands on the left and the old first column is
-    // now the third
-    auto img = make_test_image(1);
-    img->finalize();
-    img->resize_canvas(int2{k_size.x + 2, k_size.y}, Image::Anchor_MiddleRight);
-
-    const auto &ch = img->channels[0];
-    CHECK(ch(0, 0) == 0.f);
-    CHECK(ch(1, 0) == 0.f);
-    CHECK(ch(2, 0) == expected(0, 0, 0));
-}
-
-TEST_CASE("Shrinking the canvas discards what falls outside it")
-{
-    auto img = make_test_image(1);
-    img->finalize();
-
-    // anchored top-left, so the right and bottom edges are the ones cut
-    img->resize_canvas(int2{k_size.x - 2, k_size.y - 1}, Image::Anchor_TopLeft);
-
-    CHECK(img->size() == int2{k_size.x - 2, k_size.y - 1});
-    const auto &ch = img->channels[0];
-    for (int y = 0; y < ch.size().y; ++y)
-        for (int x = 0; x < ch.size().x; ++x) CHECK(ch(x, y) == expected(0, x, y));
 }
 
 TEST_CASE("A structural entry restores the samples, the windows, and the layer tree")
@@ -484,51 +428,41 @@ TEST_CASE("A structural entry restores the samples, the windows, and the layer t
     CHECK(img->size() == int2{2, 1});
 }
 
-TEST_CASE("Resampling to the same size changes nothing")
-{
-    auto img = make_test_image();
-    img->finalize();
-    img->resample(k_size);
-    CHECK(matches_original(img));
-}
-
-TEST_CASE("Reducing mixes the samples rather than dropping them")
-{
-    // A row alternating 0 and 1: point-sampling a halving returns all of one or all of the other, and a
-    // filter returns something in between. What exactly depends on the filter's width, so this asks only
-    // that both outputs are mixed and that they average out.
-    auto  img = std::make_shared<Image>(int2{4, 1}, 1);
-    auto &ch  = img->channels[0];
-    for (int x = 0; x < 4; ++x) ch(x, 0) = float(x % 2);
-    img->finalize();
-
-    img->resample(int2{2, 1});
-
-    REQUIRE(img->size() == int2{2, 1});
-    const float a0 = img->channels[0](0, 0), a1 = img->channels[0](1, 0);
-    CHECK(a0 > 0.f);
-    CHECK(a0 < 1.f);
-    CHECK(a1 > 0.f);
-    CHECK(a1 < 1.f);
-    CHECK(0.5f * (a0 + a1) == doctest::Approx(0.5f).epsilon(0.02));
-}
-
-TEST_CASE("Reducing keeps the light rather than losing it")
+TEST_CASE("Reducing keeps each channel's light, and resizes every channel and both windows together")
 {
     // under a point-sampled reduction a lone bright sample lands between the output samples and vanishes;
-    // filtering spreads it, so the total survives
-    auto  img = std::make_shared<Image>(int2{16, 16}, 1);
-    auto &ch  = img->channels[0];
-    ch(7, 7)  = 64.f;
+    // filtering spreads it, so the total survives. A different sample in each channel, so a channel resampled
+    // from another's samples, or left at its old size, shows.
+    auto img               = std::make_shared<Image>(int2{16, 12}, 2);
+    img->channels[0](7, 7) = 64.f;
+    img->channels[1](2, 9) = 32.f;
     img->finalize();
+    // a display window smaller than the data, which a resample replaces with the new whole image
+    img->display_window = Box2i{int2{1, 1}, int2{9, 5}};
 
-    img->resample(int2{4, 4});
+    // to the size it already has, a resample moves and spreads nothing
+    const auto unchanged = samples(img);
+    img->resample(int2{16, 12});
+    CHECK(samples(img) == unchanged);
 
-    double total = 0.0;
-    for (int i = 0; i < img->channels[0].num_elements(); ++i) total += double(img->channels[0](i));
+    img->resample(int2{4, 3});
 
-    // each output sample now stands for sixteen input ones
-    CHECK(total * 16.0 == doctest::Approx(64.0).epsilon(0.05));
+    REQUIRE(img->size() == int2{4, 3});
+    CHECK(img->data_window == Box2i{int2{0}, int2{4, 3}});
+    CHECK(img->display_window == img->data_window);
+
+    const float totals[] = {64.f, 32.f};
+    for (int c = 0; c < 2; ++c)
+    {
+        CAPTURE(c);
+        REQUIRE(img->channels[size_t(c)].size() == int2{4, 3});
+
+        double total = 0.0;
+        for (int i = 0; i < img->channels[size_t(c)].num_elements(); ++i) total += double(img->channels[size_t(c)](i));
+
+        // each output sample now stands for sixteen input ones
+        CHECK(total * 16.0 == doctest::Approx(double(totals[c])).epsilon(0.05));
+    }
 }
 
 TEST_CASE("Enlarging interpolates between the samples it has")
@@ -555,19 +489,6 @@ TEST_CASE("Enlarging interpolates between the samples it has")
     CHECK(out(7, 0) > 0.8f);
 }
 
-TEST_CASE("Resampling resizes every channel and both windows together")
-{
-    auto img = make_test_image();
-    img->finalize();
-
-    img->resample(int2{10, 6});
-
-    CHECK(img->size() == int2{10, 6});
-    CHECK(img->data_window.size() == int2{10, 6});
-    CHECK(img->display_window.size() == int2{10, 6});
-    for (const auto &c : img->channels) CHECK(c.size() == int2{10, 6});
-}
-
 TEST_CASE("An edit of the color metadata undoes as one entry, however many frames it spans")
 {
     // The Colorspace panel's edits reinterpret the pixels without touching them, a frame at a time while a widget is
@@ -577,7 +498,7 @@ TEST_CASE("An edit of the color metadata undoes as one entry, however many frame
     img->compute_color_transform();
     img->metadata["color profile"] = "as loaded";
     const auto original            = ColorMetadata::of(*img);
-    const bool pixels_before       = matches_original(img);
+    REQUIRE(matches_original(img));
 
     ColorMetadataEdit edit;
     // what one frame of the panel does to the image, while a widget is active or once it lets go
@@ -612,7 +533,7 @@ TEST_CASE("An edit of the color metadata undoes as one entry, however many frame
     CHECK(ColorMetadata::of(*img) == original);
     CHECK(img->history.redo(*img));
     CHECK(ColorMetadata::of(*img) == edited);
-    CHECK(matches_original(img) == pixels_before); //< and no pixel moved
+    CHECK(matches_original(img)); //< and no pixel moved
 
     // a drag that ends where it began is no edit
     frame([&] { move_white(float2{0.30f, 0.30f}); }, true);

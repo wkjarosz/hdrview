@@ -1,8 +1,8 @@
 /** \file test_gui_dialogs.cpp
     \author Wojciech Jarosz
 
-    Opens and closes the File-menu dialogs, runs every save format's options panel, and checks what each kind of
-    save writes.
+    Opens and closes the File-menu dialogs, checks that the save and edit dialogs leave the viewport navigable,
+    runs every save format's options panel, and checks what each kind of save writes.
 */
 
 #include "app.h"
@@ -13,6 +13,7 @@
 #include "imageio/jxl.h"
 #include "imageio/uhdr.h"
 #include "test_gui_registry.h"
+#include <hello_imgui/dpi_aware.h>
 
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
@@ -30,8 +31,8 @@ using namespace hdrview_test;
 #include <functional>
 #include <limits>
 
-#ifndef HDRVIEW_GUI_TEST_IMAGE
-#error "HDRVIEW_GUI_TEST_IMAGE must be defined by CMake to a small fixture image path"
+#ifndef HDRVIEW_GUI_TEST_IMAGE_2
+#error "HDRVIEW_GUI_TEST_IMAGE_2 must be defined by CMake to a small fixture image path"
 #endif
 
 // ImGui::CloseCurrentPopup() takes a couple of frames to take effect (~2 at ImGuiTestRunSpeed_Fast), so
@@ -39,6 +40,15 @@ using namespace hdrview_test;
 static void wait_for_window_closed(ImGuiTestContext *ctx, const char *window_name)
 {
     wait_until(ctx, [&] { return ctx->WindowInfo(window_name, ImGuiTestOpFlags_NoError).Window == nullptr; });
+}
+
+/// Starts from the small fixture alone, loaded \p copies times, whatever an earlier test left loaded.
+static bool load_fixture(ImGuiTestContext *ctx, int copies = 1)
+{
+    reset_images(ctx);
+    const std::vector<std::string> paths(copies, HDRVIEW_GUI_TEST_IMAGE_2);
+    IM_CHECK_SILENT_RETV(load_and_wait(ctx, paths) == copies, false);
+    return true;
 }
 
 void RegisterTests_Dialogs(ImGuiTestEngine *engine)
@@ -64,16 +74,123 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         IM_CHECK(ctx->WindowInfo("Image loading options...", ImGuiTestOpFlags_NoError).Window == nullptr);
     };
 
+    // The save and edit dialogs are modal, but leave the viewport to be panned and zoomed around them, to look at
+    // the image while choosing: the wheel zooms over the viewport and not over the dialog, and a drag begun in the
+    // viewport pans it. All of them also close from their title bar.
+    struct Navigable
+    {
+        std::string menu;
+        const char *dialog, *test;
+        bool        edit; ///< An edit dialog, with an edit's footer
+    };
+    for (const Navigable &n :
+         {Navigable{"File/Save as...", "Save as...", "save_as_lets_the_viewport_be_navigated", false},
+          Navigable{"File/Export rendition...", "Export rendition...",
+                    "export_rendition_lets_the_viewport_be_navigated", false},
+          Navigable{edit_menu_item("Channel mixer..."), "Channel mixer...",
+                    "edit_dialog_lets_the_viewport_be_navigated", true}})
+    {
+        t           = IM_REGISTER_TEST(engine, "dialogs", n.test);
+        t->TestFunc = [n](ImGuiTestContext *ctx)
+        {
+            const char *dialog = n.dialog;
+            if (!load_fixture(ctx))
+                return;
+            auto             *app = hdrview();
+            const std::string at  = std::string("//") + dialog + "/";
+            // the view as it was, pan and all, since the drags below move it
+            OnExit restore{[app, zoom = app->zoom(), at = app->vp_pos_at_pixel(float2{0.f})]
+                           {
+                               app->set_zoom(zoom);
+                               app->reposition_pixel_to_vp_pos(at, float2{0.f});
+                               app->set_selection(Box2i{});
+                           }};
+            app->set_selection(Box2i{});
+
+            ctx->SetRef("##MainMenuBar");
+            ctx->MenuClick(n.menu.c_str());
+            ctx->SetRef("");
+            ImGuiWindow *window = ctx->WindowInfo(dialog).Window;
+            IM_CHECK(window != nullptr);
+
+            // a corner of the viewport, which the centered dialog leaves clear
+            const float2 corner = app->app_pos_at_vp_pos(float2{HelloImGui::EmSize(2.f)});
+            IM_CHECK(!window->Rect().Contains(ImVec2{corner.x, corner.y}));
+
+            // An edit dialog's footer: "Selection only" only while there is a selection, and on one row with
+            // Preview and the buttons.
+            if (n.edit)
+            {
+                IM_CHECK(!ctx->ItemExists((at + "Selection only").c_str()));
+                app->set_selection(Box2i{int2{0}, int2{4}});
+                ctx->Yield(2);
+                const float row = ctx->ItemInfo((at + "Cancel").c_str()).RectFull.GetCenter().y;
+                for (const char *item : {"Selection only", "Preview"})
+                    IM_CHECK_EQ(ctx->ItemInfo((at + item).c_str()).RectFull.GetCenter().y, row);
+                app->set_selection(Box2i{});
+                ctx->Yield(2);
+            }
+
+            const float zoom = app->zoom();
+            ctx->MouseMoveToPos(ImVec2{corner.x, corner.y});
+            ctx->MouseWheelY(1.f);
+            ctx->Yield(2);
+            IM_CHECK(app->zoom() != zoom);
+
+            const float over_viewport = app->zoom();
+            ctx->MouseMoveToPos(window->Rect().GetCenter());
+            ctx->MouseWheelY(1.f);
+            ctx->Yield(2);
+            IM_CHECK_EQ(app->zoom(), over_viewport);
+
+            // a drag from the corner moves the pixel under it along
+            const float2 before = app->pixel_at_app_pos(corner);
+            drag(ctx, corner, float2{HelloImGui::EmSize(4.f), HelloImGui::EmSize(3.f)});
+            IM_CHECK(la::length(app->pixel_at_app_pos(corner) - before) > 0.f);
+
+            // and a drag begun on the dialog's own widgets is theirs, even carried out over the viewport: a press on
+            // Cancel, released away from it, which leaves it unclicked
+            const float2 held = app->pixel_at_app_pos(corner);
+            ctx->MouseMoveToPos(ctx->ItemInfo((at + "Cancel").c_str()).RectFull.GetCenter());
+            ctx->MouseDown(ImGuiMouseButton_Left);
+            ctx->MouseMoveToPos(ImVec2{corner.x, corner.y});
+            ctx->MouseMoveToPos(ImVec2{corner.x + HelloImGui::EmSize(4.f), corner.y + HelloImGui::EmSize(3.f)});
+            ctx->MouseUp(ImGuiMouseButton_Left);
+            ctx->Yield(2);
+            IM_CHECK_EQ(la::length(app->pixel_at_app_pos(corner) - held), 0.f);
+
+            // its title bar's arrow folds it to the title bar, out of the way and as wide as it was, and back
+            const float full = window->Size.y, width = window->Size.x;
+            ctx->ItemClick((at + "#FOLD").c_str());
+            ctx->Yield(3);
+            IM_CHECK_EQ(window->Size.x, width);
+            // the title bar, plus the sliver Dear ImGui keeps below one for the rounding
+            IM_CHECK_LE(window->Size.y,
+                        window->TitleBarHeight + std::max(0.f, ImGui::GetStyle().WindowRounding - 1.f) + 1.f);
+            const float folded_zoom = app->zoom();
+            ctx->MouseMoveToPos(ImVec2{corner.x, corner.y});
+            ctx->MouseWheelY(1.f);
+            ctx->Yield(2);
+            IM_CHECK(app->zoom() != folded_zoom); //< still navigable folded
+            ctx->ItemClick((at + "#FOLD").c_str());
+            ctx->Yield(3);
+            IM_CHECK_EQ(window->Size.y, full);
+
+            // the arrow sits beside the close button, which closes the dialog as Cancel does
+            IM_CHECK(!ctx->ItemInfo((at + "#FOLD").c_str())
+                          .RectFull.Overlaps(ctx->ItemInfo((at + "#CLOSE").c_str()).RectFull));
+            ctx->ItemClick((at + "#CLOSE").c_str());
+            wait_for_window_closed(ctx, dialog);
+            IM_CHECK(ctx->WindowInfo(dialog, ImGuiTestOpFlags_NoError).Window == nullptr);
+        };
+    }
+
     t           = IM_REGISTER_TEST(engine, "dialogs", "save_as_open_close");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
         // two images, so a Down that reached the shortcuts behind the dialog would change the current one
-        if (hdrview()->num_images() < 2)
-        {
-            hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE, HDRVIEW_GUI_TEST_IMAGE_2});
-            wait_for_loads(ctx);
-        }
-        IM_CHECK(hdrview()->num_images() >= 2);
+        if (!load_fixture(ctx, 2))
+            return;
         const int current = hdrview()->current_image_index();
 
         ctx->SetRef("##MainMenuBar");
@@ -83,15 +200,15 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         IM_CHECK(ctx->WindowInfo("Save as...").Window != nullptr);
 
         // The dialog's keys are its own: keyboard navigation is on while it is open, Down moves within it rather than
-        // through the images behind it, and a shortcut it has no use for, H for a horizontal flip, stands down.
+        // through the images behind it, and a shortcut it has no use for, H to mirror the view, stands down.
         ctx->Yield(2);
         IM_CHECK(ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard);
-        const bool flipped = *hdrview()->action("Flip horizontally").p_selected;
+        const bool flipped = *hdrview()->action("Mirror view horizontally").p_selected;
         ctx->KeyPress(ImGuiKey_DownArrow);
         ctx->KeyPress(ImGuiKey_H);
         ctx->Yield(2);
         IM_CHECK_EQ(hdrview()->current_image_index(), current);
-        IM_CHECK_EQ(*hdrview()->action("Flip horizontally").p_selected, flipped);
+        IM_CHECK_EQ(*hdrview()->action("Mirror view horizontally").p_selected, flipped);
 
         ctx->SetRef("Save as...");
         ctx->ItemClick("Cancel");
@@ -113,12 +230,8 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
                                                         : "export_rendition_every_format_options_panel");
         t->TestFunc = [dialog](ImGuiTestContext *ctx)
         {
-            if (hdrview()->num_images() == 0)
-            {
-                hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
-                wait_for_loads(ctx);
-            }
-            IM_CHECK(hdrview()->num_images() > 0);
+            if (!load_fixture(ctx))
+                return;
 
             const std::string menu = std::string("File/") + dialog, window = std::string("//") + dialog;
             ctx->SetRef("##MainMenuBar");
@@ -168,11 +281,8 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
     t           = IM_REGISTER_TEST(engine, "dialogs", "image_to_save_writes_what_each_mode_says");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
-        if (hdrview()->num_images() == 0)
-        {
-            hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
-            wait_for_loads(ctx);
-        }
+        if (!load_fixture(ctx))
+            return;
         auto img = hdrview()->current_image();
         IM_CHECK(img != nullptr);
         auto *app = hdrview();
@@ -213,6 +323,15 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         const float exposure = app->exposure_live(), gamma = app->gamma_live();
         const auto  tonemap = app->tonemap();
         const bool  clamp = app->clamp_to_LDR(), rolling = roll_off;
+        // put back however the test ends, a failed check returning early
+        OnExit restore{[&, exposure, gamma, tonemap, clamp, rolling]
+                       {
+                           app->exposure_live() = exposure;
+                           app->gamma_live()    = gamma;
+                           app->tonemap()       = tonemap;
+                           app->clamp_to_LDR()  = clamp;
+                           roll_off             = rolling;
+                       }};
         app->exposure_live() = 2.f;
         app->gamma_live()    = 1.f;
         app->tonemap()       = Tonemap_Gamma;
@@ -270,18 +389,13 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         group.type = ChannelGroup::RGB_Channels;
         IM_CHECK_EQ(app->image_to_save(HDRViewApp::SaveMode_Rendition, false, 0.f)->channels.size(), 3u);
         group.type = type;
-
-        app->exposure_live() = exposure;
-        app->gamma_live()    = gamma;
-        app->tonemap()       = tonemap;
-        app->clamp_to_LDR()  = clamp;
-        roll_off             = rolling;
     };
 
     // What Export rendition writes for a gain-map format, through the dialog the way a user saves: the file reads
     // back as the view clipped at SDR white with no headroom, and as the view itself in full. The view is two stops
     // up with highlights passing through, so the two renditions differ wherever the fixture is brighter than a
-    // quarter of white.
+    // quarter of white. One format suffices for the dialog building the SDR base beside the HDR rendition;
+    // test_gainmap.cpp reads back every gain-map writer, either way round.
     struct GainmapCase
     {
         const char *format, *extension;
@@ -290,23 +404,17 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
     std::vector<GainmapCase> cases;
 #if HDRVIEW_ENABLE_LIBUHDR
     cases.push_back({"JPEG (UltraHDR)", ".jpg", nullptr});
-#endif
-#if HDRVIEW_ENABLE_LIBJXL && !defined(HDRVIEW_TEST_ASAN) // see test_asan.h
+#elif HDRVIEW_ENABLE_LIBJXL && !defined(HDRVIEW_TEST_ASAN) // see test_asan.h
     cases.push_back({"JPEG-XL", ".jxl", "SDR base"});
-    cases.push_back({"JPEG-XL", ".jxl", "HDR base"});
 #endif
     for (const auto &gc : cases)
     {
-        const std::string name = std::string("export_rendition_writes_a_gain_map_") + gc.extension + "_" +
-                                 (gc.gain_map ? (gc.gain_map[0] == 'S' ? "sdr_base" : "hdr_base") : "sdr_base");
+        const std::string name = std::string("export_rendition_writes_a_gain_map_") + gc.extension + "_sdr_base";
         t                      = IM_REGISTER_TEST(engine, "dialogs", strdup(name.c_str()));
         t->TestFunc            = [gc](ImGuiTestContext *ctx)
         {
-            if (hdrview()->num_images() == 0)
-            {
-                hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
-                wait_for_loads(ctx);
-            }
+            if (!load_fixture(ctx))
+                return;
             auto *app = hdrview();
             auto  img = app->current_image();
             IM_CHECK(img != nullptr);
@@ -316,22 +424,18 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             const auto  tonemap = app->tonemap();
             const bool  clamp = app->clamp_to_LDR(), rolling = roll_off;
             // a failed check returns early, so the view and the test hooks are put back however the test ends
-            struct Restore
-            {
-                std::function<void()> undo;
-                ~Restore() { undo(); }
-            } restore{[&, exposure, gamma, tonemap, clamp, rolling]
-                      {
-                          app->test_save_path().clear();
+            OnExit restore{[&, exposure, gamma, tonemap, clamp, rolling]
+                           {
+                               app->test_save_path().clear();
 #if HDRVIEW_ENABLE_LIBJXL
-                          jxl_gain_map_option() = 0;
+                               jxl_gain_map_option() = 0;
 #endif
-                          app->exposure_live() = exposure;
-                          app->gamma_live()    = gamma;
-                          app->tonemap()       = tonemap;
-                          app->clamp_to_LDR()  = clamp;
-                          roll_off             = rolling;
-                      }};
+                               app->exposure_live() = exposure;
+                               app->gamma_live()    = gamma;
+                               app->tonemap()       = tonemap;
+                               app->clamp_to_LDR()  = clamp;
+                               roll_off             = rolling;
+                           }};
             app->exposure_live() = 2.f;
             app->gamma_live()    = 1.f;
             app->tonemap()       = Tonemap_Gamma;

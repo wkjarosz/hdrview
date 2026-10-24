@@ -140,15 +140,64 @@ enum class DialogPosition
     None       ///< no positioning; caller may set its own via SetNextWindowPos/SetNextWindowSize
 };
 
-// Handles the open-on-request/startup-frame-safety/centering boilerplate common to every modal dialog:
-// fires ImGui::OpenPopup(title) the frame `open` becomes true (once HelloImGui's startup frames have
-// settled, so a dialog can start out already-open), consumes `open`, applies `position`, then forwards to
-// ImGui::BeginPopupModal. Call ImGui::EndPopup() only when this returns true, as with BeginPopupModal.
+/// Begin a modal dialog, opening it on request and positioning it, as ImGui::BeginPopupModal() does.
+/**
+    Fires ImGui::OpenPopup(title) the frame \p open becomes true (once HelloImGui's startup frames have settled, so
+    a dialog can start out already-open), consumes \p open, applies \p position, then forwards to
+    ImGui::BeginPopupModal(). Call ImGui::EndPopup() only when this returns true, as with BeginPopupModal().
+
+    With \p folded, the dialog's title bar also gets the collapse arrow an ordinary window has, which Dear ImGui leaves
+    off a modal, and folding it shows the title bar alone. Its contents still run, out of sight, so what they keep
+    doing every frame goes on.
+
+    With \p closable, the title bar also gets a close button, which closes the dialog without running its contents. A
+    dialog whose Cancel does more than close can tell it was closed so: it was open going in (ImGui::IsPopupOpen())
+    and this returns false.
+*/
 bool BeginModalDialog(const char *title, bool &open, DialogPosition position = DialogPosition::TopCenter,
-                      ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize);
+                      ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize, bool *folded = nullptr,
+                      bool closable = false);
 
 /// Whether a BeginModalDialog() dialog showed this frame or the last, for what should stand down behind one.
 bool AnyModalDialogOpen();
+
+/// A scope whose items take the window's width rather than give it one.
+/**
+    For what is sized to the space left, such as wrapped text or a strip drawn as wide as the window. In an
+    auto-resizing window such an item is as wide as the window, so it would hold the window at whatever width it has,
+    and the window could never shrink to fit the rest of its contents.
+*/
+class FillsWidth
+{
+public:
+    FillsWidth();
+    ~FillsWidth();
+    FillsWidth(const FillsWidth &)            = delete;
+    FillsWidth &operator=(const FillsWidth &) = delete;
+
+private:
+    float m_max_x, m_ideal_x;
+};
+
+/// Text wrapped at the window's width, without holding an auto-resizing window at that width.
+void TextWrappedToWidth(const char *text);
+
+/// A scope whose items, \p width wide, end at the window's right edge but give it only the width they take.
+/**
+    The cursor is indented so that the items end at the edge, but the window is sized as if they followed on from where
+    the cursor was, so they do not hold an auto-resizing window at its width.
+*/
+class RightAligned
+{
+public:
+    explicit RightAligned(float width);
+    ~RightAligned();
+    RightAligned(const RightAligned &)            = delete;
+    RightAligned &operator=(const RightAligned &) = delete;
+
+private:
+    float m_max_x, m_ideal_x, m_natural_right;
+};
 
 enum class DialogResult
 {
@@ -328,18 +377,15 @@ void TextAlignedV2(float align_x, float size_x, const char *fmt, va_list args);
 void TextAligned2(float align_x, float size_x, const char *fmt, ...);
 
 void Tooltip(const char *description, bool questionMark = false, float wrap_width = -1.f);
+/// Not printf-style: a second string would otherwise convert to \p questionMark, showing the format and a "?".
+void Tooltip(const char *description, const char *, float wrap_width = -1.f) = delete;
 /// The tooltip of the last item: \p description, followed by whatever \p more draws, such as a table.
 void Tooltip(const char *description, const std::function<void()> &more);
 
 /**
-    The right-hand extent of a run of rows, so that something can be hung off all of them at once.
-
-    Fed by calling take() after each item that belongs to a row; it remembers the widest right edge and
-    where the first and last rows sit vertically. See RowBracketButton(), which is what consumes it.
-*/
-/**
     The square plot of a tone curve that the tonal dialogs draw above their sliders: what a level goes in
-    as against what it comes out as, over [0,1]. Used like ImPlot itself:
+    as against what it comes out as, over [0,1] and a margin beyond, to show what a curve does past black and
+    white. Used like ImPlot itself:
 
         if (ImGui::BeginToneCurvePlot("##Curve"))
         {
@@ -350,8 +396,11 @@ void Tooltip(const char *description, const std::function<void()> &more);
 
 /// Samples along the horizontal axis.
 constexpr int ToneCurveSamples = 129;
+/// The range both axes span: [0,1] with a margin either side.
+constexpr float ToneCurveMin = -0.1f, ToneCurveMax = 1.1f;
 /// The input level at sample \p i, where every curve drawn here is evaluated.
-inline float ToneCurveX(int i) { return float(i) / float(ToneCurveSamples - 1); }
+inline float ToneCurveX(int i)
+{ return ToneCurveMin + (ToneCurveMax - ToneCurveMin) * float(i) / float(ToneCurveSamples - 1); }
 
 /// Open the plot. False when ImPlot declined it, in which case nothing else may be called.
 /**
@@ -373,6 +422,11 @@ void ToneCurveHandle(float2 at, ImVec4 color);
 bool ToneCurveDrag(float2 &position, float2 *pressed_at = nullptr);
 void EndToneCurvePlot();
 
+/// The right-hand extent of a run of rows, so that something can be hung off all of them at once.
+/**
+    Fed by calling take() after each item that belongs to a row; it remembers the widest right edge and
+    where the first and last rows sit vertically. See RowBracketButton(), which is what consumes it.
+*/
 struct RowSpan
 {
     float right = 0.f;             ///< Right edge of the widest row so far
@@ -387,9 +441,9 @@ struct RowSpan
     A button at the open end of a bracket joining \p rows, as Photoshop joins a width to a height.
 
     The bracket says what the button means better than the button can -- these rows are tied, and here is
-    where -- and is drawn only when \p bracketed, since an open chain has nothing to join. Positioned
-    entirely from \p rows, leaving the cursor where it found it, so it can be called after the rows are
-    laid out without disturbing what follows them.
+    where -- and is whole when \p bracketed and broken in the middle when not, as the chain on an open link is.
+    Positioned entirely from \p rows, leaving the cursor where it found it, so it can be called after the rows
+    are laid out without disturbing what follows them.
 
     \returns Whether the button was pressed this frame.
 */

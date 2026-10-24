@@ -137,9 +137,13 @@ cmake --preset macos-arm64-cpm -DHDRVIEW_BUILD_GUI_TESTS=ON
 cmake --build --preset macos-arm64-cpm-release --target hdrview_gui_tests
 ./build/macos-arm64-cpm/Release/hdrview_gui_tests   # runs the queued tests, prints a pass/fail summary, exits with the result
 ```
-The binary takes no arguments: it opens a real HDRView window, runs every registered test, and exits. There
-is no headless mode, since capture and input both go through a live GL context, so CI runs it under
-`xvfb-run`.
+The binary takes no arguments: it opens a real HDRView window, runs every registered test, and exits.
+`HDRVIEW_GUI_TEST_FILTER` narrows the run with the engine's filter syntax: comma-separated, case-insensitive
+substrings of a test's name or category, `^` anchoring one to the start and `-` excluding, e.g.
+`HDRVIEW_GUI_TEST_FILTER=navigated,hue ./hdrview_gui_tests`. A full run takes about a minute, so run only the
+tests a change can affect; CI runs the whole suite on Linux. There is no headless mode, since capture and input
+both go through a live GL context, so CI runs it under `xvfb-run`, whose OpenGL is a software rasterizer: keep
+what a test previews cheap per pixel, or its frames grow slow enough to trip the engine's watchdog.
 Test source lives under `tests/gui/`, one file per category (mirroring Dear ImGui's own `imgui_test_suite`
 convention), each exposing a `RegisterTests_X(ImGuiTestEngine*)` aggregated by
 `tests/gui/test_gui_registry.h`. `src/app.h`/`src/app-windows.cpp` add a small
@@ -267,6 +271,20 @@ transforms.
 texture. `image-gui.cpp` holds the ImGui-facing rendering/inspection code for a single image (histograms,
 stats), separate from `image.cpp`'s data-model logic.
 
+### Edit commands and their previews
+An edit command (`src/edit/command.h`) describes its effect through `point_edit()`, `shift_preview()`,
+`remap_preview()`, `bump_preview()` or `irradiance_preview()`, and `apply()` runs that same description
+(`apply_point_edit()`, `shifted()`, `remapped_envmap()`, `bump_normal()`, `irradiance_envmap()`), so a preview
+cannot drift from the edit. `make_edit_preview()` (`src/edit/preview.cpp`) adds what the shader needs: the slots
+and rectangle the subject covers, and for a remap or irradiance map the window the result will have. The dialog
+shell (`draw_edit_command_dialog()`) posts it each frame and `edit_preview()` returns it for that frame and the
+next, since the viewport draws before the dialogs; it ends as the dialog closes, except that an edit handed to a
+worker keeps it up until the result lands. `draw_image()` passes it as uniforms, which `shader_edit()` packs into
+one op and the slots `src/shared/edits.h` lists for it, and the image shader's `edit_preview()` applies it to the
+stored samples. A command may take drags over its preview (`drag_preview()`), and one that reshapes the image
+frames its result through `EditContext::view`, `set_view` and `fit_view`. Pixel readouts are hidden while a
+preview shows. Keep preview logic in `src/edit/`, not in `HDRViewApp`.
+
 ### Image I/O: pluggable loader registry
 `src/imageio/image_loader.h` declares `BackgroundImageLoader`, which loads images asynchronously (off the
 main thread, tile-uploaded to the GPU across frames to avoid stalling), watches directories for changed
@@ -291,11 +309,12 @@ Loaders take a plain `std::istream`, but the background loader passes one of two
 `imageio/streams.h`: a `FileIStream` for a file on disk, which remembers its path, or a `SpanIStream` over bytes
 already in memory (zip entries, downloads, every web load), whose `view()` reaches them without a copy. A loader
 that needs the whole file takes it through `StreamBytes`, which views a `SpanIStream`'s bytes and reads a
-`FileIStream`'s file with one `fread()`, about three times as fast as libc++'s `std::ifstream::read()`. The EXR loader instead
-lets OpenEXR open a `FileIStream`'s path itself: OpenEXR reads chunks from many threads only through its own file
-reader or an `IStream` supporting stateless reads (`MemoryIStream` in `imageio/exr_streams.h`, OpenEXR 3.3+), and
-otherwise serializes them behind one lock. Every `is_<format>_image()` sniff runs on every file a later loader
-claims, so it must decide from a header-sized prefix; `tests/test_loader_limits.cpp` holds them all to that.
+`FileIStream`'s file with one `fread()`, about three times as fast as libc++'s `std::ifstream::read()`. The EXR
+loader instead lets OpenEXR open a `FileIStream`'s path itself: OpenEXR reads chunks from many threads only
+through its own file reader or an `IStream` supporting stateless reads (`MemoryIStream` in
+`imageio/exr_streams.h`, OpenEXR 3.3+), and otherwise serializes them behind one lock. Every `is_<format>_image()`
+sniff runs on every file a later loader claims, so it must decide from a header-sized prefix;
+`tests/test_loader_limits.cpp` holds them all to that.
 
 libheif is the one dependency that finds its own codecs, with `find_package()` calls that only ever turn up
 an installed library, of which Emscripten and a bare Windows runner have none. So the build fetches libaom
@@ -379,14 +398,19 @@ both call; `pipeline.h` has the image shader's per-pixel steps (channel isolatio
 tonemapping, and the highlight rolloff: BT.2390's EETF taken in stops of SDR white, whose ceiling and content
 peak `app-rolloff.cpp` works out each frame), all but the colormap lookup, which is a texture on the GPU and
 `Colormap::sample()` on the CPU.
-`constants.h` lists the enum values the shader branches on: GLSL gets them as constants, and C++
-`static_assert`s each against `fwd.h`, so an enum reordered there without a matching edit fails to compile
-(the transfer functions' `TF_*` constants are checked the same way in `colorspace.cpp`). `src/colorspace.h`
-brings a few shared names into the global namespace with `using`, and its `tonemap()` and
-`HDRViewApp::tonemap_value()` compose the shared steps, so C++ computes what the screen shows. The shared
-code is float only, as shading languages have no double; `tests/test_colour_reference.cpp` holds it to
-colour-science's values, and `tests/test_colorspace.cpp` to its own inverses and symmetries. Shader math belongs in `src/shared/`
-rather than copied into an `.sglsl` and mirrored in C++.
+`constants.h` lists the enum values the shader branches on: GLSL gets them as constants, and C++ `static_assert`s
+each against `fwd.h`, so an enum reordered there without a matching edit fails to compile (the transfer functions'
+`TF_*` constants are checked the same way in `colorspace.cpp`). `src/colorspace.h` brings a few shared names into
+the global namespace with `using`, and its `tonemap()` and `HDRViewApp::tonemap_value()` compose the shared steps,
+so C++ computes what the screen shows. The shared code is float only, as shading languages have no double;
+`tests/test_colour_reference.cpp` holds it to colour-science's values, and `tests/test_colorspace.cpp` to its own
+inverses and symmetries. Shader math belongs in `src/shared/` rather than copied into an `.sglsl` and mirrored in
+C++.
+`edits.h` holds the point-wise edits (an `EDIT_` op and the vectors and matrices it reads) and the bump map's
+normals, `resample.h` Shift's border modes and samplers, and `envmap.h`/`envmap_sample.h` the environment-map
+mappings and their filtered reads. `resample.h` and `envmap_sample.h` leave where the samples come from to the
+includer, which defines a value type, a `*Source` struct and a `*_fetch()` before including them: one channel's
+`Array2Df` on the CPU, the four shown channels' textures (and their mipmaps) in the shader.
 
 **Working color space and the HDR display "colorpass".** Everything HDRView draws — image content *and*
 Dear ImGui's own UI, which has no notion of display color space — is emitted in **extended sRGB**: sRGB

@@ -12,6 +12,7 @@
 #include "edit/edit_ops.h"
 #include "edit/envmap.h"
 #include "edit/filters.h"
+#include "edit/preview.h"
 #include "edit/subject.h"
 #include "edit/undo.h"
 #include "imageio/image_loader.h"
@@ -208,9 +209,11 @@ public:
     /// Resample every channel of \p img into a new \p size, replacing the image as one undoable step.
     /**
         On a worker behind a cancellable progress bar, since a resampler costs seconds a channel; a resize
-        fast enough to run synchronously goes through Image::resample() instead.
+        fast enough to run synchronously goes through Image::resample() instead. \p extent says whether the view
+        refits to the result.
     */
-    void resample_image_async(const ImagePtr &img, const std::string &name, int2 size, const ChannelResampler &op);
+    void resample_image_async(const ImagePtr &img, const std::string &name, int2 size, const ChannelResampler &op,
+                              EditExtent extent);
 
     /// Filter the subject's channels of \p img, likewise on a worker, as one undoable step.
     /**
@@ -232,8 +235,11 @@ public:
     std::vector<ImagePtr> edit_command_images(const EditCommand &cmd);
     /// Whether \p cmd could run now: the image accepts edits, and the command itself is satisfied.
     bool edit_command_enabled(const EditCommand &cmd);
-    /// The shell, the "Apply to" selector and the Cancel/Confirm footer that every command's dialog wears.
+    /// Every command's dialog shell: "Apply to", then Selection only, Preview and Cancel/Confirm.
     void draw_edit_command_dialog(EditCommand &cmd, bool &open);
+
+    /// The preview an edit dialog asked for this frame or the last, or none.
+    const EditPreview *edit_preview() const;
 
     /// Draws the "apply to" controls inline, for a dialog that carries them beside its own parameters.
     void draw_edit_subject_selector();
@@ -304,6 +310,8 @@ public:
         whole selection.
     */
     void set_current_group(int index, int group);
+    /// Make group \p group of image \p index current and the only target selected, as a plain click does.
+    void select_group_alone(int index, int group);
     /// Add group \p group of image \p index to the selection, or take it out.
     void toggle_group_selected(int index, int group);
     /// Select every image between the current one and \p index, each by the group it is showing.
@@ -326,6 +334,12 @@ public:
     float2 pixel_at_vp_pos(float2 vp_pos) const;
     /// Calculates the position inside the viewport for the given image pixel coordinate.
     float2 vp_pos_at_pixel(float2 pixel) const;
+    /// Where \p vp_pos falls in the uv of the image an edit's preview shows, or none without a preview.
+    std::optional<float2> preview_uv(float2 vp_pos) const;
+    /// pixel_at_vp_pos() for an image whose display window is \p display_window, in place of the current image's.
+    float2 pixel_at_vp_pos(float2 vp_pos, const Box2f &display_window) const;
+    /// vp_pos_at_pixel() for an image whose display window is \p display_window, in place of the current image's.
+    float2 vp_pos_at_pixel(float2 pixel, const Box2f &display_window) const;
     /// Calculates the app position at the given image pixel coordinate.
     float2 app_pos_at_pixel(float2 pixel) const { return app_pos_at_vp_pos(vp_pos_at_pixel(pixel)); }
     /// Calculates the image pixel coordinates at the given app position.
@@ -338,11 +352,11 @@ public:
     /// Reposition the image so that the specified image pixel coordinate lies under the provided viewport position
     void reposition_pixel_to_vp_pos(float2 vp_pos, float2 pixel);
 
-    /// Mirrors a pixel coordinate about the current image's display window along the flipped axes.
+    /// Mirrors a pixel coordinate about \p display_window along the flipped axes.
     /**
         An involution, and the only place the flip enters the pixel <-> viewport transforms.
     */
-    float2 flip_pixel(float2 pixel) const;
+    float2 flip_pixel(float2 pixel, const Box2f &display_window) const;
 
     /// Where the quad the image shader samples \p img over starts, as a fraction of the viewport.
     /**
@@ -373,13 +387,14 @@ public:
     /// The most recently hovered image pixel while the mouse was over the viewport.
     /**
         Held once the mouse moves elsewhere so hover-driven widgets stay interactable while it travels to
-        them. nullopt only if the viewport has never been hovered this session.
+        them. nullopt if the viewport has never been hovered this session, and while an edit is previewed, when the
+        stored values under the cursor are not what is shown.
     */
     optional<int2> last_hovered_pixel()
     {
         if (mouse_over_viewport())
             m_last_hovered_pixel = int2{pixel_at_app_pos(ImGui::GetIO().MousePos)};
-        return m_last_hovered_pixel;
+        return edit_preview() ? std::nullopt : m_last_hovered_pixel;
     }
     //-----------------------------------------------------------------------------
 
@@ -649,8 +664,8 @@ private:
 
     void   handle_mouse_interaction();
     void   calculate_viewport();
-    float2 center_offset() const;
-    Box2f  scaled_display_window(ConstImagePtr img) const;
+    /// The offset that centers \p display_window in the viewport, at the view's zoom.
+    float2 center_offset(const Box2f &display_window) const;
 
     void draw_background();
     void draw_statistics_window();
@@ -665,6 +680,12 @@ private:
     void draw_command_palette(bool &);
     /// The save dialog, Save as... for SaveMode_Data and Export rendition... for SaveMode_Rendition.
     void draw_save_dialog(bool &open, SaveMode mode);
+    /// Begin a modal dialog the viewport stays navigable around, as BeginModalDialog() begins one.
+    /**
+        Unfaded, so the image can be looked at while choosing, and foldable to its title bar through \p folded, to
+        see more of it; it closes from its title bar too.
+    */
+    bool begin_navigable_dialog(const char *title, bool &open, bool &folded);
     void draw_confirm_load_session_dialog(bool &open);
     void draw_loading_session_dialog(bool &open);
     void draw_pixel_info() const;
@@ -933,8 +954,13 @@ private:
     float2    m_translate          = {0.f, 0.f};     ///< The panning offset of the image
     Channels_ m_channel            = Channels_::Channels_RGBA; ///< Which channel to display
 
-    float2         m_viewport_min, m_viewport_size;
-    optional<int2> m_last_hovered_pixel; ///< see last_hovered_pixel()
+    float2 m_viewport_min, m_viewport_size;
+    int    m_navigable_dialog_frame = -2; ///< the last frame a save or edit dialog showed, for the viewport around it
+    bool   m_dragging_around_dialog = false;  ///< whether the left button went down in the viewport, around it
+    bool   m_steering_preview       = false;  ///< whether it went down on a preview that takes drags, which it steers
+    EditPreview    m_edit_preview;            ///< see edit_preview()
+    int            m_edit_preview_frame = -2; ///< the last frame an edit dialog asked for it, or k_preview_held
+    optional<int2> m_last_hovered_pixel;      ///< see last_hovered_pixel()
 
     /// Index of the annotation being worked on, or -1 when none on the current image is.
     int  active_annotation() const;

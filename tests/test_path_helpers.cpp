@@ -8,21 +8,27 @@
 
 #include "common.h"
 
-TEST_CASE("is_url recognizes http and https")
-{
-    CHECK(is_url("http://example.com/a.exr"));
-    CHECK(is_url("https://example.com/a.exr"));
-    CHECK(is_url("HTTPS://EXAMPLE.COM/A.EXR"));
-}
+#include <utility>
 
-TEST_CASE("is_url rejects paths that merely look like one")
+TEST_CASE("is_url recognizes http and https, and not paths that merely look like one")
 {
-    CHECK_FALSE(is_url(""));
-    CHECK_FALSE(is_url("a.exr"));
-    CHECK_FALSE(is_url("/tmp/http/a.exr"));
-    CHECK_FALSE(is_url("C:\\images\\https.exr"));
-    CHECK_FALSE(is_url("ftp://example.com/a.exr"));
-    // one slash short of a scheme, and shorter than any scheme: neither may read past the end
-    CHECK_FALSE(is_url("https:/example.com/a.exr"));
-    CHECK_FALSE(is_url("http"));
+    const std::pair<const char *, bool> cases[] = {
+        {"http://example.com/a.exr", true},
+        {"https://example.com/a.exr", true},
+        {"HTTPS://EXAMPLE.COM/A.EXR", true},
+        {"", false},
+        {"a.exr", false},
+        {"/tmp/http/a.exr", false},
+        {"C:\\images\\https.exr", false},
+        {"ftp://example.com/a.exr", false},
+        // one slash short of a scheme, and shorter than any scheme: neither may read past the end
+        {"https:/example.com/a.exr", false},
+        {"http", false},
+    };
+
+    for (const auto &c : cases)
+    {
+        CAPTURE(c.first);
+        CHECK(is_url(c.first) == c.second);
+    }
 }

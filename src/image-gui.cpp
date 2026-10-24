@@ -138,7 +138,7 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id_, bool is
                 else if (io.KeyCtrl)
                     hdrview()->toggle_group_selected(img_idx, this_group);
                 else
-                    hdrview()->set_current_group(img_idx, this_group);
+                    hdrview()->select_group_alone(img_idx, this_group);
 
                 // Not necessarily this image: taking the current target out of the selection hands current
                 // to whatever is still in it, which can be another image entirely.

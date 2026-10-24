@@ -230,6 +230,32 @@ void HDRViewApp::draw_status_bar()
         string zoom_str      = fmt::format("{:7.2f}% ({:d}:{:d})", real_zoom * 100, numer, denom);
         float  zoom_visual_x = right_zone_x + EmSize(10.f) - ImGui::CalcTextSize(zoom_str.c_str()).x;
 
+        // Just left of the zoom, a button for each axis the view mirrors, which the image itself does not, so a
+        // mirrored view is not taken for flipped pixels; clicking one stops mirroring that axis.
+        struct Mirror
+        {
+            bool       &on;
+            const char *icon, *tooltip;
+        };
+        const Mirror mirrors[] = {
+            {m_flip.x, ICON_MY_MIRROR_VIEW_HORIZ,
+             "The view is mirrored horizontally; the image itself is not. Click to stop mirroring."},
+            {m_flip.y, ICON_MY_MIRROR_VIEW_VERT,
+             "The view is mirrored vertically; the image itself is not. Click to stop mirroring."}};
+        for (int i = 1; i >= 0; --i)
+            if (mirrors[i].on)
+            {
+                const float2 size =
+                    float2{ImGui::CalcTextSize(mirrors[i].icon)} + 2.f * float2{ImGui::GetStyle().FramePadding};
+                zoom_visual_x -= size.x + item_spacing;
+                ImGui::SameLine(zoom_visual_x);
+                ImGui::PushID(i);
+                if (ImGui::FlatButton(mirrors[i].icon, true, size))
+                    mirrors[i].on = false;
+                ImGui::PopID();
+                ImGui::Tooltip(mirrors[i].tooltip);
+            }
+
         const float drag_size = EmSize(5.f);
         const float inner_sp  = ImGui::GetStyle().ItemInnerSpacing.x;
         // width the color row is given below; also part of the fit test, so the zone is only drawn when
@@ -430,52 +456,19 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Select all"));
         MenuItem(action("Deselect"));
 
-        ImGui::SeparatorText("Size and orientation");
+        // the rest in submenus, which keep the menu short enough to take in
+        ImGui::SeparatorText("Filters");
 
-        MenuItem(action("Flip image horizontally"));
-        MenuItem(action("Flip image vertically"));
-        MenuItem(action("Rotate 90 degrees clockwise"));
-        MenuItem(action("Rotate 90 degrees counter-clockwise"));
-        MenuItem(action("Crop to selection"));
-        MenuItem(action("Image size..."));
-        MenuItem(action("Canvas size..."));
-        MenuItem(action("Generate mipmaps..."));
-
-        ImGui::SeparatorText("Tone");
-
-        MenuItem(action("Invert"));
-        MenuItem(action("Clamp to [0,1]"));
-        MenuItem(action("Zap gremlins..."));
-        MenuItem(action("Exposure/gamma..."));
-        MenuItem(action("Brightness/contrast..."));
-        MenuItem(action("Fill..."));
-
-        ImGui::SeparatorText("Color");
-
-        MenuItem(action("Convert color space..."));
-        MenuItem(action("Channel mixer..."));
-        MenuItem(action("Hue/saturation..."));
-        MenuItem(action("Flatten..."));
-
-        ImGui::SeparatorText("Channels");
-
-        MenuItem(action("Ungroup channels"));
-        MenuItem(action("Regroup channels"));
-        MenuItem(action("Delete channel group"),
-                 delete_channels_label(current_image(), target_groups(current_image())));
-
-        ImGui::SeparatorText("Neighborhood filters");
-
-        MenuItem(action("Blur..."));
-        MenuItem(action("Unsharp mask..."));
-        MenuItem(action("Median filter..."));
-        MenuItem(action("Shift..."));
-        MenuItem(action("Bump to normal map..."));
-
-        ImGui::SeparatorText("Environment maps");
-
-        MenuItem(action("Remap envmap..."));
-        MenuItem(action("Irradiance envmap..."));
+        for (const auto &submenu : edit_submenus())
+            if (ImGui::BeginMenu(submenu.title))
+            {
+                for (const char *name : submenu.commands)
+                    if (std::string_view{name} == "Delete channel group")
+                        MenuItem(action(name), delete_channels_label(img, target_groups(img)));
+                    else
+                        MenuItem(action(name));
+                ImGui::EndMenu();
+            }
 
         ImGui::Separator();
 
@@ -515,8 +508,8 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Auto fit data window"));
         MenuItem(action("Fit selection"));
         MenuItem(action("Auto fit selection"));
-        MenuItem(action("Flip horizontally"));
-        MenuItem(action("Flip vertically"));
+        MenuItem(action("Mirror view horizontally"));
+        MenuItem(action("Mirror view vertically"));
 
         ImGui::Separator();
 

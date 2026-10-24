@@ -30,6 +30,9 @@ TEST_CASE("shorten_names keeps a collection distinguishable, whatever its names 
         {"", ""},
         {"", "/dir/image.exr"},
         {"aaaaaaaa", "aaaaaaaaaaaa"}, // sharing everything but their length
+        // a long shared prefix and suffix
+        {"/shots/sh010_beauty_v003.exr", "/shots/sh020_beauty_v003.exr"},
+        {"/a/x_v001_final_render.exr", "/a/x_v002_final_render.exr", "/a/x_v010_final_render.exr"},
         // isalnum() is undefined for a negative char, which every UTF-8 continuation byte is
         {"/dir/\xc3\xa9t\xc3\xa9_0001.exr", "/dir/\xc3\xa9t\xc3\xa9_0002.exr"},
     };
@@ -39,20 +42,34 @@ TEST_CASE("shorten_names keeps a collection distinguishable, whatever its names 
         auto shortened = shorten_names(names);
         REQUIRE(shortened.size() == names.size());
 
-        // whatever every name begins with is elided, once it is long enough to be worth an ellipsis
-        size_t common = 0;
+        // the prefix and suffix every name shares are elided, once long enough to be worth an ellipsis
+        size_t common = 0, common_end = 0;
         while (!names.empty() && std::all_of(names.begin(), names.end(), [&](const string &n)
                                              { return n.size() > common && n[common] == names[0][common]; }))
             ++common;
+        while (!names.empty() && std::all_of(names.begin(), names.end(),
+                                             [&](const string &n)
+                                             {
+                                                 return n.size() > common_end &&
+                                                        n[n.size() - 1 - common_end] ==
+                                                            names[0][names[0].size() - 1 - common_end];
+                                             }))
+            ++common_end;
 
         for (size_t i = 0; i < names.size(); ++i)
         {
             CAPTURE(names[i]);
             if (common > 8)
                 CHECK(shortened[i].compare(0, common, names[i], 0, common) != 0);
+            if (common_end > 8)
+                CHECK((shortened[i].size() < common_end ||
+                       shortened[i].compare(shortened[i].size() - common_end, common_end, names[i],
+                                            names[i].size() - common_end, common_end) != 0));
 
-            // a name with nothing unique left falls back to its own file name, so only an empty input
-            // can shorten to nothing
+            // A name that is all shared prefix or suffix has nothing unique left, and falls back to its own
+            // file name, so only an empty input can shorten to nothing.
+            if (names[i].size() > 4 && (names[i].size() == common || names[i].size() == common_end))
+                CHECK(shortened[i] == get_filename(names[i]));
             CHECK(shortened[i].empty() == names[i].empty());
 
             for (size_t j = 0; j < i; ++j)
@@ -62,26 +79,6 @@ TEST_CASE("shorten_names keeps a collection distinguishable, whatever its names 
                     CHECK(shortened[i] != shortened[j]);
             }
         }
-    }
-}
-
-TEST_CASE("shorten_names trims what every name shares")
-{
-    auto shortened = shorten_names({"/some/long/dir/render_0001.exr", "/some/long/dir/render_0002.exr"});
-    REQUIRE(shortened.size() == 2);
-
-    // the frame number is the unique part; the directory and extension are shared and elided
-    CHECK(shortened[0].find("0001") != string::npos);
-    CHECK(shortened[1].find("0002") != string::npos);
-    CHECK(shortened[0].find("/some/long/dir/") == string::npos);
-
-    SUBCASE("and falls back to a file name when that leaves nothing")
-    {
-        CHECK(shorten_names({"a.exr", "xa.exr"})[0] == "a.exr");
-
-        auto identical = shorten_names({"/dir/image.exr", "/dir/image.exr"});
-        CHECK(identical[0] == "image.exr");
-        CHECK(identical[1] == "image.exr");
     }
 }
 

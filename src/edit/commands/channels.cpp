@@ -63,17 +63,15 @@ std::vector<int> target_channels(const EditContext &ctx)
     return out;
 }
 
-/// The channel to leave the viewport on after a rebuild, or -1 to leave it where it is.
+/// A channel of the group the viewport shows, to leave it on after a rebuild, or -1 when it shows none.
 /**
-    Only a group being changed is followed; see select_channels_group().
+    Whether or not the edit changes that group: the rebuild renumbers every group, so an index left alone
+    can afterwards name another one; see select_channels_group().
 */
-int followed_channel(const ImagePtr &img, const std::vector<int> &changed)
+int shown_channel(const ImagePtr &img)
 {
     const std::vector<int> showing = group_channels(img, img->selected_group);
-    for (int c : changed)
-        if (std::find(showing.begin(), showing.end(), c) != showing.end())
-            return c;
-    return -1;
+    return showing.empty() ? -1 : showing.front();
 }
 
 /// The layer \p group belongs to, which is the prefix its channel names share.
@@ -126,15 +124,28 @@ void select_channels_group(Image &img, int channel)
 /**
     Leaves the viewport on whichever group now holds \p follow. Ungrouping and regrouping are this in both
     directions.
+
+    The selection is kept on the channels, so every group the rebuild makes of selected channels would come out
+    selected. Where any of \p channels was selected, the group on screen is selected in their place.
 */
 std::function<void(Image &)> mark_ungrouped(std::vector<int> channels, int follow, bool ungrouped)
 {
     return [channels = std::move(channels), follow, ungrouped](Image &img)
     {
-        for (int c : channels) img.channels[size_t(c)].ungrouped = ungrouped;
+        bool selected = false;
+        for (int c : channels)
+        {
+            selected |= img.channels[size_t(c)].selected;
+            img.channels[size_t(c)].ungrouped = ungrouped;
+        }
         img.rebuild_layers();
         if (follow >= 0)
             select_channels_group(img, follow);
+        if (selected)
+        {
+            for (int c : channels) img.channels[size_t(c)].selected = false;
+            img.select_group(img.selected_group);
+        }
     };
 }
 
@@ -152,7 +163,6 @@ public:
                      ImGuiKey_None,
                      /* has_dialog */ false,
                      "Ungroup",
-                     24.f,
                      /* draws_subject_selector */ false})
     {
     }
@@ -170,7 +180,7 @@ public:
         if (channels.empty())
             return;
 
-        const int follow = followed_channel(img, channels);
+        const int follow = shown_channel(img);
 
         auto forward  = mark_ungrouped(channels, follow, true);
         auto backward = mark_ungrouped(channels, follow, false);
@@ -212,7 +222,6 @@ public:
                      ImGuiKey_None,
                      /* has_dialog */ false,
                      "Regroup",
-                     24.f,
                      /* draws_subject_selector */ false})
     {
     }
@@ -229,7 +238,7 @@ public:
         if (marked.empty())
             return;
 
-        const int follow = followed_channel(img, marked);
+        const int follow = shown_channel(img);
 
         auto forward  = mark_ungrouped(marked, follow, false);
         auto backward = mark_ungrouped(marked, follow, true);
@@ -250,7 +259,6 @@ public:
                      ImGuiKey_None,
                      /* has_dialog */ false,
                      "Delete",
-                     24.f,
                      /* draws_subject_selector */ false})
     {
     }
@@ -279,13 +287,27 @@ public:
         // erase from the back, so the indices still to be erased are not shifted
         std::sort(channels.begin(), channels.end(), std::greater<int>());
 
+        // the shown group's channel, by name, since erasing shifts the indices of those after it; gone if the
+        // shown group is deleted, when the rebuild falls back to another
+        const int         shown  = shown_channel(img);
+        const std::string follow = shown >= 0 && std::find(channels.begin(), channels.end(), shown) == channels.end()
+                                       ? img->channels[size_t(shown)].name
+                                       : std::string{};
+
         modify_image(
             ctx, "Delete channel group",
-            [channels](Image &image)
+            [channels, follow](Image &image)
             {
                 for (int c : channels)
                     if (c >= 0 && c < int(image.channels.size()))
                         image.channels.erase(image.channels.begin() + c);
+                image.rebuild_layers();
+                for (size_t c = 0; !follow.empty() && c < image.channels.size(); ++c)
+                    if (image.channels[c].name == follow)
+                    {
+                        select_channels_group(image, int(c));
+                        break;
+                    }
             },
             structure_undo, Extent_Structure);
     }

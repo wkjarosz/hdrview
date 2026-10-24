@@ -27,16 +27,13 @@ using namespace hdrview_test;
 namespace
 {
 
-// one interleaved RGBA pixel
-std::vector<float> pixel(float r, float g, float b, float a) { return {r, g, b, a}; }
-
 /// A 1x1 RGBA image: `color` in each of R, G and B, `alpha` in A.
 ImagePtr rgba_pixel_image(float color, float alpha)
 {
     return test_image(int2{1, 1}, 4, [=](int c, int, int) { return c < 3 ? color : alpha; });
 }
 
-// by name, since OpenEXR stores channels alphabetically
+/// The sample of the 1x1 image's channel `name`, found by name since OpenEXR stores channels alphabetically.
 float channel_value(const ImagePtr &img, const std::string &name)
 {
     for (const auto &c : img->channels)
@@ -46,145 +43,67 @@ float channel_value(const ImagePtr &img, const std::string &name)
     return 0.f;
 }
 
-// the two conventions a premultiplied file can hold, for straight color `c` under coverage `a`
-float post_transfer(float c, float a) { return a * from_linear(c, TransferFunction::sRGB); }
-float linear_premult(float c, float a) { return from_linear(a * c, TransferFunction::sRGB); }
-
 } // namespace
 
-TEST_CASE("The alpha pair is a no-op for every kind but post-transfer premultiplication")
+TEST_CASE("The alpha pair divides out and restores post-transfer premultiplication, and nothing else")
 {
-    for (TransparencyType_ at :
-         {TransparencyType_None, TransparencyType_PremultipliedLinear, TransparencyType_Straight})
-    {
-        CAPTURE(transparency_type_name(at));
-        auto px = pixel(0.25f, 0.5f, 0.75f, 0.5f);
+    // A 3x2 buffer whose every sample differs, so a pixel scaled by its neighbor's alpha, or a stride that
+    // is off by one, shows. Fully transparent pixels in both rows, whose color is kept rather than divided
+    // by zero.
+    const int2  size{3, 2};
+    const float alphas[] = {0.5f, 0.f, 0.8f, 0.25f, 1.f, 0.f};
 
-        unpremultiply_before_transfer(px.data(), int3{1, 1, 4}, at);
-        CHECK(px[0] == doctest::Approx(0.25f));
-        CHECK(px[3] == doctest::Approx(0.5f));
-
-        repremultiply_after_transfer(px.data(), int3{1, 1, 4}, at);
-        CHECK(px[0] == doctest::Approx(0.25f));
-    }
-}
-
-TEST_CASE("Post-transfer premultiplication is divided out and restored around a transfer")
-{
-    const float a = 0.5f, straight = 0.8f;
-
-    // what such a file holds: the encoded color, multiplied by alpha
-    auto px = pixel(post_transfer(straight, a), post_transfer(straight, a), post_transfer(straight, a), a);
-
-    unpremultiply_before_transfer(px.data(), int3{1, 1, 4}, TransparencyType_PremultipliedNonLinear);
-    // dividing by alpha recovers the encoded straight color the inverse transfer expects
-    CHECK(px[0] == doctest::Approx(from_linear(straight, TransferFunction::sRGB)));
-
-    for (int c = 0; c < 3; ++c) px[c] = to_linear(px[c], TransferFunction::sRGB);
-
-    repremultiply_after_transfer(px.data(), int3{1, 1, 4}, TransparencyType_PremultipliedNonLinear);
-    // ending in HDRView's working form: linear color, multiplied by alpha
-    CHECK(px[0] == doctest::Approx(a * straight));
-    CHECK(px[3] == doctest::Approx(a)); // alpha itself is never scaled
-}
-
-TEST_CASE("The two premultiplied conventions disagree, and reading one as the other is visibly wrong")
-{
-    const float a = 0.5f, straight = 1.f;
-
-    // the discriminating case: full-intensity color under half coverage
-    CHECK(post_transfer(straight, a) == doctest::Approx(0.5f));
-    CHECK(linear_premult(straight, a) == doctest::Approx(0.7354f).epsilon(0.001));
-
-    // reading a post-transfer file as linear-premultiplied applies the inverse transfer to the multiplied value
-    const float misread = to_linear(post_transfer(straight, a), TransferFunction::sRGB);
-    CHECK(misread == doctest::Approx(0.2140f).epsilon(0.001));
-    CHECK(misread != doctest::Approx(a * straight)); // the correct answer is 0.5
-}
-
-TEST_CASE("A transfer function that is the identity makes the two premultiplied kinds coincide")
-{
-    // formats storing linear samples need no special case: the pair cancels arithmetically
-    const float a = 0.5f, straight = 0.8f;
-    CHECK(from_linear(a * straight, TransferFunction::Linear) ==
-          doctest::Approx(a * from_linear(straight, TransferFunction::Linear)));
-}
-
-TEST_CASE("A fully transparent pixel keeps its color rather than dividing by zero")
-{
-    auto px = pixel(0.25f, 0.5f, 0.75f, 0.f);
-
-    unpremultiply_before_transfer(px.data(), int3{1, 1, 4}, TransparencyType_PremultipliedNonLinear);
-    CHECK(px[0] == doctest::Approx(0.25f));
-    CHECK(std::isfinite(px[0]));
-
-    repremultiply_after_transfer(px.data(), int3{1, 1, 4}, TransparencyType_PremultipliedNonLinear);
-    // restoring multiplies by the alpha that is there, so a transparent pixel ends at zero either way
-    CHECK(px[0] == doctest::Approx(0.f));
-}
-
-TEST_CASE("A two-channel gray+alpha buffer is handled like RGBA")
-{
-    const float        a = 0.5f, straight = 0.8f;
-    std::vector<float> px{post_transfer(straight, a), a};
-
-    unpremultiply_before_transfer(px.data(), int3{1, 1, 2}, TransparencyType_PremultipliedNonLinear);
-    CHECK(px[0] == doctest::Approx(from_linear(straight, TransferFunction::sRGB)));
-    CHECK(px[1] == doctest::Approx(a));
-}
-
-TEST_CASE("A single-channel buffer has no alpha to divide by and is left alone")
-{
-    std::vector<float> px{0.25f};
-    unpremultiply_before_transfer(px.data(), int3{1, 1, 1}, TransparencyType_PremultipliedNonLinear);
-    CHECK(px[0] == doctest::Approx(0.25f));
-}
-
-TEST_CASE("set_transparency records what the file said, and what an override replaced it with")
-{
-    auto img = std::make_shared<Image>(int2{1, 1}, 4);
-
-    // no override: the effective kind is the file's
-    for (TransparencyType_ at : {TransparencyType_None, TransparencyType_Straight, TransparencyType_PremultipliedLinear,
-                                 TransparencyType_PremultipliedNonLinear})
-    {
-        img->set_transparency(at, std::nullopt);
-        CHECK(img->transparency == at);
-        CHECK(img->transparency_from_file == at);
-        CHECK_FALSE(img->transparency_assumed);
-    }
-
-    // overridden: the effective kind changes, what the file said does not
-    for (TransparencyType_ forced : {TransparencyType_None, TransparencyType_Straight,
-                                     TransparencyType_PremultipliedLinear, TransparencyType_PremultipliedNonLinear})
-        for (TransparencyType_ from_file :
-             {TransparencyType_None, TransparencyType_Straight, TransparencyType_PremultipliedLinear,
-              TransparencyType_PremultipliedNonLinear})
+    for (TransparencyType_ t = TransparencyType_None; t < TransparencyType_Count; ++t)
+        for (int n = 1; n <= 4; ++n)
         {
-            img->set_transparency(from_file, forced, true);
-            CHECK(img->transparency == forced);
-            CHECK(img->transparency_from_file == from_file);
-            CHECK(img->transparency_assumed);
+            CAPTURE(transparency_type_name(t));
+            CAPTURE(n);
+
+            // alpha is last, so with one channel there is none, and with any more the last one is it
+            const bool divides = t == TransparencyType_PremultipliedNonLinear && n > 1;
+
+            std::vector<float> stored(size_t(size.x * size.y * n));
+            for (int i = 0; i < size.x * size.y; ++i)
+                for (int c = 0; c < n; ++c)
+                    stored[size_t(i * n + c)] = c == n - 1 && n > 1 ? alphas[i] : 0.1f + 0.05f * float(i * 4 + c);
+
+            auto px = stored;
+            unpremultiply_before_transfer(px.data(), int3{size, n}, t);
+
+            // dividing by alpha recovers the encoded straight color the inverse transfer expects; the
+            // linearization in between is what the pair exists for
+            auto linear = px;
+            for (int i = 0; i < size.x * size.y; ++i)
+                for (int c = 0; c < n - 1; ++c)
+                    linear[size_t(i * n + c)] = to_linear(linear[size_t(i * n + c)], TransferFunction::sRGB);
+            repremultiply_after_transfer(linear.data(), int3{size, n}, t);
+
+            for (int i = 0; i < size.x * size.y; ++i)
+                for (int c = 0; c < n; ++c)
+                {
+                    CAPTURE(i);
+                    CAPTURE(c);
+                    const size_t k     = size_t(i * n + c);
+                    const bool   color = c < n - 1;
+                    const float  a     = alphas[i];
+
+                    // alpha itself is never scaled, nor is anything when there is no division to make
+                    if (!divides || !color)
+                    {
+                        CHECK(px[k] == stored[k]);
+                        CHECK(linear[k] == (color ? to_linear(stored[k], TransferFunction::sRGB) : stored[k]));
+                        continue;
+                    }
+
+                    // a fully transparent pixel carries no color to recover, so it is left as it is
+                    const float straight = a == 0.f ? stored[k] : stored[k] / a;
+                    CHECK(px[k] == doctest::Approx(straight).epsilon(1e-6));
+
+                    // ending in HDRView's working form, linear color multiplied by alpha, which is zero for a
+                    // transparent pixel either way
+                    CHECK(linear[k] == doctest::Approx(a * to_linear(straight, TransferFunction::sRGB)).epsilon(1e-6));
+                }
         }
-}
-
-TEST_CASE("finalize() premultiplies straight alpha and leaves the other kinds alone")
-{
-    auto make = [](TransparencyType_ at)
-    {
-        // the kind has to be set before finalize(), which is what acts on it
-        auto img = std::make_shared<Image>(int2{1, 1}, 4);
-        for (int c = 0; c < 3; ++c) img->channels[c](0, 0) = 1.f;
-        img->channels[3](0, 0) = 0.5f;
-        img->transparency      = at;
-        img->finalize();
-        return img;
-    };
-
-    CHECK(make(TransparencyType_Straight)->channels[0](0, 0) == doctest::Approx(0.5f));
-    // already multiplied, whichever space it happened in
-    CHECK(make(TransparencyType_PremultipliedLinear)->channels[0](0, 0) == doctest::Approx(1.f));
-    CHECK(make(TransparencyType_PremultipliedNonLinear)->channels[0](0, 0) == doctest::Approx(1.f));
 }
 
 // The override exists for files that contradict their own format's convention.
@@ -200,12 +119,11 @@ TEST_CASE("An associated-alpha PNG can be read as premultiplied, against the PNG
     save_png_image(*img, out, "premul.png", /*dither*/ false, /*interlaced*/ false,
                    /*sixteen_bit*/ false, TransferFunction::sRGB);
 
-    // read as the spec says: the samples are taken as straight and multiplied by alpha again
+    // read as the spec says, the samples are taken as straight: EOTF(0.5), multiplied by coverage a second time
     {
         auto image = load_bytes(out.str(), "premul.png");
         REQUIRE(image);
         CHECK(image->transparency == TransparencyType_Straight);
-        // taken as straight: EOTF(0.5) linearized, then multiplied by coverage a second time
         CHECK(channel_value(image, "R") ==
               doctest::Approx(0.5f * to_linear(0.5f, TransferFunction::sRGB)).epsilon(0.05));
     }
@@ -248,7 +166,7 @@ TEST_CASE("A straight-alpha EXR can be read as straight, against the EXR spec")
         auto image = load_bytes(out.str(), "straight.exr", opts);
         REQUIRE(image);
         CHECK(image->transparency == TransparencyType_Straight);
-        // finalize() now multiplies by the coverage the file's samples were never scaled by
+        // finalize() multiplies by the coverage the file's samples were never scaled by
         CHECK(channel_value(image, "R") == doctest::Approx(0.5f).epsilon(0.01));
     }
 }

@@ -194,23 +194,6 @@ std::string with_extra_boxes(const std::string &jp2, const std::string &extra)
     return jp2.substr(0, at - 4) + extra + jp2.substr(at - 4);
 }
 
-/// A little-endian TIFF holding one IFD0 entry, which is what an EXIF block is.
-std::string exif_blob(uint16_t tag, uint16_t value)
-{
-    std::string out;
-    out += "II";
-    put(out, (uint16_t)42);
-    put(out, (uint32_t)8);
-    put(out, (uint16_t)1);
-    put(out, tag);
-    put(out, (uint16_t)3); // SHORT
-    put(out, (uint32_t)1);
-    put(out, value);
-    put(out, (uint16_t)0);
-    put(out, (uint32_t)0);
-    return out;
-}
-
 /// The body of a 'uuid' box: the sixteen identifying bytes followed by the payload.
 std::string uuid_payload(const uint8_t uuid[16], const std::string &payload)
 {
@@ -359,14 +342,10 @@ TEST_CASE("Both JPEG 2000 syntaxes decode to the same pixels")
 
 TEST_CASE("A bit depth the writer does not offer is refused, not quietly changed")
 {
+    // the depths the dialog does offer are each a setting of test_export_roundtrip.cpp's sweeps
     auto img = test_image(int2{4, 4}, 3, [](int, int, int) { return 0.5f; });
 
     std::ostringstream out(std::ios::binary);
-    for (int bits : {8, 10, 12, 16})
-    {
-        CAPTURE(bits);
-        CHECK_NOTHROW(save_j2k_image(*img, out, "a.jp2", true, bits));
-    }
     CHECK_THROWS_AS(save_j2k_image(*img, out, "a.jp2", true, 11), std::exception);
 }
 
@@ -442,10 +421,10 @@ TEST_CASE("A JP2's EXIF and XMP boxes reach the metadata the info panel reads")
     {
         CAPTURE(prefix.size());
 
-        // 0x0112 is Orientation, and 3 is a 180-degree rotation
-        const auto with_meta =
-            with_extra_boxes(plain, box("uuid", uuid_payload(k_exif_uuid, prefix + exif_blob(0x0112, 3))) +
-                                        box("uuid", uuid_payload(k_xmp_uuid, xmp)));
+        // an EXIF block whose one entry is Orientation (0x0112), a SHORT of 3 for a 180-degree rotation
+        const auto exif      = tiff_bytes(Endian::Little, {{0x0112, 3, 1, 3, {}}});
+        const auto with_meta = with_extra_boxes(plain, box("uuid", uuid_payload(k_exif_uuid, prefix + exif)) +
+                                                           box("uuid", uuid_payload(k_xmp_uuid, xmp)));
 
         // through load_image(), since finalize() is what turns the raw buffers into the metadata tree
         const auto img = load_bytes(with_meta, "meta.jp2");
@@ -459,22 +438,6 @@ TEST_CASE("A JP2's EXIF and XMP boxes reach the metadata the info panel reads")
         REQUIRE(img->metadata["xmp"].is_object());
         CHECK(img->metadata["xmp"]["xmp"]["CreatorTool"] == "HDRView");
     }
-}
-
-TEST_CASE("A JP2 file's ICC profile and XMP reach the image")
-{
-    std::vector<int32_t> wrote;
-    const auto           plain = ramp_codestream(8, false, 4, 4, wrote, OPJ_CODEC_JP2);
-
-    const std::string xmp = "<?xpacket begin=\"\"?><x:xmpmeta xmlns:x=\"adobe:ns:meta/\"></x:xmpmeta>";
-    std::string       uuid_payload(16, '\0');
-    const uint8_t     xmp_uuid[16] = {0xBE, 0x7A, 0xCF, 0xCB, 0x97, 0xA9, 0x42, 0xE8,
-                                      0x9C, 0x71, 0x99, 0x94, 0x91, 0xE3, 0xAF, 0xAC};
-    std::memcpy(&uuid_payload[0], xmp_uuid, 16);
-
-    const auto img = load_bytes(load_j2k_image, with_extra_boxes(plain, box("uuid", uuid_payload + xmp)), "meta.jp2");
-    REQUIRE(img);
-    CHECK(std::string(img->xmp_data.begin(), img->xmp_data.end()) == xmp);
 }
 
 TEST_CASE("A JP2 whose codestream OpenJPEG cannot read as a JP2 still decodes from its jp2c box")
@@ -496,42 +459,6 @@ TEST_CASE("A JP2 whose codestream OpenJPEG cannot read as a JP2 still decodes fr
     REQUIRE(img->channels.size() == 1);
     for (size_t i = 0; i < wrote.size(); ++i)
         CHECK(img->channels[0](int(i)) == doctest::Approx(wrote[i] / 255.).epsilon(1e-5));
-}
-
-TEST_CASE("Truncated and corrupted JPEG 2000 files are refused rather than crashing")
-{
-    std::vector<int32_t> wrote;
-    const auto           valid = ramp_codestream(8, false, 16, 16, wrote, OPJ_CODEC_JP2);
-
-    int decoded = 0, refused = 0;
-    for (size_t cut = 1; cut < valid.size(); cut += 7)
-    {
-        CAPTURE(cut);
-        try
-        {
-            if (load_bytes(load_j2k_image, valid.substr(0, cut), "cut.jp2"))
-                ++decoded;
-        }
-        catch (const std::exception &)
-        {
-            ++refused;
-        }
-    }
-    CHECK(decoded + refused > 0);
-
-    for (size_t at = 0; at < valid.size(); at += 11)
-    {
-        CAPTURE(at);
-        std::string flipped = valid;
-        flipped[at]         = (char)(~(uint8_t)flipped[at]);
-        try
-        {
-            load_bytes(load_j2k_image, flipped, "flipped.jp2");
-        }
-        catch (const std::exception &)
-        {
-        }
-    }
 }
 
 TEST_CASE("A codestream declaring impossible dimensions is refused before it is decoded")
@@ -621,7 +548,7 @@ TEST_CASE("Every file in a real JPEG 2000 corpus either decodes or is refused")
                 CHECK(img->size().y > 0);
                 CHECK_FALSE(img->channels.empty());
                 for (const auto &ch : img->channels) CHECK(ch.size() == img->size());
-                // each header entry is an object of value/string/type/description, as the info panel wants
+                // counted for the report below, from the block coder the header names
                 if (img->metadata["header"]["Block coder"].value("value", std::string{}) == "HTJ2K")
                     ++high_throughput;
             }

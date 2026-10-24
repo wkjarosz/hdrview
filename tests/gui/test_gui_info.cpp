@@ -13,17 +13,14 @@
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
 
-#ifndef HDRVIEW_GUI_TEST_IMAGE
-#error "HDRVIEW_GUI_TEST_IMAGE must be defined by CMake to a small fixture image path"
+#ifndef HDRVIEW_GUI_TEST_IMAGE_2
+#error "HDRVIEW_GUI_TEST_IMAGE_2 must be defined by CMake to a small fixture image path"
 #endif
 
 static void load_fixture_and_show_info(ImGuiTestContext *ctx)
 {
-    if (hdrview()->num_images() == 0)
-    {
-        hdrview_test::load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE});
-    }
-    IM_CHECK(hdrview()->num_images() > 0);
+    hdrview_test::reset_images(ctx);
+    IM_CHECK_EQ(hdrview_test::load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE_2}), 1);
 
     // which panels start open depends on the saved layout; focus it too, or docked alongside others it is
     // an unselected tab that draws nothing
@@ -54,8 +51,5 @@ void RegisterTests_Info(ImGuiTestEngine *engine)
         ctx->Yield();
         IM_CHECK(!hdrview()->action("Reload image").enabled());
         IM_CHECK(!hdrview()->action("Reload all images").enabled());
-
-        // leave an image loaded, as the other tests in this run expect
-        load_fixture_and_show_info(ctx);
     };
 }

@@ -40,9 +40,9 @@ int apple_os_major();
 
 /// \p bytes as macOS's ImageIO decodes them, the decoder Preview and every macOS application use.
 /**
-    Linear BT.709 light with 1.0 at SDR white, drawn into a float bitmap in extended linear sRGB, so the file's labels
-    are honored, or ignored, as every macOS application would. None when ImageIO cannot decode the file, or when
-    \p request asks for a rendition before macOS 14, which introduced them.
+    Premultiplied linear BT.709 light with 1.0 at SDR white, drawn into a float bitmap in extended linear sRGB, so the
+    file's labels are honored, or ignored, as every macOS application would. None when ImageIO cannot decode the file,
+    or when \p request asks for a rendition before macOS 14, which introduced them.
 */
 std::optional<AppleImage> apple_decode(const std::string &bytes, AppleDecode request = AppleDecode::Default);
 

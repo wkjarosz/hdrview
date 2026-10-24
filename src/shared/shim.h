@@ -28,20 +28,32 @@ namespace shader
 {
 using vec2 = float2;
 using vec3 = float3;
-using vec4 = float4;
-using mat3 = float3x3;
+using vec4  = float4;
+using ivec2 = int2;
+using ivec3 = int3;
+using mat3  = float3x3;
 
 using la::dot;
 using la::mul;
+using la::normalize;
 using std::abs;
+using std::acos;
+using std::asin;
+using std::atan2;
+using std::ceil;
+using std::clamp;
+using std::copysign;
+using std::cos;
 using std::exp;
 using std::exp2;
+using std::floor;
 using std::log;
 using std::log10;
 using std::log2;
 using std::max;
 using std::min;
 using std::pow;
+using std::sin;
 using std::sqrt;
 } // namespace shader
 
@@ -58,10 +70,21 @@ using std::sqrt;
 #define SHARED_CONST const
 #define SHARED_BEGIN
 #define SHARED_END
-#define mul(a, b) ((a) * (b))
-#define log10(x)  (log(x) * 0.43429448190325182f)
+#define mul(a, b)   ((a) * (b))
+#define log10(x)    (log(x) * 0.43429448190325182f)
+#define atan2(y, x) atan(y, x)
+
+// |a| with the sign of b; unlike C's, it reads -0 as positive, which shading languages cannot tell from +0. Defined
+// under another name, since Metal has a copysign() of its own, which SPIRV-Cross's output would collide with.
+float shim_copysign(float a, float b) { return b < 0.0f ? -abs(a) : abs(a); }
+#define copysign(a, b) shim_copysign(a, b)
 
 #endif
+
+SHARED_BEGIN
+/// \p x modulo \p n, in [0, n) whatever the sign of \p x, which GLSL's % does not promise.
+SHARED_FN int floor_mod(int x, int n) { return x - n * int(floor(float(x) / float(n))); }
+SHARED_END
 
 /// Defines the vec3 overload of the one-argument float function \p f, applying it to each component.
 #define SHARED_PER_COMPONENT(f)                                                                                        \

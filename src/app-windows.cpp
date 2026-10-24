@@ -134,7 +134,11 @@ void HDRViewApp::enable_gui_test_engine(void (*register_tests)(ImGuiTestEngine *
         // frames (see MouseMoveToPos() in imgui_te_context.cpp); Fast teleports it in 2 frames.
         io.ConfigRunSpeed = ImGuiTestRunSpeed_Fast;
         register_tests(engine);
-        ImGuiTestEngine_QueueTests(engine, ImGuiTestGroup_Tests, nullptr, ImGuiTestRunFlags_RunFromCommandLine);
+        // HDRVIEW_GUI_TEST_FILTER picks tests by the engine's filter syntax: comma-separated substrings of a test's
+        // name or category, '^' anchoring one to the start and '-' excluding; unset, every test runs
+        const char *filter = getenv("HDRVIEW_GUI_TEST_FILTER");
+        ImGuiTestEngine_QueueTests(engine, ImGuiTestGroup_Tests, filter && *filter ? filter : nullptr,
+                                   ImGuiTestRunFlags_RunFromCommandLine);
     };
     // HelloImGui's own PostSwap hook steps the running test forward each frame; this watches for the queue
     // draining and asks the app to exit via m_params.appShallExit, as a window-close request does.
@@ -781,6 +785,16 @@ void HDRViewApp::set_current_group(int index, int group)
     }
 }
 
+void HDRViewApp::select_group_alone(int index, int group)
+{
+    auto img = image(index);
+    if (!img || !img->is_valid_group(group))
+        return;
+
+    for (auto &i : m_images) i->deselect_all();
+    set_current_group(index, group);
+}
+
 void HDRViewApp::toggle_group_selected(int index, int group)
 {
     // logic:
@@ -1252,7 +1266,7 @@ void HDRViewApp::draw_file_window()
                     else if (io.KeyShift)
                         m_reference = is_reference ? -1 : i;
                     else
-                        set_current_image_index(i);
+                        select_group_alone(i, img->selected_group);
                     set_image_textures();
                     spdlog::trace("Clicked image {}; current is {}, reference is {}", i, m_current, m_reference);
                 }

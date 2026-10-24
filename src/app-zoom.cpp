@@ -7,29 +7,37 @@
 using namespace std;
 using namespace HelloImGui;
 
+namespace
+{
+/// The display window the view shows \p img in, empty without one.
+Box2f display_window_of(const ConstImagePtr &img) { return img ? Box2f{img->display_window} : Box2f{float2{0.f}}; }
+
+/// The display window of the image \p preview shows: a reshaping edit's result, or else \p img.
+Box2f previewed_window(const EditPreview &preview, const ConstImagePtr &img)
+{ return preview.window ? Box2f{*preview.window} : display_window_of(img); }
+} // namespace
+
 /**
-    Mirrors a pixel coordinate about the current image's display window, along whichever axes are flipped.
+    Mirrors a pixel coordinate about a display window, along whichever axes are flipped.
 
     Pixel coordinates are continuous, with pixel \c i covering <tt>[i, i+1)</tt>, so the mirror of the
     whole window <tt>[0, max)</tt> is <tt>max - p</tt> -- the same convention image_position() hands the
     shader. The involution makes pixel_at_vp_pos() and vp_pos_at_pixel() inverses whether flipped or not.
 */
-float2 HDRViewApp::flip_pixel(float2 pixel) const
-{
-    if (auto img = current_image())
-        return select(m_flip, float2{img->display_window.max} - pixel, pixel);
-    return pixel;
-}
+float2 HDRViewApp::flip_pixel(float2 pixel, const Box2f &display_window) const
+{ return select(m_flip, display_window.max - pixel, pixel); }
 
 float2 HDRViewApp::pixel_at_vp_pos(float2 vp_pos) const
-{
-    return flip_pixel((vp_pos - (m_translate + center_offset())) / m_zoom);
-}
+{ return pixel_at_vp_pos(vp_pos, display_window_of(current_image())); }
 
 float2 HDRViewApp::vp_pos_at_pixel(float2 pixel) const
-{
-    return m_zoom * flip_pixel(pixel) + (m_translate + center_offset());
-}
+{ return vp_pos_at_pixel(pixel, display_window_of(current_image())); }
+
+float2 HDRViewApp::pixel_at_vp_pos(float2 vp_pos, const Box2f &display_window) const
+{ return flip_pixel((vp_pos - (m_translate + center_offset(display_window))) / m_zoom, display_window); }
+
+float2 HDRViewApp::vp_pos_at_pixel(float2 pixel, const Box2f &display_window) const
+{ return m_zoom * flip_pixel(pixel, display_window) + (m_translate + center_offset(display_window)); }
 
 void HDRViewApp::set_zoom(float zoom)
 {
@@ -126,22 +134,15 @@ void HDRViewApp::zoom_out()
 void HDRViewApp::reposition_pixel_to_vp_pos(float2 position, float2 pixel)
 {
     // Calculate where the new offset must be in order to satisfy the image position equation.
-    m_translate = position - (flip_pixel(pixel) * m_zoom) - center_offset();
-}
-
-Box2f HDRViewApp::scaled_display_window(ConstImagePtr img) const
-{
-    Box2f dw = img ? Box2f{img->display_window} : Box2f{{0, 0}, {0, 0}};
-    dw.min *= m_zoom;
-    dw.max *= m_zoom;
-    return dw;
+    const Box2f w = display_window_of(current_image());
+    m_translate   = position - (flip_pixel(pixel, w) * m_zoom) - center_offset(w);
 }
 
 float HDRViewApp::pixel_ratio() const { return ImGui::GetIO().DisplayFramebufferScale.x; }
 
-float2 HDRViewApp::center_offset() const
+float2 HDRViewApp::center_offset(const Box2f &display_window) const
 {
-    const Box2f dw = scaled_display_window(current_image());
+    const Box2f dw{display_window.min * m_zoom, display_window.max * m_zoom};
     // Center the display window in the viewport. Unflipped, the mapping is zoom*pixel + offset, so the
     // window's min corner has to be pulled back to the viewport's margin; flipped, it is
     // zoom*(display_window.max - pixel) + offset, which already puts that corner at zero.
@@ -271,18 +272,52 @@ static float2 scroll_units(float2 wheel)
     return discrete ? wheel * k_units_per_notch : wheel;
 }
 
+std::optional<float2> HDRViewApp::preview_uv(float2 vp_pos) const
+{
+    const EditPreview *preview = edit_preview();
+    if (!preview)
+        return std::nullopt;
+    const Box2f w = previewed_window(*preview, current_image());
+    return (pixel_at_vp_pos(vp_pos, w) - w.min) / w.size();
+}
+
 void HDRViewApp::handle_mouse_interaction()
 {
     auto &io = ImGui::GetIO();
-    if (io.WantCaptureMouse || !current_image())
+    if (!current_image())
         return;
+
+    // A save or edit dialog is modal but lets the viewport be panned and zoomed around it: where the mouse is over the
+    // viewport and no window (under a modal, only it and its popups can be hovered), and for a drag only if it began
+    // there. The dialog is the one shown last frame, since this runs before this frame's dialogs.
+    bool navigate_only = false, may_scroll = true, may_drag = true;
+    if (io.WantCaptureMouse)
+    {
+        const bool around = ImGui::GetFrameCount() - m_navigable_dialog_frame <= 1 &&
+                            app_pos_in_viewport(io.MousePos) && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);
+        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        {
+            m_dragging_around_dialog = around;
+            // a drag begun on a preview that takes drags steers it to the end, and one begun beside it pans
+            const auto at      = preview_uv(vp_pos_at_app_pos(io.MousePos));
+            m_steering_preview = around && at && all(gequal(*at, float2{0.f})) && all(lequal(*at, float2{1.f}));
+        }
+        else if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
+            m_dragging_around_dialog = m_steering_preview = false;
+        if (!around && !m_dragging_around_dialog)
+            return;
+        navigate_only = true;
+        // a drag of one of the dialog's own widgets, carried out over the viewport, is the widget's
+        may_drag   = m_dragging_around_dialog;
+        may_scroll = around && (m_dragging_around_dialog || !ImGui::IsMouseDown(ImGuiMouseButton_Left));
+    }
 
     auto vp_mouse_pos   = vp_pos_at_app_pos(io.MousePos);
     bool cancel_autofit = false;
 
     auto scroll = scroll_units(float2{io.MouseWheelH, io.MouseWheel});
 
-    if (length2(scroll) > 0.f)
+    if (may_scroll && length2(scroll) > 0.f)
     {
         cancel_autofit = true;
         if (ImGui::IsKeyDown(ImGuiMod_Shift))
@@ -292,7 +327,8 @@ void HDRViewApp::handle_mouse_interaction()
             zoom_at_vp_pos(scroll.y / 4.f, vp_mouse_pos);
     }
 
-    if (m_mouse_mode == MouseMode_RectangularSelection)
+    const MouseMode mouse_mode = navigate_only ? MouseMode(MouseMode_PanZoom) : m_mouse_mode;
+    if (mouse_mode == MouseMode_RectangularSelection)
     {
         // set m_roi based on dragged region
         if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
@@ -306,9 +342,9 @@ void HDRViewApp::handle_mouse_interaction()
         else if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
             m_roi = m_roi_live;
     }
-    else if (m_mouse_mode == MouseMode_Annotate)
+    else if (mouse_mode == MouseMode_Annotate)
         handle_annotate_tool();
-    else if (m_mouse_mode == MouseMode_ColorInspector)
+    else if (mouse_mode == MouseMode_ColorInspector)
     {
         if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
             // add watched pixel
@@ -321,16 +357,26 @@ void HDRViewApp::handle_mouse_interaction()
     }
     else
     {
-        if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+        if (may_drag && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
         {
+            // A drag begun on a preview that takes drags steers it, from where the drag last was to where it is, in
+            // the uv of the image previewed; Alt pans the view over it instead.
+            const float2 delta{ImGui::GetMouseDragDelta(ImGuiMouseButton_Left)};
+            bool         steered = false;
+            if (m_steering_preview && !ImGui::IsKeyDown(ImGuiMod_Alt) && m_active_touches < 2)
+                if (const auto from = preview_uv(vp_mouse_pos - delta), to = preview_uv(vp_mouse_pos); from && to)
+                {
+                    const EditPreview *p = edit_preview();
+                    steered = p->command->drag_preview(*from, *to, previewed_window(*p, current_image()).size());
+                }
+
             // A second finger means a pinch, while the first still drives a synthesized left-drag, so
             // panning would fight the zoom. The drag is consumed meanwhile: left to accumulate, it would
             // pan by the whole pinch's travel the moment a finger lifts.
-            if (m_active_touches < 2)
+            if (!steered && m_active_touches < 2)
             {
                 cancel_autofit = true;
-                reposition_pixel_to_vp_pos(vp_mouse_pos + float2{ImGui::GetMouseDragDelta(ImGuiMouseButton_Left)},
-                                           pixel_at_vp_pos(vp_mouse_pos));
+                reposition_pixel_to_vp_pos(vp_mouse_pos + delta, pixel_at_vp_pos(vp_mouse_pos));
             }
             ImGui::ResetMouseDragDelta();
         }

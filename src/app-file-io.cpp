@@ -107,12 +107,22 @@ bool validate_session_manifest(const json &j, const string &source_name)
     return true;
 }
 
+/// Whether a rendition of \p img, blended with \p reference, has alpha: whether either group it shows does.
+bool rendition_has_alpha(const ConstImagePtr &img, const ConstImagePtr &reference)
+{
+    auto has_alpha = [](const ConstImagePtr &i, Target_ target)
+    { return i && group_has_alpha(i->groups[i->active_group_index(target)].type); };
+    return has_alpha(img, Target_Primary) || has_alpha(reference, Target_Secondary);
+}
+
 } // namespace
 
 void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
 {
-    const bool rendition = mode == SaveMode_Rendition;
-    if (ImGui::BeginModalDialog(rendition ? "Export rendition..." : "Save as...", open, ImGui::DialogPosition::Center))
+    const bool  rendition = mode == SaveMode_Rendition;
+    static bool folded    = false;
+    // closed from its title bar as Cancel closes it, its Cancel doing nothing but close
+    if (begin_navigable_dialog(rendition ? "Export rendition..." : "Save as...", open, folded))
     {
         // Define enum for save formats
         enum Format_
@@ -345,15 +355,18 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
 
         case Format_EXR:
         {
-            // A rendition is a single color group, which the options list in place of the image's own groups; this
-            // stands in for it, since it is only built once the file is chosen.
-            static const ImagePtr rgba = []
+            // A rendition is a single color group, which the options list in place of the image's own groups; one of
+            // these stands in for it, since it is only built once the file is chosen.
+            static const auto stand_in = [](int channels)
             {
-                auto img = make_shared<Image>(int2{1, 1}, 4);
+                auto img = make_shared<Image>(int2{1, 1}, channels);
                 img->finalize();
                 return img;
-            }();
-            auto opts = exr_parameters_gui(rendition ? rgba : current_image(), ctx);
+            };
+            static const ImagePtr rgb = stand_in(3), rgba = stand_in(4);
+            auto                  opts = exr_parameters_gui(
+                rendition ? (rendition_has_alpha(current_image(), reference_image()) ? rgba : rgb) : current_image(),
+                ctx);
             save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename, const Image *)
             { save_exr_image(img, os, filename, opts); };
         }
@@ -647,16 +660,13 @@ ConstImagePtr HDRViewApp::image_to_save(SaveMode mode, bool selection_only, floa
         return region.has_volume() ? img->duplicate(region) : img;
 
     // A new image of the view, blended with the reference when there is one, over the image's data window or the
-    // part of it under the selection, which keeps its place in the frame as duplicate() keeps it. It has alpha only
-    // if what it shows does: the current image, or the reference blended with it.
+    // part of it under the selection, which keeps its place in the frame as duplicate() keeps it.
     Box2i bounds = img->data_window;
     if (region.has_volume())
         bounds.intersect(region);
     if (!bounds.has_volume())
         return nullptr;
-    auto has_alpha = [](const ConstImagePtr &i, Target_ target)
-    { return i && group_has_alpha(i->groups[i->active_group_index(target)].type); };
-    const int num_channels = has_alpha(img, Target_Primary) || has_alpha(reference_image(), Target_Secondary) ? 4 : 3;
+    const int num_channels = rendition_has_alpha(img, reference_image()) ? 4 : 3;
     auto      out          = make_shared<Image>(bounds.size(), num_channels);
     // pixel_value() is linear BT.709; the result goes to the chosen primaries or else back to the current image's,
     // labeled with them, so a wide gamut survives in a format that can record it
@@ -1610,7 +1620,10 @@ void HDRViewApp::finish_loading_session()
     {
         view["roi"][0].get_to(m_roi.min);
         view["roi"][1].get_to(m_roi.max);
-        m_roi.make_valid(); // the file's two corners need not arrive in that order
+        // Deselect leaves the inverted box, which make_valid() would turn into one covering everything, so corners in
+        // the wrong order are no selection
+        if (m_roi.is_empty())
+            m_roi = Box2i{int2{0}};
     }
     m_roi_live = m_roi;
 

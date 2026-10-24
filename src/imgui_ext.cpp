@@ -1100,7 +1100,33 @@ void Checkbox(const Action &a)
 // shortcuts ask before this frame's dialogs are drawn
 static int s_modal_dialog_frame = -2;
 
-bool BeginModalDialog(const char *title, bool &open, DialogPosition position, ImGuiWindowFlags flags)
+namespace
+{
+
+/// A collapse arrow at \p pos, drawn as Dear ImGui draws an ordinary window's, pointing as \p folded says.
+bool FoldButton(ImGuiID id, const ImVec2 &pos, bool folded)
+{
+    ImGuiContext &g      = *GImGui;
+    ImGuiWindow  *window = g.CurrentWindow;
+    const ImRect  bb(pos, pos + ImVec2(g.FontSize, g.FontSize));
+    const bool    clipped = !ImGui::ItemAdd(bb, id);
+    bool          hovered, held;
+    const bool    pressed = ImGui::ButtonBehavior(bb, id, &hovered, &held);
+    if (clipped)
+        return pressed;
+    if (hovered || held)
+        window->DrawList->AddRectFilled(
+            bb.Min, bb.Max, ImGui::GetColorU32(held && hovered ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered));
+    ImGui::RenderNavCursor(bb, id, ImGuiNavRenderCursorFlags_Compact);
+    ImGui::RenderArrow(window->DrawList, bb.Min, ImGui::GetColorU32(ImGuiCol_Text),
+                       folded ? ImGuiDir_Right : ImGuiDir_Down, 1.f);
+    return pressed;
+}
+
+} // namespace
+
+bool BeginModalDialog(const char *title, bool &open, DialogPosition position, ImGuiWindowFlags flags, bool *folded,
+                      bool closable)
 {
     // HelloImGui renders a couple of frames to figure out sizes before the first real frame; guard against
     // opening a dialog that starts out already-open (e.g. the About box on first launch) before then.
@@ -1108,6 +1134,8 @@ bool BeginModalDialog(const char *title, bool &open, DialogPosition position, Im
     {
         ImGui::OpenPopup(title);
         open = false;
+        if (folded)
+            *folded = false; //< a dialog opens unfolded, however it was left
     }
 
     switch (position)
@@ -1122,9 +1150,48 @@ bool BeginModalDialog(const char *title, bool &open, DialogPosition position, Im
     case DialogPosition::None: break;
     }
 
-    const bool shown = ImGui::BeginPopupModal(title, nullptr, flags);
+    // Folded, the dialog keeps its width and shrinks to its title bar, as a collapsed window does, but for the sliver
+    // below it that Dear ImGui keeps for the rounded corners. The width is the one it had unfolded: a zero one would
+    // refit it to its contents each frame, which, no longer auto-resizing, size their sliders from the window's width
+    // rather than the font's. A collapsed window is exempt from the style's least height, which the dialog lowers to
+    // the title bar.
+    const bool fold = folded && *folded;
+    if (fold)
+    {
+        flags &= ~ImGuiWindowFlags_AlwaysAutoResize;
+        flags |= ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar;
+        const ImGuiWindow *window = ImGui::FindWindowByName(title);
+        ImGui::SetNextWindowSize(ImVec2(window ? window->Size.x : 0.f, ImGui::GetFrameHeight()));
+        ImGui::PushStyleVarY(ImGuiStyleVar_WindowMinSize, ImGui::GetFrameHeight());
+    }
+
+    // Dear ImGui draws the close button and closes the popup itself when it is pressed
+    bool       keep_open = true;
+    const bool shown     = ImGui::BeginPopupModal(title, closable ? &keep_open : nullptr, flags);
+    if (fold)
+        ImGui::PopStyleVar();
     if (shown)
+    {
         s_modal_dialog_frame = ImGui::GetFrameCount();
+        if (folded)
+        {
+            // where Dear ImGui puts an ordinary window's collapse arrow, in the title bar, outside the content's clip;
+            // on the right, it sits left of the close button
+            ImGuiWindow      *window = ImGui::GetCurrentWindow();
+            const ImRect      bar    = window->TitleBarRect();
+            const ImGuiStyle &style  = ImGui::GetStyle();
+            const float       button = ImGui::GetFontSize();
+            const float       right =
+                bar.Max.x - style.FramePadding.x - button - (closable ? button + style.ItemInnerSpacing.x : 0.f);
+            const ImVec2 pos =
+                ImVec2(style.WindowMenuButtonPosition == ImGuiDir_Left ? bar.Min.x + style.FramePadding.x : right,
+                       bar.Min.y + style.FramePadding.y);
+            ImGui::PushClipRect(bar.Min, bar.Max, false);
+            if (FoldButton(window->GetID("#FOLD"), pos, *folded))
+                *folded = !*folded;
+            ImGui::PopClipRect();
+        }
+    }
     return shown;
 }
 
@@ -1162,17 +1229,60 @@ bool RowBracketButton(const char *icon, const RowSpan &rows, bool bracketed, con
 
     ImGui::SetCursorScreenPos(restore);
 
+    // whole while the rows are joined, and broken in its middle third while they are not, as the chain is
+    auto       *dl  = ImGui::GetWindowDrawList();
+    const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
+    dl->AddLine(ImVec2(x0, rows.first), ImVec2(x1, rows.first), col);
+    dl->AddLine(ImVec2(x1, rows.last), ImVec2(x0, rows.last), col);
     if (bracketed)
-    {
-        auto       *dl  = ImGui::GetWindowDrawList();
-        const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
-
-        dl->AddLine(ImVec2(x0, rows.first), ImVec2(x1, rows.first), col);
         dl->AddLine(ImVec2(x1, rows.first), ImVec2(x1, rows.last), col);
-        dl->AddLine(ImVec2(x1, rows.last), ImVec2(x0, rows.last), col);
+    else
+    {
+        const float third = (rows.last - rows.first) / 3.f;
+        dl->AddLine(ImVec2(x1, rows.first), ImVec2(x1, rows.first + third), col);
+        dl->AddLine(ImVec2(x1, rows.last - third), ImVec2(x1, rows.last), col);
     }
 
     return pressed;
+}
+
+FillsWidth::FillsWidth()
+{
+    const ImGuiWindow *window = ImGui::GetCurrentWindow();
+    m_max_x                   = window->DC.CursorMaxPos.x;
+    m_ideal_x                 = window->DC.IdealMaxPos.x;
+}
+
+FillsWidth::~FillsWidth()
+{
+    // the extents an auto-resizing window is sized from, as they were before the scope; only across, so the items
+    // still give it their height
+    ImGuiWindow *window       = ImGui::GetCurrentWindow();
+    window->DC.CursorMaxPos.x = m_max_x;
+    window->DC.IdealMaxPos.x  = m_ideal_x;
+}
+
+void TextWrappedToWidth(const char *text)
+{
+    FillsWidth fill;
+    ImGui::TextWrapped("%s", text);
+}
+
+RightAligned::RightAligned(float width)
+{
+    const ImGuiWindow *window = ImGui::GetCurrentWindow();
+    m_max_x                   = window->DC.CursorMaxPos.x;
+    m_ideal_x                 = window->DC.IdealMaxPos.x;
+    m_natural_right           = window->DC.CursorPos.x + width;
+    if (const float indent = ImGui::GetContentRegionAvail().x - width; indent > 0.f)
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+}
+
+RightAligned::~RightAligned()
+{
+    ImGuiWindow *window       = ImGui::GetCurrentWindow();
+    window->DC.CursorMaxPos.x = ImMax(m_max_x, m_natural_right);
+    window->DC.IdealMaxPos.x  = ImMax(m_ideal_x, m_natural_right);
 }
 
 DialogResult DialogButtons(const char *confirm_label, const char *cancel_label, bool use_shortcuts,
@@ -1194,10 +1304,9 @@ DialogResult DialogButtons(const char *confirm_label, const char *cancel_label, 
     const float       width = ImGui::CalcTextSize(cancel_label).x + ImGui::CalcTextSize(confirm_label).x +
                         4.f * style.FramePadding.x + style.ItemSpacing.x;
 
-    // Trailing edge of the content, which under an auto-resizing dialog is as wide as its widest row --
-    // so the buttons end where the controls above them do.
-    if (const float indent = ImGui::GetContentRegionAvail().x - width; indent > 0.f)
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+    // at the trailing edge of the content, which under an auto-resizing dialog is as wide as its widest row, so the
+    // buttons end where the controls above them do, without being what holds the dialog that wide
+    RightAligned right(width);
 
     const bool cancel_pressed = ImGui::Button(cancel_label);
     if (cancel_pressed ||
@@ -1503,11 +1612,12 @@ bool in_tone_plot(ImVec2 p)
     return p.x >= pos.x && p.x <= pos.x + size.x && p.y >= pos.y && p.y <= pos.y + size.y;
 }
 
-/// \p screen in the plot's own coordinates, clamped to the unit square the axes are locked to.
+/// \p screen in the plot's own coordinates, clamped to the square the axes are locked to.
 float2 tone_plot_pos(ImVec2 screen)
 {
     const ImPlotPoint p = ImPlot::PixelsToPlot(screen);
-    return float2{std::clamp(float(p.x), 0.f, 1.f), std::clamp(float(p.y), 0.f, 1.f)};
+    return float2{std::clamp(float(p.x), ToneCurveMin, ToneCurveMax),
+                  std::clamp(float(p.y), ToneCurveMin, ToneCurveMax)};
 }
 } // namespace
 
@@ -1532,7 +1642,29 @@ bool BeginToneCurvePlot(const char *id, bool draggable)
     ImPlot::SetupAxisTicks(ImAxis_Y1, 0.0, 1.0, 5);
 
     // fixed, so a steep curve is seen leaving the top and bottom instead of the frame following it
-    ImPlot::SetupAxesLimits(0.0, 1.0, 0.0, 1.0, ImPlotCond_Always);
+    ImPlot::SetupAxesLimits(ToneCurveMin, ToneCurveMax, ToneCurveMin, ToneCurveMax, ImPlotCond_Always);
+
+    // Behind the curves: the [0,1] square black and white bound, shaded and edged, and the dashed diagonal where a
+    // curve would leave every level as it is. Drawn in the text's color, faint, so they read in any theme.
+    ImPlot::SetupFinish();
+    {
+        ImDrawList  *dl = ImPlot::GetPlotDrawList();
+        const ImVec2 lo = ImPlot::PlotToPixels(0.0, 0.0), hi = ImPlot::PlotToPixels(1.0, 1.0);
+        const ImVec2 from = ImPlot::PlotToPixels(ToneCurveMin, ToneCurveMin);
+        const ImVec2 to   = ImPlot::PlotToPixels(ToneCurveMax, ToneCurveMax);
+        ImPlot::PushPlotClipRect();
+        dl->AddRectFilled(ImVec2(lo.x, hi.y), ImVec2(hi.x, lo.y), ImGui::GetColorU32(ImGuiCol_Text, 0.06f));
+        dl->AddRect(ImVec2(lo.x, hi.y), ImVec2(hi.x, lo.y), ImGui::GetColorU32(ImGuiCol_Text, 0.25f));
+        const float dash = HelloImGui::EmSize(0.3f), length = std::hypot(to.x - from.x, to.y - from.y);
+        for (float d = 0.f; d < length; d += 2.f * dash)
+        {
+            const float t0 = d / length, t1 = std::min(d + dash, length) / length;
+            dl->AddLine(ImVec2(from.x + (to.x - from.x) * t0, from.y + (to.y - from.y) * t0),
+                        ImVec2(from.x + (to.x - from.x) * t1, from.y + (to.y - from.y) * t1),
+                        ImGui::GetColorU32(ImGuiCol_Text, 0.3f));
+        }
+        ImPlot::PopPlotClipRect();
+    }
 
     // say the curve can be taken hold of, and keep saying it while it is being held and the cursor has
     // wandered off the plot
@@ -1558,7 +1690,7 @@ void ToneCurve(const char *name, const float *ys, ImVec4 color, float weight)
 void ToneCurveMarkerX(const char *name, float value, ImVec4 color)
 {
     const float xs[2] = {value, value};
-    const float ys[2] = {0.f, 1.f};
+    const float ys[2] = {ToneCurveMin, ToneCurveMax};
 
     ImPlotSpec spec;
     spec.LineWeight = 1.f;

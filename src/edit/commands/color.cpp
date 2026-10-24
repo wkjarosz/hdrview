@@ -17,14 +17,17 @@
 #include "fonts.h"
 #include "image.h"
 #include "imgui_ext.h"
+#include "shared/edits.h"
 
 #include <algorithm>
 #include <cmath>
+#include <hello_imgui/hello_imgui.h>
 #include <optional>
 #include <vector>
 
 namespace
 {
+
 class ConvertColorSpace final : public EditCommand
 {
 public:
@@ -33,8 +36,7 @@ public:
                      ICON_MY_COLORSPACE,
                      ImGuiKey_None,
                      true,
-                     "Convert",
-                     27.f})
+                     "Convert"})
     {
     }
 
@@ -99,37 +101,48 @@ public:
 
         float3x3 M;
         if (!color_conversion_matrix(M, from(), to(), AdaptationMethod(m_method)))
-            ImGui::TextWrapped("These describe the same color space, so this would leave the samples as they are.");
+            ImGui::TextWrappedToWidth(
+                "These describe the same color space, so this would leave the samples as they are.");
+    }
+
+    std::optional<PointEdit> point_edit(const EditContext &) const override
+    {
+        PointEdit e{shader::EDIT_MATRIX};
+        color_conversion_matrix(e.m0, from(), to(), AdaptationMethod(m_method));
+        return e;
+    }
+
+    // as compute_color_transform() works it out for the tag apply() leaves, which adopts no neutral of its own
+    std::optional<float3x3> M_to_sRGB_after(const EditContext &) const override
+    {
+        float3x3 M;
+        color_conversion_matrix(M, to(), Chromaticities{}, AdaptationMethod(m_method));
+        return M;
     }
 
     void apply(const EditContext &ctx) override
     {
-        float3x3 M;
-        color_conversion_matrix(M, from(), to(), AdaptationMethod(m_method));
-
         const int  g = m_dst_gamut, w = m_dst_white, m = m_method;
         const auto tagged = to();
 
-        modify_colors(
-            ctx, "Convert color space",
-            // premultiplied alpha is no obstacle: scaling every component by alpha commutes with a matrix
-            [M](const float4 &c, int2, int) { return float4{la::mul(M, c.xyz()), c.w}; },
-            [g, w, m, tagged](Image &image)
-            {
-                image.chromaticities    = tagged;
-                image.adopted_neutral   = std::nullopt;
-                image.adaptation_method = AdaptationMethod(m);
-                image.compute_color_transform();
+        apply_point_edit(ctx, "Convert color space", *point_edit(ctx),
+                         [g, w, m, tagged](Image &image)
+                         {
+                             image.chromaticities    = tagged;
+                             image.adopted_neutral   = std::nullopt;
+                             image.adaptation_method = AdaptationMethod(m);
+                             image.compute_color_transform();
 
-                // compute_color_transform() names the space from the chromaticities; these only matter
-                // when the destination is one it cannot recognize
-                image.color_space = ColorGamut_(g);
-                image.white_point = WhitePoint_(w);
+                             // compute_color_transform() names the space from the chromaticities; these only matter
+                             // when the destination is one it cannot recognize
+                             image.color_space = ColorGamut_(g);
+                             image.white_point = WhitePoint_(w);
 
-                // the samples are linear light in the new primaries; the Colorspace panel reads this as
-                // its "Profile name"
-                image.metadata["color profile"] = color_profile_name(ColorGamut_(g), TransferFunction::Linear);
-            });
+                             // the samples are linear light in the new primaries; the Colorspace panel reads this as
+                             // its "Profile name"
+                             image.metadata["color profile"] =
+                                 color_profile_name(ColorGamut_(g), TransferFunction::Linear);
+                         });
     }
 
 private:
@@ -155,53 +168,74 @@ class ChannelMixer final : public EditCommand
 {
 public:
     ChannelMixer() :
-        EditCommand({{"Channel mixer...", "Mix channels", "Monochrome"},
-                     ICON_MY_CHANNEL_MIXER,
-                     ImGuiKey_None,
-                     true,
-                     "Mix",
-                     27.f})
+        EditCommand(
+            {{"Channel mixer...", "Mix channels", "Monochrome"}, ICON_MY_CHANNEL_MIXER, ImGuiKey_None, true, "Mix"})
     {
     }
 
     void draw(EditContext &) override
     {
-        // radio-height text, so the label sits on the same line as the buttons beside it
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("Output channel");
+        ImGui::Checkbox("Monochrome", &m_monochrome);
+        ImGui::Tooltip("Mix one gray value from the three channels, and write it to all of them.");
 
-        // each named in its own color, gray last
-        const char  *names[]  = {"Red", "Green", "Blue", "Monochrome"};
+        // The whole mix at once, a row of source weights per output channel, each channel named in its own color and
+        // the gray row in gray. Fit to its columns, so the table gives the dialog its width rather than taking it.
+        const char  *names[]  = {"Red", "Green", "Blue", "Gray"};
         const ImVec4 colors[] = {ImVec4(0.90f, 0.35f, 0.35f, 1.f), ImVec4(0.35f, 0.85f, 0.35f, 1.f),
                                  ImVec4(0.45f, 0.55f, 1.00f, 1.f), ImVec4(0.80f, 0.80f, 0.80f, 1.f)};
-
-        for (int i = 0; i < Out_COUNT; ++i)
+        auto         name     = [&](int i)
         {
-            // only between them: SameLine() before the first would put it back on the line above
-            ImGui::SameLine();
             ImGui::PushStyleColor(ImGuiCol_Text, colors[i]);
-            ImGui::PushStyleColor(ImGuiCol_CheckMark, colors[i]);
-            ImGui::RadioButton(names[i], &m_output, i);
-            ImGui::PopStyleColor(2);
+            ImGui::TextUnformatted(names[i]);
+            ImGui::PopStyleColor();
+        };
+
+        if (ImGui::BeginTable("##mix", 5, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX))
+        {
+            const float cell = HelloImGui::EmSize(5.f);
+            ImGui::TableSetupColumn("##output");
+            for (int c = 0; c < 3; ++c) ImGui::TableSetupColumn(names[c], ImGuiTableColumnFlags_WidthFixed, cell);
+            ImGui::TableSetupColumn("Total");
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            for (int c = 0; c < 3; ++c)
+            {
+                ImGui::TableNextColumn();
+                name(c);
+                ImGui::Tooltip("How much of each output is taken from this channel.");
+            }
+            ImGui::TableNextColumn();
+            ImGui::TextDisabled("Total");
+
+            for (int r = m_monochrome ? int(Out_Monochrome) : int(Out_Red);
+                 r < (m_monochrome ? int(Out_COUNT) : int(Out_Monochrome)); ++r)
+            {
+                float3 &w = m_rows[r];
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::AlignTextToFramePadding();
+                name(r);
+                ImGui::Tooltip(r == Out_Monochrome ? "The weights the gray is mixed with."
+                                                   : "The weights this output channel is mixed with.");
+                for (int c = 0; c < 3; ++c)
+                {
+                    ImGui::TableNextColumn();
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    ImGui::DragFloat(fmt::format("##weight{}{}", r, c).c_str(), &w[c], 0.5f, -200.f, 200.f, "%.1f%%");
+                }
+                ImGui::TableNextColumn();
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextDisabled("%.1f%%", w.x + w.y + w.z);
+            }
+            ImGui::EndTable();
         }
-        ImGui::Tooltip("Which channel the weights below are written to. Monochrome writes one gray value "
-                       "to all three.");
 
-        float3 &w = m_rows[m_output];
-
-        ImGui::DragFloat("Red##weight", &w.x, 0.5f, -200.f, 200.f, "%.1f%%");
-        ImGui::DragFloat("Green##weight", &w.y, 0.5f, -200.f, 200.f, "%.1f%%");
-        ImGui::DragFloat("Blue##weight", &w.z, 0.5f, -200.f, 200.f, "%.1f%%");
-
-        // the checkbox first, so the total, whose width changes, has nothing after it to push around
         ImGui::Checkbox("Normalize", &m_normalize);
-        ImGui::Tooltip("Divides each row by its own total, so the mix neither brightens nor darkens. Off, a "
-                       "total above 100% lightens the result and one below darkens it.");
-        ImGui::SameLine();
-        ImGui::TextDisabled("Total: %.1f%%", w.x + w.y + w.z);
+        ImGui::Tooltip("Divides each row by its own total, so the mix neither brightens nor darkens.");
     }
 
-    void apply(const EditContext &ctx) override
+    std::optional<PointEdit> point_edit(const EditContext &) const override
     {
         auto row = [norm = m_normalize](const float3 &r)
         {
@@ -211,26 +245,20 @@ public:
             return norm && std::abs(sum) > 1e-6f ? v / sum : v;
         };
 
-        if (m_output == Out_Monochrome)
-        {
-            const float3 g = row(m_rows[Out_Monochrome]);
-            modify_colors(ctx, "Channel mixer",
-                          [g](const float4 &c, int2, int)
-                          {
-                              const float y = la::dot(g, c.xyz());
-                              return float4{y, y, y, c.w};
-                          });
-        }
-        else
-        {
-            const float3 r = row(m_rows[Out_Red]), g = row(m_rows[Out_Green]), b = row(m_rows[Out_Blue]);
-            modify_colors(ctx, "Channel mixer", [r, g, b](const float4 &c, int2, int)
-                          { return float4{la::dot(r, c.xyz()), la::dot(g, c.xyz()), la::dot(b, c.xyz()), c.w}; });
-        }
+        // the rows of the matrix, as source weights per output channel; Monochrome writes one gray to all three
+        const bool   mono = m_monochrome;
+        const float3 r    = row(m_rows[mono ? Out_Monochrome : Out_Red]),
+                     g    = row(m_rows[mono ? Out_Monochrome : Out_Green]),
+                     b    = row(m_rows[mono ? Out_Monochrome : Out_Blue]);
+        PointEdit    e{shader::EDIT_MATRIX};
+        e.m0 = transpose(float3x3{r, g, b});
+        return e;
     }
 
+    void apply(const EditContext &ctx) override { apply_point_edit(ctx, "Channel mixer", *point_edit(ctx)); }
+
 private:
-    /// Which channel the weights are written to.
+    /// The rows of weights: one per output channel, and the one that mixes a single gray.
     enum Output : int
     {
         Out_Red = 0,
@@ -245,50 +273,50 @@ private:
     // as percentages the way Photoshop presents them. Thirds, so the monochrome default totals 100%.
     float3 m_rows[Out_COUNT] = {
         {100.f, 0.f, 0.f}, {0.f, 100.f, 0.f}, {0.f, 0.f, 100.f}, {100.f / 3.f, 100.f / 3.f, 100.f / 3.f}};
-    int  m_output    = Out_Red;
-    bool m_normalize = false;
+    bool m_monochrome = false;
+    bool m_normalize  = false;
 };
 
 class HueSaturation final : public EditCommand
 {
 public:
     HueSaturation() :
-        EditCommand({{"Hue/saturation...", "Colorize", "Desaturate"},
-                     ICON_MY_HUE_SATURATION,
-                     ImGuiKey_None,
-                     true,
-                     "Apply",
-                     27.f})
+        EditCommand(
+            {{"Hue/saturation...", "Colorize", "Desaturate"}, ICON_MY_HUE_SATURATION, ImGuiKey_None, true, "Apply"})
     {
     }
 
-    void draw(EditContext &) override
+    void draw(EditContext &ctx) override
     {
         // the ranges Photoshop uses: hue in degrees around the wheel, the other two as a percentage
         ImGui::SliderFloat("Hue", &m_hue, -180.f, 180.f, "%+.0f deg");
+        ImGui::Tooltip("Turn every color around the hue wheel. Dragging the lower strip turns it too.");
         ImGui::SliderFloat("Saturation", &m_saturation, -100.f, 100.f, "%+.0f%%");
+        ImGui::Tooltip("Move every color toward or away from the gray of its own luminance.");
         ImGui::SliderFloat("Lightness", &m_lightness, -100.f, 100.f, "%+.0f%%");
+        ImGui::Tooltip("Darken toward black, or lighten toward white (toward the color's own peak, for colors brighter "
+                       "than white).");
 
         // The wheel as it is and as the settings would leave it.
         /**
-            Drawn as shaded quads between the points where the sweep bends, which is not an approximation:
-            the hue hexcone is piecewise linear in hue, and the three settings each either move those
-            bends or are affine in every component.
+            Drawn as shaded quads between the points where the sweep bends, which is not an approximation: the
+            hue hexcone is piecewise linear in hue, with its corners slid along by the turn, the saturation is a
+            matrix, and the lightness is affine but for the level it mixes toward, which bends where a component
+            crosses white.
 
-            Two kinds of bend. Six are the hexcone's own corners, slid along by the hue rotation and one of
-            them wrapped. The rest are where clamping to the display's range bends the ramp, which is what
-            raising the saturation of an already-saturated hue looks like: flat, a steeper ramp, then flat.
+            The other bends are where clamping to the display's range bends the ramp, which is what raising the
+            saturation of an already-saturated hue looks like: flat, a steeper ramp, then flat.
         */
-        auto strip = [](const char *id, float h, float s, float l)
+        auto strip = [&](const char *id, const PointEdit &edit)
         {
             const float  w  = ImGui::GetContentRegionAvail().x;
             const ImVec2 p  = ImGui::GetCursorScreenPos();
             auto        *dl = ImGui::GetWindowDrawList();
 
             // before the display's range is imposed, where the bends are still straight lines
-            auto raw = [&](float t)
-            { return adjust_HSL(HSL_to_RGB(float3{t, 1.f, 0.5f}), h / 360.f, (s + 100.f) / 100.f, l / 100.f); };
-
+            auto wheel = [](float t) { return float4{HSL_to_RGB(float3{t, 1.f, 0.5f}), 1.f}; };
+            auto raw   = [&](float t)
+            { return shader::edit_color(edit.op, wheel(t), edit.p0, edit.p1, edit.m0, edit.m1).xyz(); };
             auto shown = [&](float t)
             {
                 const float3 c = raw(t);
@@ -296,33 +324,35 @@ public:
                     ImVec4(std::clamp(c.x, 0.f, 1.f), std::clamp(c.y, 0.f, 1.f), std::clamp(c.z, 0.f, 1.f), 1.f));
             };
 
-            // the hexcone's corners, moved by the hue rotation and wrapped back into the strip
+            // Where a component of f crosses 0 or 1 between each pair of knots, between which it is linear, so each
+            // crossing is one division.
+            auto crossings = [](const std::vector<float> &knots, auto f)
+            {
+                std::vector<float> out = knots;
+                for (size_t i = 0; i + 1 < knots.size(); ++i)
+                {
+                    const float  t0 = knots[i], t1 = knots[i + 1];
+                    const float3 a = f(t0), b = f(t1);
+                    for (int c = 0; c < 3; ++c)
+                        for (float level : {0.f, 1.f})
+                            if ((a[c] < level) != (b[c] < level) && a[c] != b[c])
+                                out.push_back(t0 + (level - a[c]) / (b[c] - a[c]) * (t1 - t0));
+                }
+                std::sort(out.begin(), out.end());
+                return out;
+            };
+
+            // the hexcone's corners, moved by the turn and wrapped back into the strip, then where the saturated
+            // color crosses white, where the lightness bends, then where the result crosses the display's range
             std::vector<float> knots{0.f, 1.f};
             for (int k = 0; k < 6; ++k)
             {
-                const float t = float(k) / 6.f - h / 360.f;
+                const float t = float(k) / 6.f - edit.p0.x;
                 knots.push_back(t - std::floor(t));
             }
             std::sort(knots.begin(), knots.end());
-
-            // then wherever a component crosses 0 or 1 between two corners; it is linear in there, so
-            // each crossing is one division
-            std::vector<float> bends = knots;
-            for (size_t i = 0; i + 1 < knots.size(); ++i)
-            {
-                const float  t0 = knots[i], t1 = knots[i + 1];
-                const float3 a = raw(t0), b = raw(t1);
-
-                for (int c = 0; c < 3; ++c)
-                    for (float level : {0.f, 1.f})
-                    {
-                        const float v0 = a[c], v1 = b[c];
-                        if ((v0 < level) == (v1 < level) || v1 == v0)
-                            continue;
-                        bends.push_back(t0 + (level - v0) / (v1 - v0) * (t1 - t0));
-                    }
-            }
-            std::sort(bends.begin(), bends.end());
+            knots = crossings(knots, [&](float t) { return mul(edit.m0, rotate_hue(wheel(t).xyz(), edit.p0.x)); });
+            const std::vector<float> bends = crossings(knots, raw);
 
             const float height = ImGui::GetFrameHeight();
             for (size_t i = 0; i + 1 < bends.size(); ++i)
@@ -336,19 +366,42 @@ public:
                                             right, left);
             }
 
-            ImGui::Dummy(ImVec2(w, height));
+            ImGui::InvisibleButton(id, ImVec2(w, height));
             ImGui::SetItemTooltip("%s", id);
+            return w;
         };
-        strip("The hue wheel as it is", 0.f, 0.f, 0.f);
-        strip("The hue wheel as these settings would leave it", m_hue, m_saturation, m_lightness);
+        // as wide as the controls above them, rather than what makes the dialog wide
+        float w = 0.f;
+        {
+            ImGui::FillsWidth fill;
+            strip("The hue wheel as it is", PointEdit{shader::EDIT_HUE_SATURATION});
+            w = strip("The hue wheel as these settings would leave it; drag it to turn the hue", *point_edit(ctx));
+        }
+
+        // dragging the strip carries its colors along with the mouse, so the hue under it is the one grabbed
+        if (ImGui::IsItemActive() && ImGui::GetIO().MouseDelta.x != 0.f && w > 0.f)
+        {
+            const float h = m_hue - 360.f * ImGui::GetIO().MouseDelta.x / w;
+            m_hue         = h - 360.f * std::floor((h + 180.f) / 360.f);
+        }
     }
 
-    void apply(const EditContext &ctx) override
+    std::optional<PointEdit> point_edit(const EditContext &ctx) const override
     {
-        const float h = m_hue / 360.f, s = (m_saturation + 100.f) / 100.f, l = m_lightness / 100.f;
-        modify_colors(ctx, "Hue/saturation",
-                      [h, s, l](const float4 &c, int2, int) { return float4{adjust_HSL(c.xyz(), h, s, l), c.w}; });
+        // Toward the gray of the image's own primaries, on straight color wherever alpha means transparency, since
+        // finalize() then stores the samples premultiplied. A group without alpha reads as opaque either way.
+        const auto  &img           = ctx.image;
+        const bool   premultiplied = img && img->alpha_is_transparency();
+        const float3 Yw            = img ? img->luminance_weights : sRGB_Yw();
+
+        PointEdit e{shader::EDIT_HUE_SATURATION};
+        e.m0 = saturation_matrix((m_saturation + 100.f) / 100.f, Yw);
+        e.p0 = float4{m_hue / 360.f, 0.f, m_lightness / 100.f, 0.f};
+        e.p1 = float4{premultiplied ? 1.f : 0.f, 0.f, 0.f, 0.f};
+        return e;
     }
+
+    void apply(const EditContext &ctx) override { apply_point_edit(ctx, "Hue/saturation", *point_edit(ctx)); }
 
 private:
     float m_hue = 0.f, m_saturation = 0.f, m_lightness = 0.f;
@@ -362,8 +415,7 @@ public:
                      ICON_MY_BRIGHTNESS_CONTRAST,
                      ImGuiKey_None,
                      true,
-                     "Apply",
-                     27.f})
+                     "Apply"})
     {
     }
 
@@ -381,12 +433,15 @@ public:
                        "at +1 the curve is vertical and only black and white are left.");
 
         ImGui::Checkbox("Linear", &m_linear);
-        ImGui::Tooltip("A straight line through the midpoint, which runs past black and white rather than "
-                       "stopping at them -- so an HDR sample keeps its relation to its neighbors. Unticked, "
-                       "an s-curve that approaches them without ever arriving.");
+        ImGui::Tooltip("Use a straight line through the midpoint instead of an s-curve. Both continue past black and "
+                       "white, so HDR values keep contrast there: the line all of it, the s-curve a share.");
+        ImGui::SameLine();
+        ImGui::Checkbox("Clip to SDR", &m_clip);
+        ImGui::Tooltip("Clip what the curve gives to [0, 1], as an SDR image holds it.");
 
+        // radio-height text, so the label sits on the same line as the buttons beside it
         ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("Apply to");
+        ImGui::TextUnformatted("Adjust");
         const char *names[] = {"RGB", "Lightness", "Chromaticity"};
         for (int i = 0; i < Channel_COUNT; ++i)
         {
@@ -398,52 +453,26 @@ public:
                        "changes how light the image is and leaves its colors, the other does the reverse.");
     }
 
-    void apply(const EditContext &ctx) override
+    std::optional<PointEdit> point_edit(const EditContext &ctx) const override
     {
-        auto img = ctx.image;
-        if (!img)
-            return;
-
-        const float slope    = slope_of(m_contrast);
-        const float midpoint = (1.f - m_brightness) / 2.f;
-        const float bias     = (m_brightness + 1.f) / 2.f;
-        const bool  linear   = m_linear;
-
-        auto curve = [slope, midpoint, bias, linear](float v) {
-            return linear ? brightness_contrast_linear(v, slope, midpoint)
-                          : brightness_contrast_nonlinear(v, slope, bias);
-        };
-
-        if (m_channel == Channel_RGB)
+        PointEdit e{shader::EDIT_BRIGHTNESS_CONTRAST};
+        const int shape = (m_linear ? shader::SHAPE_LINE : shader::SHAPE_RATIONAL) + (m_clip ? shader::SHAPE_CLIP : 0);
+        e.p0 = float4{slope_of(m_contrast), (1.f - m_brightness) / 2.f, (m_brightness + 1.f) / 2.f, float(shape)};
+        e.p1 = float4{float(m_channel), 0.f, 0.f, 0.f};
+        // through the image's own primaries: L*a*b* is defined from XYZ, and what the samples mean in XYZ is what
+        // the image says they do
+        if (m_channel != Channel_RGB && ctx.image)
         {
-            modify_colors(ctx, "Brightness/contrast", [curve](const float4 &c, int2, int)
-                          { return float4{curve(c.x), curve(c.y), curve(c.z), c.w}; });
-            return;
+            const auto  &img   = *ctx.image;
+            const float3 white = img.chromaticities ? XYZ_from_xy(img.chromaticities->white) : Lab_reference_white();
+            e.p1               = float4{float(m_channel), white.x, white.y, white.z};
+            e.m0               = img.M_RGB_to_XYZ;
+            e.m1               = img.M_XYZ_to_RGB;
         }
-
-        // through the image's own primaries: L*a*b* is defined from XYZ, and what the samples mean in
-        // XYZ is what the image says they do
-        const float3x3 to_XYZ   = img->M_RGB_to_XYZ;
-        const float3x3 from_XYZ = img->M_XYZ_to_RGB;
-        const float3   white    = img->chromaticities ? XYZ_from_xy(img->chromaticities->white) : Lab_reference_white();
-        const bool     lightness = m_channel == Channel_Lightness;
-
-        modify_colors(ctx, "Brightness/contrast",
-                      [curve, to_XYZ, from_XYZ, white, lightness](const float4 &c, int2, int)
-                      {
-                          float3 lab = normalize_Lab(XYZ_to_Lab(mul(to_XYZ, c.xyz()), white));
-
-                          if (lightness)
-                              lab.x = curve(lab.x);
-                          else
-                          {
-                              lab.y = curve(lab.y);
-                              lab.z = curve(lab.z);
-                          }
-
-                          return float4{mul(from_XYZ, Lab_to_XYZ(unnormalize_Lab(lab), white)), c.w};
-                      });
+        return e;
     }
+
+    void apply(const EditContext &ctx) override { apply_point_edit(ctx, "Brightness/contrast", *point_edit(ctx)); }
 
 private:
     /// The slope the contrast slider asks for, as the tangent of an angle.
@@ -471,22 +500,23 @@ private:
         return (y - 0.5f) / (x - midpoint);
     }
 
-    /// The gain exponent that puts the s-curve through (\p x, \p y); negative when nothing can.
+    /// The midpoint slope that puts the rational s-curve through (\p x, \p y); negative when nothing can.
     /**
-        gain_Perlin is a power on each half of its range, so this is one logarithm; the bias stays put.
+        The curve is Schlick's gain after his bias, and each half of the gain is a bias of a doubled input, so solving
+        for its parameter takes one division. The curve's midpoint slope is the gain's times the bias's,
+        1 / (4 bias (1 - bias)).
     */
-    static float curve_gain_through(float x, float y, float bias)
+    static float rational_slope_through(float x, float y, float bias)
     {
         const float u = bias_Schlick(std::clamp(x, 0.f, 1.f), bias);
-        if (u <= 1e-4f || u >= 1.f - 1e-4f || y <= 1e-4f || y >= 1.f - 1e-4f)
+        if (u <= 1e-4f || u >= 1.f - 1e-4f || y <= 1e-4f || y >= 1.f - 1e-4f || (u > 0.5f) != (y > 0.5f))
             return -1.f;
-
-        // each half is pinned at its own end and at the middle, so a target on the far side of the
-        // middle from the input is unreachable at any exponent
-        if ((u > 0.5f) != (y > 0.5f))
+        // bias(t, a) = z for a, on the half the input falls in
+        const float t = u < 0.5f ? 2.f * u : 2.f - 2.f * u, z = u < 0.5f ? 2.f * y : 2.f - 2.f * y;
+        if (std::fabs(1.f - t) < 1e-4f)
             return -1.f;
-
-        return u > 0.5f ? std::log(2.f * (1.f - y)) / std::log(2.f - 2.f * u) : std::log(2.f * y) / std::log(2.f * u);
+        const float a = 1.f / ((t / z - 1.f) / (1.f - t) + 2.f);
+        return a > 0.f && a < 1.f ? (1.f - a) / a / (4.f * bias * (1.f - bias)) : -1.f;
     }
 
     /// Both curves over [0,1], the one in force drawn solid and the other left faint behind it.
@@ -496,12 +526,14 @@ private:
         const float midpoint = (1.f - m_brightness) / 2.f;
         const float bias     = (m_brightness + 1.f) / 2.f;
 
-        float linear[ImGui::ToneCurveSamples], curved[ImGui::ToneCurveSamples];
+        float linear[ImGui::ToneCurveSamples], rational[ImGui::ToneCurveSamples];
         for (int i = 0; i < ImGui::ToneCurveSamples; ++i)
         {
+            // clipped as the edit clips them, so the plot shows what Clip to SDR does
             const float x = ImGui::ToneCurveX(i);
-            linear[i]     = brightness_contrast_linear(x, slope, midpoint);
-            curved[i]     = brightness_contrast_nonlinear(x, slope, bias);
+            auto        f = [this](float y) { return m_clip ? std::clamp(y, 0.f, 1.f) : y; };
+            linear[i]     = f(brightness_contrast_linear(x, slope, midpoint));
+            rational[i]   = f(brightness_contrast_rational(x, slope, bias));
         }
 
         if (!ImGui::BeginToneCurvePlot("##Curve", true))
@@ -510,12 +542,11 @@ private:
         const ImVec4 active{1.f, 1.f, 1.f, 0.85f};
         const ImVec4 faint{1.f, 1.f, 1.f, 0.18f};
 
-        // both are drawn whichever is in force, the inactive one faint
-        ImGui::ToneCurve("s-curve", curved, m_linear ? faint : active);
+        ImGui::ToneCurve("rational", rational, m_linear ? faint : active);
         ImGui::ToneCurve("line", linear, m_linear ? active : faint);
 
-        // the pivot: the one input both curves send to the middle, whatever the contrast. Drawn as a
-        // handle because it is also what the drag below grabs.
+        // the pivot: the one input both curves send to the middle, whatever the contrast. Drawn as a handle because
+        // it is also what the drag below grabs.
         ImGui::ToneCurveMarkerX("pivot", midpoint, ImVec4(1.f, 1.f, 1.f, 0.35f));
         ImGui::ToneCurveHandle(float2{midpoint, 0.5f}, ImVec4(1.f, 1.f, 1.f, 0.55f));
 
@@ -538,11 +569,10 @@ private:
             {
                 m_dragging_pivot = false;
 
-                const float wanted =
-                    m_linear ? line_slope_through(from.x, p.y, midpoint) : curve_gain_through(from.x, p.y, bias);
-
                 // left as it is where the cursor asks for something no setting produces, so the curve
                 // stops following instead of jumping to an end of the slider
+                const float wanted =
+                    m_linear ? line_slope_through(from.x, p.y, midpoint) : rational_slope_through(from.x, p.y, bias);
                 if (wanted >= 0.f)
                     m_contrast = contrast_of(wanted);
             }
@@ -562,9 +592,12 @@ private:
 
         Channel_COUNT
     };
+    // the shader's names for them, which point_edit() hands it
+    static_assert(Channel_RGB == shader::CURVE_RGB && Channel_Lightness == shader::CURVE_LIGHTNESS &&
+                  Channel_Chromaticity == shader::CURVE_CHROMATICITY);
 
     float m_brightness = 0.f, m_contrast = 0.f;
-    bool  m_linear  = false;
+    bool  m_linear = false, m_clip = false;
     int   m_channel = Channel_RGB;
     /// Which of the two things the drag in progress is doing; unset between drags.
     std::optional<bool> m_dragging_pivot;
@@ -584,8 +617,8 @@ public:
 
     void draw(EditContext &ctx) override
     {
-        ImGui::TextWrapped("Composites the image over a background color, so what was transparent becomes "
-                           "that color and the result is opaque.");
+        ImGui::TextWrappedToWidth("Composites the image over a background color, so what was transparent becomes "
+                                  "that color and the result is opaque.");
         ImGui::Spacing();
 
         ImGui::ColorEdit4("Background", &m_bg.x,
@@ -597,17 +630,14 @@ public:
         ImGui::Tooltip("Takes the custom background color from the View menu.");
     }
 
-    void apply(const EditContext &ctx) override
+    std::optional<PointEdit> point_edit(const EditContext &) const override
     {
-        const float4 b = m_bg;
-        modify_colors(ctx, "Flatten",
-                      [b](const float4 &c, int2, int)
-                      {
-                          // samples are held premultiplied, so "over" is an addition and not the
-                          // textbook's lerp; the background is given straight and premultiplied here
-                          return float4{c.xyz() + b.xyz() * b.w * (1.f - c.w), c.w + b.w * (1.f - c.w)};
-                      });
+        PointEdit e{shader::EDIT_FLATTEN};
+        e.p0 = m_bg;
+        return e;
     }
+
+    void apply(const EditContext &ctx) override { apply_point_edit(ctx, "Flatten", *point_edit(ctx)); }
 
 private:
     float4 m_bg{0.f, 0.f, 0.f, 1.f};

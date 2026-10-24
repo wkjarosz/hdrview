@@ -206,7 +206,8 @@ void CommandHistory::trim()
 }
 
 StructureUndo::StructureUndo(const Image &img, std::string name) :
-    m_name(std::move(name)), m_data_window(img.data_window), m_display_window(img.display_window)
+    m_name(std::move(name)), m_data_window(img.data_window), m_display_window(img.display_window),
+    m_selected_group(img.selected_group), m_reference_group(img.reference_group)
 {
     // Channel is not copyable, its deleted copy being what stops a texture and a statistics task from
     // being duplicated, so the samples are copied into fresh channels
@@ -216,6 +217,7 @@ StructureUndo::StructureUndo(const Image &img, std::string name) :
         Channel copy{c.name, c.size()};
         copy.bits_per_sample = c.bits_per_sample;
         copy.ungrouped       = c.ungrouped;
+        copy.selected        = c.selected;
         std::copy(c.data(), c.data() + c.num_elements(), copy.data());
         m_channels.push_back(std::move(copy));
     }
@@ -228,6 +230,10 @@ void StructureUndo::swap(Image &img)
     std::swap(m_channels, img.channels);
     std::swap(m_data_window, img.data_window);
     std::swap(m_display_window, img.display_window);
+    // the groups are built from the channel list alone, so an index into the groups one list builds still names
+    // the same group once that list is back
+    std::swap(m_selected_group, img.selected_group);
+    std::swap(m_reference_group, img.reference_group);
 
     // the channels that just arrived may be a different size, or carry no texture, so each is rebuilt
     // from its samples on the next draw

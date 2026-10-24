@@ -18,7 +18,10 @@ std::vector<ImagePtr> load_exr_image(std::istream &is, std::string_view filename
 
 struct EXRSaveOptions;
 struct SaveContext;
+struct Caveat;
 EXRSaveOptions *exr_parameters_gui(const ImagePtr &img, SaveContext &ctx);
+/// The warning the EXR options show for a file that holds alpha, or not.
+Caveat exr_caveat(bool alpha);
 
 // throws on error
 void save_exr_image(const Image &img, std::ostream &os, std::string_view filename,

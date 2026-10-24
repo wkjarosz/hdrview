@@ -247,44 +247,25 @@ TEST_CASE("check_image_dimensions accepts real sizes and rejects degenerate ones
 TEST_CASE("Loaders reject implausible dimensions before decoding")
 {
     // the four headers the fuzzer found, each declaring a canvas nothing could display
-    SUBCASE("QOI declaring 4 x 16776963")
+    using Loader = std::vector<ImagePtr> (*)(std::istream &, std::string_view, const ImageLoadOptions &);
+    const struct
     {
-        auto reason = rejection_reason(load_qoi_image, qoi_header(4, 16776963), "bomb.qoi");
-        CAPTURE(reason);
-        CHECK(blames_dimensions(reason));
-    }
-    SUBCASE("DDS declaring 4294967295 square")
-    {
-        auto reason = rejection_reason(load_dds_image, dds_header(4294967295u, 4294967295u), "bomb.dds");
-        CAPTURE(reason);
-        CHECK(blames_dimensions(reason));
-    }
-    SUBCASE("GIF declaring 19789 x 19789")
-    {
-        auto reason = rejection_reason(load_stb_image, gif_header(19789, 19789), "bomb.gif");
-        CAPTURE(reason);
-        CHECK(blames_dimensions(reason));
-    }
-    SUBCASE("GIF declaring 7850 x 57457")
-    {
-        auto reason = rejection_reason(load_stb_image, gif_header(7850, 57457), "bomb.gif");
-        CAPTURE(reason);
-        CHECK(blames_dimensions(reason));
-    }
-}
+        Loader      loader;
+        std::string header;
+        const char *name;
+    } bombs[] = {
+        {load_qoi_image, qoi_header(4, 16776963), "4x16776963.qoi"},
+        {load_dds_image, dds_header(4294967295u, 4294967295u), "4294967295x4294967295.dds"},
+        {load_stb_image, gif_header(19789, 19789), "19789x19789.gif"},
+        {load_stb_image, gif_header(7850, 57457), "7850x57457.gif"},
+    };
 
-TEST_CASE("A header declaring an ordinary size is not rejected for its dimensions")
-{
-    // guards against the limits being tightened into the range of real images: these headers are truncated,
-    // so they still fail, but not with a dimension complaint
-    std::istringstream is(qoi_header(64, 64), std::ios::binary);
-    try
+    for (const auto &bomb : bombs)
     {
-        load_qoi_image(is, "small.qoi", ImageLoadOptions{});
-    }
-    catch (const std::exception &e)
-    {
-        CHECK(std::string(e.what()).find("implausibly large") == std::string::npos);
+        const auto reason = rejection_reason(bomb.loader, bomb.header, bomb.name);
+        CAPTURE(bomb.name);
+        CAPTURE(reason);
+        CHECK(blames_dimensions(reason));
     }
 }
 

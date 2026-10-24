@@ -19,10 +19,15 @@ bool is_pfm_image(std::istream &is) noexcept;
 std::vector<ImagePtr>    load_pfm_image(std::istream &is, std::string_view filename, const ImageLoadOptions &opts = {});
 std::unique_ptr<float[]> load_pfm_image(std::istream &is, std::string_view filename, int *width, int *height,
                                         int *num_channels);
-// throws on error
+/// Write \p data, rows top to bottom, as a PFM; throws on error.
+/**
+    The file stores the rows bottom to top, as the format specifies and nearly every reader expects, or with
+    \p top_to_bottom the other way round, as Photoshop reads and writes them.
+*/
 void write_pfm_image(std::ostream &os, std::string_view filename, int width, int height, int num_channels,
-                     const float data[]);
-void save_pfm_image(const Image &img, std::ostream &os, std::string_view filename);
+                     const float data[], bool top_to_bottom = false);
+/// Save \p img as a linear PFM, its rows stored as write_pfm_image() stores them; throws on error.
+void save_pfm_image(const Image &img, std::ostream &os, std::string_view filename, bool top_to_bottom = false);
 
 struct PFMSaveOptions;
 struct SaveContext;

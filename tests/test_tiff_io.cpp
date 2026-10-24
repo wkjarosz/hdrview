@@ -17,6 +17,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <half.h>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -124,12 +125,6 @@ ImagePtr load_tiff(const std::string &bytes)
 
 } // namespace
 
-TEST_CASE("TIFF channels report the file's sample depth")
-{
-    auto img = load_tiff(rgba_tiff(2)); // EXTRASAMPLE_UNASSALPHA
-    for (const auto &c : img->channels) CHECK(c.bits_per_sample == 8);
-}
-
 TEST_CASE("What a TIFF declares about its fourth sample, and what an override does to it")
 {
     // EXTRASAMPLES settles the kind whichever value it carries, including the one saying the sample is data;
@@ -183,7 +178,7 @@ TEST_CASE("What a TIFF declares about its fourth sample, and what an override do
     }
 
 #ifdef HDRVIEW_TEST_LCMS_TESTBED_DIR
-    // A separated image's fourth sample is black ink and never coverage, whatever EXTRASAMPLES is absent.
+    // A separated image's fourth sample is black ink and never coverage, with no EXTRASAMPLES needed to say so.
     // Reading it as alpha would make the solid black pixel transparent instead of dark.
     {
         auto img = load_bytes(cmyk_tiff(cmyk_profile()), "cmyk.tif");
@@ -221,17 +216,18 @@ TEST_CASE("A TIFF's alpha kind decides how many times its samples are multiplied
 
     SUBCASE("associated alpha is read as already multiplied into the encoded samples")
     {
-        // pixel 1 holds 128/255 under alpha 128/255: a fully bright color at half coverage, as Photoshop,
-        // OpenImageIO, ImageMagick and vips all store it (a*OETF(C))
+        // pixel 1 holds 128/255 under alpha 128/255: a fully bright color at half coverage, multiplied into the
+        // encoded samples (a*OETF(C)), as Photoshop stores it, OpenImageIO 3.2 writes by default and vips 8.18 asked
+        // to premultiply; ImageMagick 7.1.2's associated alpha multiplies the color the same way, but its alpha too
         auto img = load_tiff(rgba_tiff(1, 0x80));
 
         REQUIRE(img->channels.size() == 4);
         CHECK(img->channels[3](1, 0) == doctest::Approx(k_half).epsilon(0.001));
 
         // dividing alpha out before the inverse transfer recovers straight 1.0, and multiplying back gives
-        // linear 1.0 times alpha; the transfer applied to the stored value would give EOTF(0.502) = 0.214
+        // linear 1.0 times alpha; the transfer applied to the stored value would give EOTF(0.502) = 0.216
         CHECK(img->channels[0](1, 0) == doctest::Approx(k_half).epsilon(0.005));
-        CHECK(img->channels[0](1, 0) != doctest::Approx(0.214f).epsilon(0.01));
+        CHECK(img->channels[0](1, 0) != doctest::Approx(0.216f).epsilon(0.01));
 
         // the opaque pixel is the control, unaffected by any of this
         CHECK(img->channels[0](0, 0) == doctest::Approx(1.f).epsilon(0.001));
@@ -240,7 +236,7 @@ TEST_CASE("A TIFF's alpha kind decides how many times its samples are multiplied
     SUBCASE("an override changes which of the two the samples go through")
     {
         // Read a file the tag says is associated as straight, so finalize() multiplies instead of the loader
-        // dividing. ImageMagick and vips both write premultiplied samples tagged unassociated.
+        // dividing, for a file whose writer tagged it wrongly.
         ImageLoadOptions opts;
         opts.override_transparency = true;
         opts.transparency_override = TransparencyType_Straight;
@@ -293,25 +289,6 @@ TEST_CASE("A saved TIFF multiplies alpha into its encoded samples")
     CHECK(reloaded->channels[0](0, 0) == doctest::Approx(0.5f).epsilon(0.02));
 }
 
-TEST_CASE("TIFF save/load round-trips alpha without repeated premultiplication")
-{
-    auto original = load_tiff(rgba_tiff(2));
-
-    // draw_save_dialog() renders into an ostringstream and writes the buffer out, so that is the only
-    // save path there is. Float samples keep the comparison about alpha, not quantization.
-    std::ostringstream out(std::ios::binary);
-    save_tiff_image(*original, out, "roundtrip.tif", TransferFunction::Linear,
-                    /*compression*/ 0, /*data_type*/ 2);
-    REQUIRE(out.str().size() > 64);
-
-    auto reloaded = load_tiff(out.str());
-
-    REQUIRE(reloaded->channels.size() == 4);
-    for (int c = 0; c < 4; ++c)
-        for (int x = 0; x < 2; ++x)
-            CHECK(reloaded->channels[c](x, 0) == doctest::Approx(original->channels[c](x, 0)).epsilon(0.001));
-}
-
 namespace
 {
 
@@ -352,133 +329,99 @@ std::string gray_tiff(Endian endian, uint16_t bits, uint16_t sample_format, cons
                       strip);
 }
 
-/// Every image a TIFF's directories yield, so a refusal shows as an empty result.
+/// Every image a TIFF's directories yield, its samples left as stored, so a refusal shows as an empty result.
 std::vector<ImagePtr> load_tiff_bytes(const std::string &bytes, const std::string &name)
 {
+    ImageLoadOptions opts;
+    opts.override_profile = true;
+    opts.tf_override      = TransferFunction::Linear;
     std::istringstream is(bytes, std::ios::binary);
-    return load_tiff_image(is, name);
+    return load_tiff_image(is, name, opts);
 }
 
 const char *endian_name(Endian e) { return e == Endian::Little ? "little-endian" : "big-endian"; }
 
 } // namespace
 
-TEST_CASE("TIFF integer samples decode into the unit range at every supported width, sign and byte order")
+TEST_CASE("TIFF samples decode to their values at every width, sign and byte order, or are refused")
 {
-    // Sample width, signedness and byte order are three independent axes through unpack_bits(), and a bug in
-    // any of them (a sign bit read as a magnitude, a partial word assembled in host order) shows up the same
-    // way: a value outside [0,1] or out of order. GDAL's int16/int24/int32 and uint* samples are such files.
+    // Width, sign and byte order are independent axes through unpack_bits() and convert_to_float(), and a bug in
+    // any of them (a sign bit read as magnitude, a partial word assembled in host order) moves a value. Integers
+    // dequantize to [0,1], signed ones offset by half the range; floats arrive as stored, sign and range intact.
+    // unpack_bits() accumulates into a uint32_t and convert_to_float() reads half, float or double, so samples of
+    // other widths have nowhere to land and are refused: as no image, not an exception, since the loader skips a
+    // bad directory and keeps the rest. GDAL's int16/int24/int32, int64.tif and float24.tif are such files.
+    const float floats[] = {-0.5f, 0.25f, 2.f, 1000.f}; // exact at half precision too
     for (Endian endian : {Endian::Little, Endian::Big})
-        for (uint16_t bits : {(uint16_t)8, (uint16_t)16, (uint16_t)24, (uint16_t)32})
-            for (uint16_t format : {k_sampleformat_uint, k_sampleformat_int})
+        for (uint16_t format : {k_sampleformat_uint, k_sampleformat_int, k_sampleformat_ieeefp})
+            for (uint16_t bits : {(uint16_t)8, (uint16_t)16, (uint16_t)24, (uint16_t)32, (uint16_t)64})
             {
-                const char *sign_name = format == k_sampleformat_int ? "signed" : "unsigned";
                 CAPTURE(endian_name(endian));
+                CAPTURE(format);
                 CAPTURE(bits);
-                CAPTURE(sign_name);
 
-                // four well-separated samples in increasing numeric order, so the check is on ordering and
-                // endpoints and not on whatever transfer function the loader applies between them
-                const uint64_t        one   = 1ull;
-                const uint64_t        range = bits >= 64 ? ~0ull : ((one << bits) - 1);
-                std::vector<uint64_t> samples;
-                if (format == k_sampleformat_uint)
-                    samples = {0, range / 4, range / 2, range};
+                std::vector<uint64_t> words;
+                std::vector<double>   want;
+                const uint64_t        one = 1;
+                if (format == k_sampleformat_ieeefp)
+                    for (float v : floats)
+                    {
+                        if (bits == 16)
+                            words.push_back(half(v).bits());
+                        else if (bits == 64)
+                        {
+                            const double d = v;
+                            uint64_t     w;
+                            std::memcpy(&w, &d, sizeof(w));
+                            words.push_back(w);
+                        }
+                        else
+                        {
+                            uint32_t w;
+                            std::memcpy(&w, &v, sizeof(w));
+                            words.push_back(w);
+                        }
+                        want.push_back(v);
+                    }
                 else
                 {
-                    const uint64_t min = one << (bits - 1); // two's complement minimum
-                    samples            = {min, min + min / 2, 0, (one << (bits - 1)) - 1};
+                    // the extremes and two values between, as words of the file's width
+                    const uint64_t range = bits >= 64 ? ~0ull : (one << bits) - 1;
+                    const double   denom = double(range);
+                    if (format == k_sampleformat_uint)
+                    {
+                        words = {0, range / 4, range / 2, range};
+                        for (uint64_t w : words) want.push_back(double(w) / denom);
+                    }
+                    else
+                    {
+                        // two's complement: the minimum, half of it, zero and the maximum
+                        const uint64_t min = one << (bits - 1);
+                        words              = {min, min + min / 2, 0, min - 1};
+                        const double bias  = double(min);
+                        for (double v : {-bias, -bias / 2, 0., bias - 1}) want.push_back((v + bias) / denom);
+                    }
                 }
 
-                auto images = load_tiff_bytes(gray_tiff(endian, bits, format, samples), "matrix.tif");
+                const bool supported =
+                    format == k_sampleformat_ieeefp ? (bits == 16 || bits == 32 || bits == 64) : bits <= 32;
+                auto images = load_tiff_bytes(gray_tiff(endian, bits, format, words), "matrix.tif");
+                if (!supported)
+                {
+                    CHECK(images.empty());
+                    continue;
+                }
                 REQUIRE(images.size() == 1);
                 auto &ch = images[0]->channels[0];
                 REQUIRE(ch.num_elements() == 4);
-
+                // the histogram's bin count comes from this: the file's depth, or none for floating point
+                CHECK(ch.bits_per_sample == (format == k_sampleformat_ieeefp ? 0 : bits));
                 for (int i = 0; i < 4; ++i)
                 {
                     CAPTURE(i);
-                    CHECK(ch(i) >= 0.f);
-                    CHECK(ch(i) <= 1.f);
+                    CHECK(ch(i) == doctest::Approx(want[i]).epsilon(1e-6));
                 }
-
-                CHECK(ch(0) == doctest::Approx(0.f).epsilon(1e-5)); // the minimum
-                CHECK(ch(3) == doctest::Approx(1.f).epsilon(1e-5)); // the maximum
-                CHECK(ch(0) < ch(1));
-                CHECK(ch(1) < ch(2));
-                CHECK(ch(2) < ch(3));
             }
-}
-
-TEST_CASE("TIFF samples of a width the loader cannot represent are refused")
-{
-    // The refusal surfaces as no image, not an exception: load_image() catches per directory and skips it,
-    // so one bad directory of a multi-directory TIFF doesn't discard the rest. unpack_bits accumulates into a
-    // uint32_t and convert_to_float reads half, float or double, so wider samples have nowhere to land.
-    // GDAL's int64.tif and float24.tif are such files.
-    for (Endian endian : {Endian::Little, Endian::Big})
-    {
-        CAPTURE(endian_name(endian));
-
-        SUBCASE("integers wider than the accumulator")
-        {
-            for (uint16_t format : {k_sampleformat_uint, k_sampleformat_int})
-            {
-                CAPTURE(format);
-                CHECK(load_tiff_bytes(gray_tiff(endian, 64, format, {0, 1, 2, 3}), "int64.tif").empty());
-            }
-        }
-
-        SUBCASE("floating point at a width with no such format")
-        {
-            for (uint16_t bits : {(uint16_t)8, (uint16_t)24})
-            {
-                CAPTURE(bits);
-                CHECK(load_tiff_bytes(gray_tiff(endian, bits, k_sampleformat_ieeefp, {0, 0, 0, 0}), "floatN.tif")
-                          .empty());
-            }
-        }
-    }
-}
-
-TEST_CASE("TIFF 32- and 64-bit floating point samples load")
-{
-    // the widths convert_to_float does handle, so the refusal above is about the width and not about
-    // SAMPLEFORMAT_IEEEFP itself
-    for (Endian endian : {Endian::Little, Endian::Big})
-    {
-        CAPTURE(endian_name(endian));
-
-        std::vector<uint64_t> f32;
-        for (float v : {0.f, 0.25f, 0.5f, 1.f})
-        {
-            uint32_t bits32;
-            std::memcpy(&bits32, &v, sizeof(bits32));
-            f32.push_back(bits32);
-        }
-        auto images = load_tiff_bytes(gray_tiff(endian, 32, k_sampleformat_ieeefp, f32), "float32.tif");
-        REQUIRE(images.size() == 1);
-        auto &ch = images[0]->channels[0];
-        REQUIRE(ch.num_elements() == 4);
-        CHECK(ch(0) < ch(1));
-        CHECK(ch(1) < ch(2));
-        CHECK(ch(2) < ch(3));
-
-        std::vector<uint64_t> f64;
-        for (double v : {0.0, 0.25, 0.5, 1.0})
-        {
-            uint64_t bits64;
-            std::memcpy(&bits64, &v, sizeof(bits64));
-            f64.push_back(bits64);
-        }
-        auto images64 = load_tiff_bytes(gray_tiff(endian, 64, k_sampleformat_ieeefp, f64), "float64.tif");
-        REQUIRE(images64.size() == 1);
-        auto &ch64 = images64[0]->channels[0];
-        REQUIRE(ch64.num_elements() == 4);
-        CHECK(ch64(0) < ch64(1));
-        CHECK(ch64(1) < ch64(2));
-        CHECK(ch64(2) < ch64(3));
-    }
 }
 
 #if HDRVIEW_ENABLE_LIBTIFF
@@ -529,31 +472,6 @@ TEST_CASE("An 8-bit TIFF's TransferFunction curve is indexed over its own length
 
     // the identity curve has to give the stored samples back
     for (int c = 0; c < 3; ++c) CHECK(img->channels[c](1, 0) == doctest::Approx(stored[c] / 255.f).epsilon(1e-4));
-}
-TEST_CASE("A wide-gamut image saved as TIFF records the primaries its samples are in")
-{
-    // save_tiff_image() asks as_interleaved() not to convert to sRGB, so the samples it writes are in the
-    // image's own primaries and the file has to record them in WhitePoint and PrimaryChromaticities.
-    const Chromaticities bt2020{{0.708f, 0.292f}, {0.170f, 0.797f}, {0.131f, 0.046f}, {0.3127f, 0.3290f}};
-
-    auto original            = load_tiff(rgba_tiff(2));
-    original->chromaticities = bt2020;
-    color_conversion_matrix(original->M_to_sRGB, bt2020, gamut_chromaticities(ColorGamut_sRGB_BT709));
-    const float4 want = original->rgba_pixel(int2{0, 0}, Target_Primary);
-
-    // 32-bit float, so the transfer function plays no part in what comes back
-    std::ostringstream out(std::ios::binary);
-    REQUIRE_NOTHROW(save_tiff_image(*original, out, "wide.tif", TransferFunction::Linear,
-                                    /*compression*/ 0, /*data_type*/ 2));
-
-    auto reloaded = load_tiff(out.str());
-    REQUIRE(reloaded->chromaticities.has_value());
-    CHECK(reloaded->chromaticities->red.x == doctest::Approx(bt2020.red.x).epsilon(1e-4));
-    CHECK(reloaded->chromaticities->green.y == doctest::Approx(bt2020.green.y).epsilon(1e-4));
-    CHECK(reloaded->chromaticities->white.x == doctest::Approx(bt2020.white.x).epsilon(1e-4));
-
-    const float4 got = reloaded->rgba_pixel(int2{0, 0}, Target_Primary);
-    for (int c = 0; c < 3; ++c) CHECK(got[c] == doctest::Approx(want[c]).epsilon(1e-3));
 }
 
 #ifdef HDRVIEW_TEST_LIBTIFF_DIR

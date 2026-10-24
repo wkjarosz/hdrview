@@ -50,7 +50,7 @@ std::pair<std::vector<int>, Box2i> resolve_subject(const ConstImagePtr &img, con
     \param op        Makes the change
     \param make_undo Builds the entry that reverses it, called before \p op so it can capture what \p op
                      is about to overwrite
-    \param extent    Whether \p op reshapes the image, so the layer tree is rebuilt and the view refit
+    \param extent    How far \p op reaches, which says whether the layer tree is rebuilt and the view refit
 */
 bool modify_image(const EditContext &ctx, const std::string &name, const std::function<void(Image &)> &op,
                   const UndoFactory &make_undo, EditExtent extent = Extent_Pixels);
@@ -75,5 +75,12 @@ bool modify_pixels(const EditContext &ctx, const std::string &name, const std::f
 bool modify_colors(const EditContext &ctx, const std::string &name,
                    const std::function<float4(const float4 &, int2, int)> &op,
                    const std::function<void(Image &)>                     &retag = {});
+
+/// Apply \p edit to the subject: a per-sample op through modify_pixels(), a color op through modify_colors().
+/**
+    \p retag goes to modify_colors(), so it applies only with a color op.
+*/
+bool apply_point_edit(const EditContext &ctx, const std::string &name, const PointEdit &edit,
+                      const std::function<void(Image &)> &retag = {});
 
 ///@}

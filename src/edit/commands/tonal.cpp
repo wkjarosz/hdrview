@@ -18,6 +18,7 @@
 #include "fonts.h"
 #include "image.h"
 #include "imgui_ext.h"
+#include "shared/edits.h"
 
 #include <hello_imgui/hello_imgui.h>
 
@@ -31,10 +32,9 @@ class Invert final : public EditCommand
 public:
     Invert() : EditCommand({{"Invert", "Negative"}, ICON_MY_INVERT, ImGuiMod_Ctrl | ImGuiKey_I}) {}
 
-    void apply(const EditContext &ctx) override
-    {
-        modify_pixels(ctx, "Invert", [](float v, int2, int) { return 1.f - v; });
-    }
+    std::optional<PointEdit> point_edit(const EditContext &) const override { return PointEdit{shader::EDIT_INVERT}; }
+
+    void apply(const EditContext &ctx) override { apply_point_edit(ctx, "Invert", *point_edit(ctx)); }
 };
 
 class Clamp final : public EditCommand
@@ -42,10 +42,9 @@ class Clamp final : public EditCommand
 public:
     Clamp() : EditCommand({{"Clamp to [0,1]", "Clip to LDR range"}, ICON_MY_CLAMP}) {}
 
-    void apply(const EditContext &ctx) override
-    {
-        modify_pixels(ctx, "Clamp to [0,1]", [](float v, int2, int) { return std::min(1.f, std::max(0.f, v)); });
-    }
+    std::optional<PointEdit> point_edit(const EditContext &) const override { return PointEdit{shader::EDIT_CLAMP}; }
+
+    void apply(const EditContext &ctx) override { apply_point_edit(ctx, "Clamp to [0,1]", *point_edit(ctx)); }
 };
 
 class ExposureGamma final : public EditCommand
@@ -68,10 +67,7 @@ public:
                        "sample keeps its sign.");
     }
 
-    /// The curve the three sliders make, over [0,1].
-    /**
-        Only the part landing in the unit square is drawn; the operation itself is unbounded.
-    */
+    /// The curve the three sliders make, plotted a little past [0,1]; the operation itself is unbounded.
     void draw_curve()
     {
         const float scale = std::pow(2.f, m_exposure);
@@ -91,20 +87,14 @@ public:
         ImGui::EndToneCurvePlot();
     }
 
-    void apply(const EditContext &ctx) override
+    std::optional<PointEdit> point_edit(const EditContext &) const override
     {
-        const float scale = std::pow(2.f, m_exposure);
-        const float inv_g = 1.f / std::max(MIN_GAMMA, m_gamma);
-        const float off   = m_offset;
-
-        modify_pixels(ctx, "Exposure/gamma",
-                      [scale, off, inv_g](float v, int2, int)
-                      {
-                          // signed: a negative sample is meaningful in an HDR image and pow() of one
-                          // is not, so the curve is mirrored through the origin
-                          return spow(scale * v + off, inv_g);
-                      });
+        PointEdit e{shader::EDIT_EXPOSURE_GAMMA};
+        e.p0 = float4{std::pow(2.f, m_exposure), m_offset, 1.f / std::max(MIN_GAMMA, m_gamma), 0.f};
+        return e;
     }
+
+    void apply(const EditContext &ctx) override { apply_point_edit(ctx, "Exposure/gamma", *point_edit(ctx)); }
 
 private:
     float m_exposure = 0.f, m_offset = 0.f, m_gamma = 1.f;
@@ -133,11 +123,11 @@ public:
         if (m_mode == Mode_Replace)
             if (auto img = ctx.image; img && img->is_valid_group(img->active_group_index(Target_Primary)))
                 if (!group_has_alpha(img->groups[size_t(img->active_group_index(Target_Primary))].type))
-                    ImGui::TextUnformatted("This channel group has no alpha, so the color's alpha has\n"
-                                           "nowhere to go. Blend over instead to use it as coverage.");
+                    ImGui::TextWrappedToWidth("This channel group has no alpha, so the color's alpha has nowhere "
+                                              "to go. Blend over instead to use it as coverage.");
     }
 
-    void apply(const EditContext &ctx) override
+    std::optional<PointEdit> point_edit(const EditContext &ctx) const override
     {
         const float4 c = m_color;
 
@@ -155,27 +145,22 @@ public:
             }
         }
 
+        // Replace: premultiplied storage wants the color scaled by its own alpha, and the alpha channel itself is
+        // stored as given. Blend over: source-over, which premultiplied storage makes the same expression for color
+        // and alpha alike.
         if (m_mode == Mode_Replace)
         {
-            // premultiplied storage wants the color scaled by its own alpha; the alpha channel itself is
-            // stored as given
-            const float4 v = premultiplied ? float4{c.x * c.w, c.y * c.w, c.z * c.w, c.w} : c;
-
-            modify_pixels(ctx, "Fill", [v](float, int2, int slot) { return v[slot % 4]; });
+            PointEdit e{shader::EDIT_FILL_REPLACE};
+            e.p0 = premultiplied ? float4{c.x * c.w, c.y * c.w, c.z * c.w, c.w} : c;
+            return e;
         }
-        else
-        {
-            // source-over: with premultiplied storage the color contributes a*c and what was there keeps
-            // (1-a) of itself, the same expression for color and alpha alike
-            const float a = c.w;
-            modify_pixels(ctx, "Fill",
-                          [c, a, alpha_slot](float old, int2, int slot)
-                          {
-                              const float src = (slot == alpha_slot) ? 1.f : c[slot % 4];
-                              return a * src + (1.f - a) * old;
-                          });
-        }
+        PointEdit e{shader::EDIT_FILL_BLEND};
+        e.p0 = c;
+        e.p1 = float4{float(alpha_slot), 0.f, 0.f, 0.f};
+        return e;
     }
+
+    void apply(const EditContext &ctx) override { apply_point_edit(ctx, "Fill", *point_edit(ctx)); }
 
 private:
     /// What the color's alpha is taken to mean.

@@ -77,7 +77,8 @@ void RegisterTests_SessionBundle(ImGuiTestEngine *engine)
                                                        {"images/000_fixture.png", read_file(HDRVIEW_GUI_TEST_IMAGE)}});
 
         hdrview()->close_all_images();
-        // the same entry point drag-and-drop and CLI args use
+        // the same entry point drag-and-drop and CLI args use, and the blend mode the session sets put back after
+        OnExit restore{[] { hdrview()->blend_mode() = BlendMode_Normal; }};
         hdrview()->load_images({zip_path.string()});
         wait_for_loads(ctx);
 
@@ -175,52 +176,10 @@ void RegisterTests_SessionBundle(ImGuiTestEngine *engine)
 
         hdrview()->close_all_images();
         hdrview()->load_session(zip_path.string());
-        ctx->Yield();
-        ctx->Yield();
+        // drained first, so a fallback to plain images would have landed by the time the list is read
+        wait_for_loads(ctx);
+        ctx->Yield(2);
 
         IM_CHECK_EQ(hdrview()->num_images(), 0);
-    };
-
-    t           = IM_REGISTER_TEST(engine, "session_bundle", "reexporting_bundle_loaded_image_recovers_its_bytes");
-    t->TestFunc = [](ImGuiTestContext *ctx)
-    {
-        // an image loaded from inside a bundle carries a synthetic "zip_path/entry_path" identity, not a
-        // filesystem path (see begin_bundle_session_load), and export_session_bundle() has to recognize
-        // that and re-extract the original bytes from the source zip
-        std::string fixture_bytes = read_file(HDRVIEW_GUI_TEST_IMAGE);
-
-        json entry;
-        entry["path"] = "images/000_fixture.png";
-        json j;
-        j["type"]       = "HDRView session";
-        j["version"]    = current_version_string();
-        j["images"]     = json::array({entry});
-        j["current"]    = 0;
-        j["reference"]  = -1;
-        j["blend_mode"] = "normal";
-        j["view"]       = json::object();
-
-        fs::path zip_path = write_test_zip("hdrview_test_reexport_bundle.zip",
-                                           {{"session.hsess", j.dump(4)}, {"images/000_fixture.png", fixture_bytes}});
-
-        hdrview()->close_all_images();
-        hdrview()->load_images({zip_path.string()});
-        wait_for_loads(ctx);
-
-        IM_CHECK_EQ(hdrview()->num_images(), 1);
-        auto img = hdrview()->image(0);
-        // the loaded image's path is the synthetic form this test targets
-        IM_CHECK(!fs::exists(img->path));
-
-        // the same split_zip_entry() + zip_extract_entry() combination export_session_bundle() uses
-        std::string source = img->path.u8string();
-        std::string source_zip, entry_path;
-        IM_CHECK(split_zip_entry(source, source_zip, entry_path));
-        IM_CHECK(!entry_path.empty());
-
-        std::string zip_bytes = read_file(source_zip);
-        auto        recovered = zip_extract_entry(zip_bytes, entry_path);
-        IM_CHECK(recovered.has_value());
-        IM_CHECK(*recovered == fixture_bytes);
     };
 }

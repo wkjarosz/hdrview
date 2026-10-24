@@ -18,33 +18,63 @@
 #include "fonts.h"
 #include "image.h"
 #include "imgui_ext.h"
+#include "shared/edits.h"
 
 #include <cmath>
+#include <string>
 
 namespace
 {
+/// A setting per axis, as two rows drawn by \p field, joined by a link that keeps them the same.
+/**
+    As Image size joins its width and height: the link at the open end of a bracket around the two rows, labeled
+    \p name followed by x and y. While it is closed, \p y follows \p x and its row is disabled. \p field draws one
+    row's widget under the ID it is given.
+*/
+template <typename T, typename Field>
+void axis_pair(const char *name, T *x, T *y, bool *linked, const char *tooltip, Field &&field)
+{
+    ImGui::RowSpan rows;
+    auto           row = [&](const char *axis, T *value)
+    {
+        const std::string label = fmt::format("{} {}", name, axis);
+        field(("##" + label).c_str(), value);
+        if (tooltip)
+            ImGui::Tooltip(tooltip);
+        rows.take();
+
+        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+        ImGui::TextUnformatted(label.c_str());
+        rows.take();
+    };
+
+    row("x", x);
+    if (*linked)
+        *y = *x;
+    ImGui::BeginDisabled(*linked);
+    row("y", y);
+    ImGui::EndDisabled();
+
+    if (ImGui::RowBracketButton(*linked ? ICON_MY_LINK : ICON_MY_UNLINK, rows, *linked,
+                                *linked ? "The x and y values are linked. Click to unlink."
+                                        : "The x and y values are set independently. Click to link."))
+        *linked = !*linked;
+}
+
 /// The border-mode pair the resampling commands offer.
 void border_fields(int *border_x, int *border_y, bool *linked, const char *tooltip)
 {
-    auto combo = [](const char *label, int *value)
-    {
-        if (ImGui::BeginCombo(label, border_mode_name(*value)))
-        {
-            for (int i = 0; i < BorderMode_COUNT; ++i)
-                if (ImGui::Selectable(border_mode_name(i), *value == i))
-                    *value = i;
-            ImGui::EndCombo();
-        }
-    };
-
-    combo("Border", border_x);
-    ImGui::Tooltip("%s", tooltip);
-
-    ImGui::Checkbox("Same in both directions", linked);
-    if (!*linked)
-        combo("Border (vertical)", border_y);
-    else
-        *border_y = *border_x;
+    axis_pair("Border", border_x, border_y, linked, tooltip,
+              [](const char *id, int *value)
+              {
+                  if (ImGui::BeginCombo(id, border_mode_name(*value)))
+                  {
+                      for (int i = 0; i < BorderMode_COUNT; ++i)
+                          if (ImGui::Selectable(border_mode_name(i), *value == i))
+                              *value = i;
+                      ImGui::EndCombo();
+                  }
+              });
 }
 
 class Blur final : public EditCommand
@@ -63,10 +93,8 @@ public:
 
         if (m_kind == Kind_Box)
         {
-            ImGui::SliderInt("Half width", &m_half_width, 0, 64);
-            ImGui::Checkbox("Same in both directions", &m_link_axes);
-            if (!m_link_axes)
-                ImGui::SliderInt("Half width (vertical)", &m_half_width_y, 0, 64);
+            axis_pair("Half-size", &m_half_width, &m_half_width_y, &m_link_axes, nullptr,
+                      [](const char *id, int *value) { return ImGui::SliderInt(id, value, 0, 64); });
 
             // here repeating widens the result, this being the box blur as an effect in its own right
             ImGui::SliderInt("Passes", &m_iterations, 1, 16);
@@ -74,10 +102,8 @@ public:
         }
         else
         {
-            ImGui::SliderFloat("Sigma", &m_sigma, 0.f, 64.f, "%.2f", ImGuiSliderFlags_Logarithmic);
-            ImGui::Checkbox("Same in both directions", &m_link_axes);
-            if (!m_link_axes)
-                ImGui::SliderFloat("Sigma (vertical)", &m_sigma_y, 0.f, 64.f, "%.2f", ImGuiSliderFlags_Logarithmic);
+            axis_pair("Sigma", &m_sigma, &m_sigma_y, &m_link_axes, nullptr, [](const char *id, float *value)
+                      { return ImGui::SliderFloat(id, value, 0.f, 64.f, "%.2f", ImGuiSliderFlags_Logarithmic); });
 
             if (m_kind == Kind_FastGaussian)
             {
@@ -170,12 +196,12 @@ public:
     void draw(EditContext &) override
     {
         ImGui::SliderFloat("Radius", &m_radius, 0.f, 32.f, "%.1f");
+        ImGui::Tooltip("Removes lone outliers -- fireflies in a render -- without the smearing a blur "
+                       "would cause. Costs the area of the disc per sample, so a large radius is slow.");
 
         ImGui::Checkbox("Circular window", &m_disc);
         ImGui::Tooltip("A square window reaches root-two farther at its corners than along its axes, which "
                        "leaves a faint squareness in what it removes.");
-        ImGui::Tooltip("Removes lone outliers -- fireflies in a render -- without the smearing a blur "
-                       "would cause. Costs the area of the disc per sample, so a large radius is slow.");
     }
 
     void apply(const EditContext &ctx) override
@@ -202,16 +228,17 @@ public:
 
     void draw(EditContext &) override
     {
-        ImGui::DragFloat2("X, Y offset", &m_offset.x, 0.25f, 0.f, 0.f, "%.2f px");
-        ImGui::Tooltip("Positive moves the image right and down. Fractional offsets are allowed, and are "
-                       "what the sampler below is for.");
+        ImGui::DragFloat2("Offset x, y", &m_offset.x, 0.25f, 0.f, 0.f, "%.2f px");
+        ImGui::Tooltip("Shift the image by this many pixels. Positive values move it right and down, and "
+                       "fractional offsets are interpolated using the sampler below.");
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+        ImGui::TextWrappedToWidth("Drag the preview to move the image. Alt-drag to pan the view instead.");
+        ImGui::PopStyleColor();
 
         border_fields(&m_border_x, &m_border_y, &m_link_borders,
-                      "What is read where the shift reaches past the edge. Repeat is the wrapping shift: "
-                      "what leaves one side comes back in on the other, so a tiling texture stays tiling.");
+                      "Set what fills in where the shift moves the image away from an edge. Repeat wraps the "
+                      "image around, which keeps a tiling texture seamless.");
 
-        // only asked for when it is consulted: a whole-sample offset reads samples exactly
-        ImGui::BeginDisabled(m_offset.x == std::floor(m_offset.x) && m_offset.y == std::floor(m_offset.y));
         if (ImGui::BeginCombo("Sampler", sampler_name(m_sampler)))
         {
             for (int i = 0; i < Sampler_COUNT; ++i)
@@ -219,10 +246,19 @@ public:
                     m_sampler = i;
             ImGui::EndCombo();
         }
-        ImGui::EndDisabled();
-        ImGui::Tooltip("How the samples between samples are reconstructed, which a whole-number offset never "
-                       "has to ask.");
+        ImGui::Tooltip("Set how to interpolate between pixels for a fractional offset (unused for whole-pixel "
+                       "offsets).");
     }
+
+    /// Moves the offset by the drag, so the image follows the cursor as if grabbed, as panning does.
+    bool drag_preview(float2 from, float2 to, float2 size) override
+    {
+        m_offset += (to - from) * size;
+        return true;
+    }
+
+    std::optional<ShiftEdit> shift_preview(const EditContext &) const override
+    { return ShiftEdit{m_offset, m_sampler, int2{m_border_x, m_link_borders ? m_border_x : m_border_y}}; }
 
     void apply(const EditContext &ctx) override
     {
@@ -252,11 +288,12 @@ public:
 
     void draw(EditContext &ctx) override
     {
-        ImGui::TextWrapped("Gremlins are NaNs or infinities that can corrupt various image operations. Here you can "
-                           "replace them with a specified color, or with the median of their neighborhood.");
+        ImGui::TextWrappedToWidth(
+            "Gremlins are NaNs or infinities that can corrupt various image operations. Here you can "
+            "replace them with a specified color, or with the median of their neighborhood.");
         ImGui::Spacing();
 
-        if (auto img = ctx.image)
+        if (auto img = ctx.image; img && img->is_valid_group(img->selected_group))
             if (auto *stats = img->channels[img->groups[img->selected_group].channels[0]].get_stats())
                 if (stats->computed)
                     ImGui::TextFmt("{} NaN and {} infinite samples in this channel.", stats->summary.nan_pixels,
@@ -308,16 +345,15 @@ public:
                      ICON_MY_NORMAL_MAP,
                      ImGuiKey_None,
                      true,
-                     "Convert",
-                     27.f})
+                     "Convert"})
     {
     }
 
     void draw(EditContext &) override
     {
-        ImGui::TextWrapped("Reads the image as a height field -- the average of its channels -- and writes "
-                           "the surface normal that height field would have, encoded so that a component of "
-                           "zero is 0.5.");
+        ImGui::TextWrappedToWidth("Reads the image as a height field -- the average of its channels -- and writes "
+                                  "the surface normal that height field would have, encoded so that a component of "
+                                  "zero is 0.5.");
         ImGui::Spacing();
 
         ImGui::DragFloat("Scale", &m_scale, 0.01f, 0.f, 100.f, "%.2f");
@@ -333,6 +369,18 @@ public:
                        "is a convention it chooses, and the two are commonly called OpenGL and DirectX.");
     }
 
+    /// The bump map's scale and borders, as the image shader previews it and apply() makes it.
+    std::optional<BumpEdit> bump_preview(const EditContext &ctx) const override
+    {
+        if (!ctx.image)
+            return std::nullopt;
+        // slopes in the image's own coordinates, so height is per unit of the whole image and the same bump map gives
+        // the same normals whatever resolution it is stored at
+        const float2 size{float(ctx.image->size().x), float(ctx.image->size().y)};
+        return BumpEdit{float2{m_scale * size.x, (m_flip_y ? -1.f : 1.f) * m_scale * size.y},
+                        int2{m_border_x, m_link_borders ? m_border_x : m_border_y}};
+    }
+
     void apply(const EditContext &ctx) override
     {
         auto img = ctx.image;
@@ -346,15 +394,11 @@ public:
         if (!src)
             return;
 
-        // slopes in the image's own coordinates, so height is per unit of the whole image and the same
-        // bump map gives the same normals whatever resolution it is stored at
-        const float2 size{float(img->size().x), float(img->size().y)};
-        const float  s      = m_scale;
-        const float  y_sign = m_flip_y ? -1.f : 1.f;
-        const int    bx = m_border_x, by = m_link_borders ? m_border_x : m_border_y;
+        const BumpEdit bump = *bump_preview(ctx);
+        const int      bx = bump.borders.x, by = bump.borders.y;
 
         modify_colors(ctx, "Bump to normal map",
-                      [src, groups, s, size, y_sign, bx, by](const float4 &, int2 p, int g)
+                      [src, groups, scale = bump.scale, bx, by](const float4 &, int2 p, int g)
                       {
                           // reads anywhere in the channel, not merely the selection; only past the image itself
                           // does the border mode decide what is there
@@ -376,16 +420,9 @@ public:
                           };
 
                           // forward differences: the finest slope the pixels can express
-                          const float h00 = height(p);
-                          const float dx  = height(p + int2{1, 0}) - h00;
-                          const float dy  = height(p + int2{0, 1}) - h00;
-
-                          // the surface z = h(x,y) has normal (-dh/dx, -dh/dy, 1), the sign folded into the scale
-                          float3 n = la::normalize(float3{s * dx * size.x, y_sign * s * dy * size.y, 1.f});
-
-                          // into the [0,1] range a normal map is stored in, where flat is (0.5, 0.5, 1)
-                          n = n * 0.5f + 0.5f;
-                          return float4{n, 1.f};
+                          return float4{
+                              shader::bump_normal(height(p), height(p + int2{1, 0}), height(p + int2{0, 1}), scale),
+                              1.f};
                       });
     }
 

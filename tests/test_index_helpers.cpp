@@ -15,6 +15,8 @@
 #include "common.h"
 
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <initializer_list>
 #include <numeric>
 #include <vector>
@@ -118,47 +120,35 @@ TEST_CASE("download_percent_remaining reports a usable percentage for any byte c
         CHECK(download_percent_remaining(0, -1) == 100);
     }
 
-    SUBCASE("the endpoints are exact")
+    SUBCASE("it is within a point of the exact percentage, and zero only once every byte has arrived")
     {
-        CHECK(download_percent_remaining(0, 1000) == 100);
-        CHECK(download_percent_remaining(1000, 1000) == 0);
-        // over-reporting more bytes than the declared total still reads as finished, not negative
-        CHECK(download_percent_remaining(1500, 1000) == 0);
-    }
+        // Every byte count of every small total, including more bytes than were declared, which reads as
+        // finished rather than negative; and a sample of large totals, where a nearly finished transfer
+        // still shows and one past 32 bits must not overflow. Being within a point of a percentage keeps the
+        // value inside [0, 100].
+        std::vector<int64_t> totals;
+        for (int64_t total = 1; total <= 64; ++total) totals.push_back(total);
+        for (int64_t total : {int64_t(1000), int64_t(1000000), int64_t(8) << 30}) totals.push_back(total);
 
-    SUBCASE("a partial transfer is neither 0 nor 100")
-    {
-        // a plain integer division would send all of these to zero
-        CHECK(download_percent_remaining(500, 1000) == 50);
-        CHECK(download_percent_remaining(250, 1000) == 75);
-        CHECK(download_percent_remaining(999, 1000) == 1);
-        // rounded up, so a nearly-finished transfer still shows
-        CHECK(download_percent_remaining(999999, 1000000) == 1);
-    }
-
-    SUBCASE("the invariants hold across every small total and byte count")
-    {
-        for (int64_t total = 1; total <= 64; ++total)
+        for (int64_t total : totals)
         {
-            int64_t previous = 101;
-            for (int64_t loaded = 0; loaded <= total; ++loaded)
+            std::vector<int64_t> counts;
+            if (total <= 64)
+                for (int64_t loaded = 0; loaded <= total + 2; ++loaded) counts.push_back(loaded);
+            else
+                counts = {0, 1, total / 4, total / 2, total - 1, total, total + total / 2};
+
+            int previous = 101;
+            for (int64_t loaded : counts)
             {
-                const int r = download_percent_remaining(loaded, total);
+                const int    r     = download_percent_remaining(loaded, total);
+                const double exact = 100.0 * double(std::max<int64_t>(0, total - loaded)) / double(total);
                 INFO("loaded = ", loaded, " of ", total, " -> ", r);
-                CHECK(r >= 0);
-                CHECK(r <= 100);
+                CHECK(std::abs(r - exact) < 1.0);
                 CHECK(r <= previous); // never goes backwards as bytes arrive
-                CHECK((r == 0) == (loaded == total));
+                CHECK((r == 0) == (loaded >= total));
                 previous = r;
             }
         }
-    }
-
-    SUBCASE("a transfer larger than 32 bits does not overflow the percentage")
-    {
-        const int64_t huge = 8ll << 30;
-        CHECK(download_percent_remaining(0, huge) == 100);
-        CHECK(download_percent_remaining(huge / 2, huge) == 50);
-        CHECK(download_percent_remaining(huge, huge) == 0);
     }
 }

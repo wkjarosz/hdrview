@@ -43,29 +43,6 @@ const float          k_max_cll = 1000.f, k_max_fall = 400.f;
 const float          k_min_nits = 0.005f, k_max_nits = 1000.f;
 const Chromaticities k_display{{0.68f, 0.32f}, {0.265f, 0.69f}, {0.15f, 0.06f}, {0.3127f, 0.329f}}; // P3 at D65
 
-uint32_t crc32(const std::string &data)
-{
-    uint32_t crc = 0xFFFFFFFFu;
-    for (unsigned char c : data)
-    {
-        crc ^= c;
-        for (int k = 0; k < 8; ++k) crc = (crc >> 1) ^ (0xEDB88320u & (0u - (crc & 1u)));
-    }
-    return ~crc;
-}
-
-/// A PNG chunk: its length, type, data and the CRC over type and data.
-std::string png_chunk(const char type[4], const std::vector<uint8_t> &data)
-{
-    std::string type_and_data(type, 4);
-    type_and_data.append(data.begin(), data.end());
-    std::string out;
-    put<uint32_t>(out, (uint32_t)data.size(), Endian::Big);
-    out += type_and_data;
-    put<uint32_t>(out, crc32(type_and_data), Endian::Big);
-    return out;
-}
-
 uint16_t xy_units(float v) { return (uint16_t)std::lround(v / 0.00002f); }
 uint32_t nit_units(float v) { return (uint32_t)std::lround(double(v) * 10000.0); }
 
@@ -78,7 +55,7 @@ std::string png_with_light_levels()
     save_png_image(*img, out, "a.png");
     std::string bytes = out.str();
 
-    std::vector<uint8_t> cLLI, mDCV;
+    std::string cLLI, mDCV;
     put<uint32_t>(cLLI, nit_units(k_max_cll), Endian::Big);
     put<uint32_t>(cLLI, nit_units(k_max_fall), Endian::Big);
     for (float2 xy : {k_display.red, k_display.green, k_display.blue, k_display.white})
@@ -223,11 +200,10 @@ TEST_CASE("Every format that carries HDR light levels or a white luminance repor
         }
     }
 
-    // OpenEXR has no light levels, but says what its (1, 1, 1) stands for, under the shared key rather than as a
-    // raw attribute
+    // OpenEXR has no light levels, but says what its (1, 1, 1) stands for, under the shared key (which
+    // test_export_roundtrip.cpp reads back) rather than as a raw attribute, and only when the file does
     auto exr = load_bytes(exr_with_white_luminance(300.f), "a.exr");
     REQUIRE(exr);
-    CHECK(exr->metadata["header"][k_white_luminance_key]["value"].get<float>() == 300.f);
     CHECK_FALSE(exr->metadata["header"].contains("whiteLuminance"));
     auto exr_without = load_bytes(exr_with_white_luminance(0.f), "a.exr");
     REQUIRE(exr_without);

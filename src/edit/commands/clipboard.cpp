@@ -127,8 +127,7 @@ public:
                      ICON_MY_SEAMLESS_PASTE,
                      ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_V,
                      true,
-                     "Paste",
-                     27.f})
+                     "Paste"})
     {
     }
 
@@ -136,9 +135,9 @@ public:
 
     void draw(EditContext &ctx) override
     {
-        ImGui::TextWrapped("Pastes what the clipboard varies like rather than what it is: the border keeps the "
-                           "values already there, so no seam can appear, and the interior drifts to meet them "
-                           "-- the patch takes on the surrounding illumination.");
+        ImGui::TextWrappedToWidth("Pastes what the clipboard varies like rather than what it is: the border keeps the "
+                                  "values already there, so no seam can appear, and the interior drifts to meet them "
+                                  "-- the patch takes on the surrounding illumination.");
         ImGui::Spacing();
 
         ImGui::SliderInt("Iterations", &m_iterations, 10, 2000);

@@ -67,23 +67,26 @@ TEST_CASE("An ordinary XMP packet parses into its schemas")
 
 TEST_CASE("A default namespace declaration does not take the image down with it")
 {
-    // xmlns= has no colon, so it is stored as a plain string; xmlns:dc= then addresses it as an object
+    // xmlns= has no colon, so read as an ordinary attribute it is a plain string, which xmlns:dc= then
+    // addresses as an object
     const std::string with_default_ns = packet(R"(<rdf:Description rdf:about=""
         xmlns="http://purl.org/dc/elements/1.1/"
         xmlns:dc="http://purl.org/dc/elements/1.1/">
         <dc:title>ok</dc:title>
       </rdf:Description>)");
 
+    // and what the packet says survives the collision
     json j;
     CHECK_NOTHROW(j = parse(with_default_ns));
-    CHECK(j.is_object());
+    CHECK(j.value("dc", json::object()).value("title", std::string{}) == "ok");
 
     // the same collision reached through an element's own attributes
     const std::string prefix_used_twice = packet(R"(<rdf:Description rdf:about=""
         xmlns:dc="http://purl.org/dc/elements/1.1/"
         dc="plain"
         dc:title="structured"/>)");
-    CHECK_NOTHROW(parse(prefix_used_twice));
+    CHECK_NOTHROW(j = parse(prefix_used_twice));
+    CHECK(j.dump().find("structured") != std::string::npos);
 
     // and through a child element whose prefix an attribute already claimed as a plain value
     const std::string child_after_attribute = packet(R"(<rdf:Description rdf:about=""
@@ -91,7 +94,8 @@ TEST_CASE("A default namespace declaration does not take the image down with it"
         dc="plain">
         <dc:title>structured</dc:title>
       </rdf:Description>)");
-    CHECK_NOTHROW(parse(child_after_attribute));
+    CHECK_NOTHROW(j = parse(child_after_attribute));
+    CHECK(j.dump().find("structured") != std::string::npos);
 }
 
 TEST_CASE("A packet that cannot be parsed yields nothing rather than throwing")
@@ -115,14 +119,8 @@ std::string png_with_xmp(const std::string &xmp)
         put(s, v, Endian::Big);
         return s;
     };
-    auto chunk = [&](const std::string &type, const std::string &data)
-    {
-        const std::string body = type + data;
-        return be32((uint32_t)data.size()) + body +
-               be32((uint32_t)crc32(0, (const Bytef *)body.data(), (uInt)body.size()));
-    };
 
-    // 1x1 8-bit RGB, one uncompressed zlib block holding a single filtered scanline
+    // 1x1 8-bit RGB, a zlib stream holding a single filtered scanline
     std::string        ihdr = be32(1) + be32(1) + std::string("\x08\x02\x00\x00\x00", 5);
     std::string        raw  = std::string("\x00\xff\x00\x00", 4);
     uLongf             cap  = compressBound((uLong)raw.size());
@@ -132,8 +130,8 @@ std::string png_with_xmp(const std::string &xmp)
     // iTXt: keyword \0 compression-flag compression-method language \0 translated \0 text
     const std::string itxt = std::string("XML:com.adobe.xmp") + '\0' + '\0' + '\0' + '\0' + '\0' + xmp;
 
-    return std::string("\x89PNG\r\n\x1a\n", 8) + chunk("IHDR", ihdr) + chunk("iTXt", itxt) +
-           chunk("IDAT", std::string((char *)z.data(), cap)) + chunk("IEND", "");
+    return std::string("\x89PNG\r\n\x1a\n", 8) + png_chunk("IHDR", ihdr) + png_chunk("iTXt", itxt) +
+           png_chunk("IDAT", std::string((char *)z.data(), cap)) + png_chunk("IEND", "");
 }
 
 } // namespace
@@ -147,7 +145,7 @@ TEST_CASE("An image whose XMP the parser dislikes still loads its pixels")
         <dc:title>ok</dc:title>
       </rdf:Description>)");
 
-    // first the control, so a broken fixture cannot masquerade as the bug
+    // first the control, so a broken fixture cannot pass for the XMP's doing
     std::istringstream    plain{png_with_xmp("")};
     std::vector<ImagePtr> plain_images;
     CHECK_NOTHROW(plain_images = load_image(plain, "plain.png"));
@@ -159,4 +157,7 @@ TEST_CASE("An image whose XMP the parser dislikes still loads its pixels")
     CHECK_NOTHROW(images = load_image(is, "xmp-test.png"));
     REQUIRE(images.size() == 1);
     CHECK(images[0]->size() == int2{1, 1});
+    // and the packet still reaches the metadata the Info panel reads
+    REQUIRE(images[0]->metadata.contains("xmp"));
+    CHECK(images[0]->metadata["xmp"].value("dc", json::object()).value("title", std::string{}) == "ok");
 }

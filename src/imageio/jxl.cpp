@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <optional>
 #include <spdlog/fmt/fmt.h>
 #include <stdexcept>
 
@@ -421,6 +422,8 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
     int                              first_black_channel = -1;
     bool                             is_cmyk             = false;
     bool                             prefer_icc          = false;
+    // the primaries the file was encoded from, when libjxl hands the pixels back in a space of its own instead
+    std::optional<Chromaticities> original_chr;
 
     vector<ImagePtr> images;
     ImagePtr         image;
@@ -677,6 +680,33 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                                                    file_enc.transfer_function != JXL_TRANSFER_FUNCTION_DCI &&
                                                    file_enc.transfer_function != JXL_TRANSFER_FUNCTION_709));
             spdlog::info("Will {}prefer ICC profile for linearization.", prefer_icc ? "" : "not ");
+
+            // A lossy file is XYB, which libjxl decodes into the original color space only when it can state that
+            // space in its own codes, and otherwise into linear sRGB. Its pixels are then right but in sRGB's
+            // primaries, so the original's are kept to convert them back into.
+            if (!info.uses_original_profile && !is_cmyk)
+            {
+                JxlColorEncoding original_enc;
+                Chromaticities   chr;
+                if (JXL_DEC_SUCCESS == hdrview_JxlDecoderGetColorAsEncodedProfile(
+                                           dec.get(), JXL_COLOR_PROFILE_TARGET_ORIGINAL, &original_enc))
+                {
+                    if (original_enc.color_space == JXL_COLOR_SPACE_RGB)
+                        original_chr = file_chromaticities(original_enc);
+                }
+                else if (size_t original_size = 0;
+                         JXL_DEC_SUCCESS == hdrview_JxlDecoderGetICCProfileSize(
+                                                dec.get(), JXL_COLOR_PROFILE_TARGET_ORIGINAL, &original_size))
+                {
+                    std::vector<uint8_t> original(original_size);
+                    if (JXL_DEC_SUCCESS == hdrview_JxlDecoderGetColorAsICCProfile(dec.get(),
+                                                                                  JXL_COLOR_PROFILE_TARGET_ORIGINAL,
+                                                                                  original.data(), original.size()))
+                        if (const ICCProfile profile(original);
+                            profile.is_RGB() && profile.extract_chromaticities(&chr))
+                            original_chr = chr;
+                }
+            }
         }
         else if (status == JXL_DEC_NEED_IMAGE_OUT_BUFFER)
         {
@@ -885,6 +915,23 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                 else if (linearize_colors(pixels.data(), size, file_enc, opts.keep_primaries, &profile_description,
                                           &chr))
                     image->chromaticities = chr;
+
+                // back into the primaries the file was encoded from, adapting the white as the ICC transform that
+                // left the original did
+                float3x3 M;
+                if (opts.keep_primaries && original_chr && image->chromaticities && size.z >= 3 &&
+                    color_conversion_matrix(M, *image->chromaticities, *original_chr, AdaptationMethod_Bradford))
+                {
+                    for (int64_t i = 0; i < int64_t(size.x) * size.y; ++i)
+                    {
+                        float       *px  = &pixels[size_t(i) * size.z];
+                        const float3 rgb = mul(M, float3{px[0], px[1], px[2]});
+                        px[0]            = rgb.x;
+                        px[1]            = rgb.y;
+                        px[2]            = rgb.z;
+                    }
+                    image->chromaticities = original_chr;
+                }
             }
             image->metadata["color profile"] = profile_description;
 
