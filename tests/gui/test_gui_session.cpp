@@ -177,6 +177,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         hdrview()->toggle_group_selected(1, hdrview()->image(1)->selected_group);
         IM_CHECK(hdrview()->image(0)->is_selected());
         IM_CHECK(hdrview()->image(1)->is_selected());
+        hdrview()->set_selection(Box2i{}); //< as Deselect leaves it
 
         // absolute paths, so the file can sit in the temp directory and still find its images
         json     j = hdrview()->build_session_manifest([](ConstImagePtr img) { return img->path.generic_u8string(); });
@@ -192,6 +193,8 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         // both come back selected: without the selection in the file, update_visibility() collapses it onto
         // the group the current image is showing
         for (int i = 0; i < 2; ++i) IM_CHECK(hdrview()->image(i)->is_selected());
+        // and no pixels come back selected
+        IM_CHECK(!hdrview()->roi().has_volume());
 
         fs::remove(session_path);
     };

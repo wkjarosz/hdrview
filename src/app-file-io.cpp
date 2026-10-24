@@ -1620,7 +1620,10 @@ void HDRViewApp::finish_loading_session()
     {
         view["roi"][0].get_to(m_roi.min);
         view["roi"][1].get_to(m_roi.max);
-        m_roi.make_valid(); // the file's two corners need not arrive in that order
+        // Deselect leaves the inverted box, which make_valid() would turn into one covering everything, so corners in
+        // the wrong order are no selection
+        if (m_roi.is_empty())
+            m_roi = Box2i{int2{0}};
     }
     m_roi_live = m_roi;
 
