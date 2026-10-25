@@ -61,8 +61,13 @@ id<MTLFunction> compile_metal_shader(id<MTLDevice> device, const std::string &na
     return function;
 }
 
+// Metal builds a pipeline quickly enough to do it at once
+bool Shader::builds_in_background() { return false; }
+
+bool Shader::ready() { return true; }
+
 Shader::Shader(RenderPass *render_pass, const std::string &name, const std::string &vs_source,
-               const std::string &fs_source, BlendMode blend_mode) :
+               const std::string &fs_source, BlendMode blend_mode, bool) :
     m_render_pass(render_pass), m_name(name), m_blend_mode(blend_mode)
 {
     auto           &gMetalGlobals = GetMetalGlobals();

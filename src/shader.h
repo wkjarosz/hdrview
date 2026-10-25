@@ -75,9 +75,23 @@ public:
 
         \param fs_filename
             Filename of the fragment shader source code.
+
+        \param background
+            Leave the build to the driver's own threads where it has them (see builds_in_background()), returning
+            before the shader is built. It may then not be used until ready() says it can.
     */
     Shader(RenderPass *render_pass, const std::string &name, const std::string &vs_source, const std::string &fs_source,
-           BlendMode blend_mode = BlendMode::None);
+           BlendMode blend_mode = BlendMode::None, bool background = false);
+
+    /// Whether the graphics backend can build a shader in the background, which this turns on the first time it asks.
+    static bool builds_in_background();
+
+    /// Whether the shader is built and can be used, which a background build is once the driver has finished it.
+    /**
+        Until then this only asks the driver, without waiting. The call that finds the build done checks it, and
+        throws if it failed, as the constructor of a shader built at once does.
+    */
+    bool ready();
 
     /// Release all resources
     virtual ~Shader();
@@ -271,6 +285,10 @@ protected:
 
 #if defined(HELLOIMGUI_HAS_OPENGL)
     uint32_t m_shader_handle = 0;
+    // a background build's stages and sources, kept until ready() checks the build
+    uint32_t    m_pending_shaders[2] = {0, 0};
+    std::string m_pending_sources[2];
+    void        finish_build();
 #if defined(HELLOIMGUI_USE_GLAD)
     uint32_t m_vertex_array_handle = 0;
     bool     m_uses_point_size     = false;

@@ -870,8 +870,12 @@ private:
     //-----------------------------------------------------------------------------
     std::unique_ptr<RenderPass> m_render_pass;
     std::unique_ptr<Shader>     m_shader;
-    /// m_shader with an edit dialog's preview, made the first time one shows; see image-shader.sglsl.
-    std::unique_ptr<Shader> m_preview_shader;
+    /// m_shader with an edit dialog's preview, once built; see image-shader.sglsl.
+    /**
+        Where the driver builds in the background, the build starts at startup in m_preview_build, which the first
+        preview a dialog posts moves here once it is done. Elsewhere, that preview builds it at once.
+    */
+    std::unique_ptr<Shader> m_preview_shader, m_preview_build;
     bool                    m_preview_shader_failed = false; ///< so a shader that failed to build is not retried
 
     //-----------------------------------------------------------------------------
@@ -1125,5 +1129,8 @@ void init_hdrview(optional<float> exposure, optional<float> gamma, optional<bool
 /// Return a pointer to the global singleton HDRViewApp instance
 HDRViewApp *hdrview();
 
-/// An image shader drawing into \p render_pass, the one with edit previews if \p preview, its quad and dither set.
+/// An image shader drawing into \p render_pass, the one with edit previews if \p preview, which builds in the
+/// background.
 std::unique_ptr<Shader> make_image_shader(RenderPass *render_pass, bool preview);
+/// Give \p shader, once ready, the quad it draws and its dither.
+void finish_image_shader(Shader &shader);

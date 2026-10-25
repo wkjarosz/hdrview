@@ -22,8 +22,12 @@ void HDRViewApp::setup_rendering()
         Image::make_default_textures();
         Colormap::initialize();
 
-        // the viewer's shader only; the one with edit previews takes far longer to link, so the first preview makes it
+        // The viewer's shader, at once; the one with edit previews takes far longer to link, so it is left to the
+        // driver's own threads where it has them, and otherwise to the first preview.
         m_shader = make_image_shader(m_render_pass.get(), false);
+        finish_image_shader(*m_shader);
+        if (Shader::builds_in_background())
+            m_preview_build = make_image_shader(m_render_pass.get(), true);
         set_image_textures();
         spdlog::info("Successfully initialized graphics API!");
     }
@@ -39,14 +43,15 @@ void HDRViewApp::setup_rendering()
 std::unique_ptr<Shader> make_image_shader(RenderPass *render_pass, bool preview)
 {
     const string asset = preview ? "shaders/image-preview" : "shaders/image-shader";
-    auto         shader =
-        make_unique<Shader>(render_pass, preview ? "ImagePreview" : "ImageView", Shader::from_asset(asset + "_vert"),
-                            Shader::from_asset(asset + "_frag"), Shader::BlendMode::AlphaBlend);
+    return make_unique<Shader>(render_pass, preview ? "ImagePreview" : "ImageView", Shader::from_asset(asset + "_vert"),
+                               Shader::from_asset(asset + "_frag"), Shader::BlendMode::AlphaBlend, preview);
+}
 
+void finish_image_shader(Shader &shader)
+{
     const float positions[] = {-1.f, -1.f, 1.f, -1.f, -1.f, 1.f, 1.f, -1.f, 1.f, 1.f, -1.f, 1.f};
-    shader->set_buffer("position", VariableType::Float32, {6, 2}, positions);
-    shader->set_texture("dither_texture", Image::dither_texture());
-    return shader;
+    shader.set_buffer("position", VariableType::Float32, {6, 2}, positions);
+    shader.set_texture("dither_texture", Image::dither_texture());
 }
 
 bool HDRViewApp::supports_hdr() const
