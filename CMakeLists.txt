@@ -1192,6 +1192,7 @@ if(HDRVIEW_ENABLE_AVIF AND (EMSCRIPTEN OR (APPLE AND NOT (HDRVIEW_AOM_INCLUDE_DI
     get_property(_doc CACHE "${_var}" PROPERTY HELPSTRING)
     set("HDRVIEW_SAVED_DOC_${_var}" "${_doc}")
   endforeach()
+  get_property(HDRVIEW_CACHE_BEFORE_AOM DIRECTORY PROPERTY CACHE_VARIABLES)
 
   list(LENGTH CMAKE_OSX_ARCHITECTURES _osx_arch_count)
   if(EMSCRIPTEN)
@@ -1234,6 +1235,16 @@ if(HDRVIEW_ENABLE_AVIF AND (EMSCRIPTEN OR (APPLE AND NOT (HDRVIEW_AOM_INCLUDE_DI
   foreach(_var IN LISTS HDRVIEW_AOM_CLOBBERED_VARS)
     set("${_var}" "${HDRVIEW_SAVED_CACHE_${_var}}" CACHE STRING "${HDRVIEW_SAVED_DOC_${_var}}" FORCE)
     set("${_var}" "${HDRVIEW_SAVED_${_var}}")
+  endforeach()
+  # aom also caches what it detects under the names other libraries' checks use (HAVE_UNISTD_H,
+  # HAVE_PTHREAD_H, ...), and a check finding its variable already set takes that answer instead of running:
+  # aom's HAVE_UNISTD_H of 0 leaves libtiff's tif_unix.c without read() and write(). aom has written its own
+  # config header by now, so drop every such entry it added.
+  get_property(_cache_after_aom DIRECTORY PROPERTY CACHE_VARIABLES)
+  foreach(_var IN LISTS _cache_after_aom)
+    if(_var MATCHES "^HAVE_" AND NOT _var IN_LIST HDRVIEW_CACHE_BEFORE_AOM)
+      unset("${_var}" CACHE)
+    endif()
   endforeach()
 
   if(NOT aom_ADDED)

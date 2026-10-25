@@ -44,6 +44,17 @@ jobs:
       - name: Install dependencies
         run: brew install ninja create-dmg dylibbundler nasm meson
 
+      # The runner image comes with some of these installed, which the build would otherwise find and link.
+      # check-macos-dmg.sh names any that this list misses.
+      - name: Remove the runner's libraries
+        run: |
+          installed=$(brew list --formula -1)
+          for lib in aom dav1d libvmaf freetype libpng jpeg-turbo webp libtiff little-cms2 openexr imath libraw \
+                     jpeg-xl highway brotli libheif libde265 x265 openjpeg openjph libultrahdr libexif glfw giflib \
+                     libdeflate; do
+            if grep -qx "$lib" <<<"$installed"; then brew uninstall --ignore-dependencies "$lib"; fi
+          done
+
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
