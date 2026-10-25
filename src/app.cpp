@@ -1460,7 +1460,12 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    ICON_MY_ADD_WATCHED_FOLDER,
                    ImGuiKey_None,
                    0,
-                   [this]() { add_watched_folder(); },
+                   [this]()
+                   {
+                       if (const string folder = folder_path("Add watched folder", m_params.backendPointers.glfwWindow);
+                           !folder.empty() && m_image_loader.add_watched_directory(folder, true))
+                           m_watch_files_for_changes = true;
+                   },
                    always_enabled,
                    false,
                    nullptr,

@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <spdlog/spdlog.h>
 #include <string>
+#include <vector>
 
 #if !defined(__EMSCRIPTEN__)
 // nfd_glfw3.h reaches the native window through glfw3native.h, which brings in each window system's own headers
@@ -15,6 +16,7 @@
 #define GLFW_EXPOSE_NATIVE_X11
 #define GLFW_EXPOSE_NATIVE_WAYLAND
 #endif
+#include <nfd.hpp>
 #include <nfd_glfw3.h>
 #if defined(NFD_PORTAL)
 #include <dbus/dbus.h>
@@ -169,12 +171,72 @@ void quit_file_dialogs()
     s_file_dialogs_initialized = false;
 }
 
-nfdwindowhandle_t file_dialog_parent(void *glfw_window)
+/// The handle that makes a native file dialog a child of the GLFW window \p glfw_window.
+static nfdwindowhandle_t file_dialog_parent(void *glfw_window)
 {
     // a handle left empty, should this fail, opens the dialog unparented
     nfdwindowhandle_t parent{};
     NFD_GetNativeWindowFromGLFWWindow(static_cast<GLFWwindow *>(glfw_window), &parent);
     return parent;
+}
+
+/// Whether a native file dialog returned a choice, logging why if it failed rather than was canceled.
+static bool chosen(nfdresult_t result, const char *title)
+{
+    if (result == NFD_ERROR)
+        spdlog::error("The '{}' dialog failed: {}.", title, NFD::GetError());
+    return result == NFD_OKAY;
+}
+
+std::vector<std::string> open_file_paths(const char *title, const char *filter_name, const std::string &extensions,
+                                         bool multiple, void *glfw_window)
+{
+    const nfdu8filteritem_t  filter{filter_name, extensions.c_str()};
+    const nfdwindowhandle_t  parent = file_dialog_parent(glfw_window);
+    std::vector<std::string> paths;
+    if (multiple)
+    {
+        const nfdpathset_t *set = nullptr;
+        if (!chosen(NFD::OpenDialogMultiple(set, &filter, 1, nullptr, parent, title), title))
+            return paths;
+        NFD::UniquePathSet owned{set};
+        nfdpathsetsize_t   count = 0;
+        NFD::PathSet::Count(owned, count);
+        for (nfdpathsetsize_t i = 0; i < count; ++i)
+            if (NFD::UniquePathSetPathU8 path; NFD::PathSet::GetPath(owned, i, path) == NFD_OKAY)
+                paths.emplace_back(path.get());
+    }
+    else
+    {
+        nfdu8char_t *path = nullptr;
+        if (!chosen(NFD::OpenDialog(path, &filter, 1, nullptr, parent, title), title))
+            return paths;
+        NFD::UniquePathU8 owned{path};
+        paths.emplace_back(owned.get());
+    }
+    return paths;
+}
+
+std::string save_file_path(const char *title, const std::string &default_name, const char *filter_name,
+                           const std::string &extensions, void *glfw_window)
+{
+    const nfdu8filteritem_t filter{filter_name, extensions.c_str()};
+    nfdu8char_t            *path = nullptr;
+    if (!chosen(
+            NFD::SaveDialog(path, &filter, 1, nullptr, default_name.c_str(), file_dialog_parent(glfw_window), title),
+            title))
+        return "";
+    NFD::UniquePathU8 owned{path};
+    return owned.get();
+}
+
+std::string folder_path(const char *title, void *glfw_window)
+{
+    nfdu8char_t *path = nullptr;
+    if (!chosen(NFD::PickFolder(path, nullptr, file_dialog_parent(glfw_window), title), title))
+        return "";
+    NFD::UniquePathU8 owned{path};
+    return owned.get();
 }
 #endif
 

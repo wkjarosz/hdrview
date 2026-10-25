@@ -92,7 +92,6 @@ public:
     //-----------------------------------------------------------------------------
     void open_image();
     void open_folder();
-    void add_watched_folder();
     void load_images(const vector<string> &filenames);
     void load_image(const string filename, std::optional<string_view> buffer = std::nullopt, bool should_select = true,
                     const ImageLoadOptions &opts = {}, ImagePtr to_replace = nullptr);

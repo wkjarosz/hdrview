@@ -35,40 +35,6 @@
 
 using namespace std;
 
-#if !defined(__EMSCRIPTEN__)
-/// Whether a native file dialog returned a choice, logging why if it failed rather than was canceled.
-static bool chosen(nfdresult_t result, const char *title)
-{
-    if (result == NFD_ERROR)
-        spdlog::error("The '{}' dialog failed: {}.", title, NFD::GetError());
-    return result == NFD_OKAY;
-}
-
-/// The path a native save dialog returns, or an empty string if none was chosen.
-static string save_path(const char *title, const string &default_name, const char *filter_name,
-                        const string &extensions, void *glfw_window)
-{
-    const nfdu8filteritem_t filter{filter_name, extensions.c_str()};
-    nfdu8char_t            *path = nullptr;
-    if (!chosen(
-            NFD::SaveDialog(path, &filter, 1, nullptr, default_name.c_str(), file_dialog_parent(glfw_window), title),
-            title))
-        return "";
-    NFD::UniquePathU8 owned{path};
-    return owned.get();
-}
-
-/// The folder a native folder dialog returns, or an empty string if none was chosen.
-static string folder_path(const char *title, void *glfw_window)
-{
-    nfdu8char_t *path = nullptr;
-    if (!chosen(NFD::PickFolder(path, nullptr, file_dialog_parent(glfw_window), title), title))
-        return "";
-    NFD::UniquePathU8 owned{path};
-    return owned.get();
-}
-#endif
-
 namespace
 {
 
@@ -627,7 +593,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
             else
 #endif
 #if !defined(__EMSCRIPTEN__)
-                filename = save_path(
+                filename = save_file_path(
                     save_as_name.c_str(), filename, (string(save_format_names[save_format]) + " images").c_str(),
                     save_extension.substr(save_extension.rfind('.') + 1), m_params.backendPointers.glfwWindow);
 #endif
@@ -804,21 +770,9 @@ void HDRViewApp::open_image()
             }
         });
 #else
-    const string            extensions = fmt::format("{},zip", fmt::join(Image::loadable_formats(), ","));
-    const nfdu8filteritem_t filter{"Image files", extensions.c_str()};
-    const nfdpathset_t     *paths = nullptr;
-    if (!chosen(NFD::OpenDialogMultiple(paths, &filter, 1, nullptr,
-                                        file_dialog_parent(m_params.backendPointers.glfwWindow), "Open image(s)"),
-                "Open image(s)"))
-        return;
-    NFD::UniquePathSet owned{paths};
-    nfdpathsetsize_t   count = 0;
-    NFD::PathSet::Count(owned, count);
-    vector<string> filenames;
-    for (nfdpathsetsize_t i = 0; i < count; ++i)
-        if (NFD::UniquePathSetPathU8 path; NFD::PathSet::GetPath(owned, i, path) == NFD_OKAY)
-            filenames.emplace_back(path.get());
-    load_images(filenames);
+    load_images(open_file_paths("Open image(s)", "Image files",
+                                fmt::format("{},zip", fmt::join(Image::loadable_formats(), ",")), true,
+                                m_params.backendPointers.glfwWindow));
 #endif
 }
 
@@ -828,15 +782,6 @@ void HDRViewApp::open_folder()
     if (const string folder = folder_path("Open images in folder", m_params.backendPointers.glfwWindow);
         !folder.empty())
         load_images({folder});
-#endif
-}
-
-void HDRViewApp::add_watched_folder()
-{
-#if !defined(__EMSCRIPTEN__)
-    if (const string folder = folder_path("Add watched folder", m_params.backendPointers.glfwWindow);
-        !folder.empty() && m_image_loader.add_watched_directory(folder, true))
-        m_watch_files_for_changes = true;
 #endif
 }
 
@@ -1254,8 +1199,8 @@ void HDRViewApp::save_session()
         return;
 
 #if !defined(__EMSCRIPTEN__)
-    string filename =
-        save_path("Save session", "session.hsess", "HDRView session", "hsess", m_params.backendPointers.glfwWindow);
+    string filename = save_file_path("Save session", "session.hsess", "HDRView session", "hsess",
+                                     m_params.backendPointers.glfwWindow);
     if (filename.empty())
         return;
 
@@ -1290,8 +1235,8 @@ void HDRViewApp::export_session_bundle()
         return;
 
 #if !defined(__EMSCRIPTEN__)
-    string filename = save_path("Export session bundle", "session.hsess.zip", "HDRView session bundle", "zip",
-                                m_params.backendPointers.glfwWindow);
+    string filename = save_file_path("Export session bundle", "session.hsess.zip", "HDRView session bundle", "zip",
+                                     m_params.backendPointers.glfwWindow);
     if (filename.empty())
         return;
 
@@ -1398,14 +1343,10 @@ struct HDRViewApp::LoadingSession
 void HDRViewApp::load_session()
 {
 #if !defined(__EMSCRIPTEN__)
-    const nfdu8filteritem_t filter{"HDRView session", "hsess,zip"};
-    nfdu8char_t            *path = nullptr;
-    if (!chosen(NFD::OpenDialog(path, &filter, 1, nullptr, file_dialog_parent(m_params.backendPointers.glfwWindow),
-                                "Load session"),
-                "Load session"))
-        return;
-    NFD::UniquePathU8 owned{path};
-    load_session(owned.get());
+    const auto selected =
+        open_file_paths("Load session", "HDRView session", "hsess,zip", false, m_params.backendPointers.glfwWindow);
+    if (!selected.empty())
+        load_session(selected.front());
 #endif
 }
 

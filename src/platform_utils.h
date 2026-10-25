@@ -9,7 +9,7 @@ const char *reveal_in_file_manager_text();
 void        show_in_file_manager(const char *filename);
 
 #if !defined(__EMSCRIPTEN__)
-#include <nfd.hpp>
+#include <vector>
 
 /// Sets up the native file dialogs once GLFW is, and returns why they cannot open, or an empty string when they can.
 /**
@@ -25,8 +25,20 @@ const std::string &file_dialog_problem();
 /// Undoes init_file_dialogs(), if it got as far as setting the dialogs up.
 void quit_file_dialogs();
 
-/// The handle that makes a native file dialog a child of the GLFW window \p glfw_window.
-nfdwindowhandle_t file_dialog_parent(void *glfw_window);
+/// The files a native open dialog over \p glfw_window returns, none if it was canceled or failed.
+/**
+    The dialog offers files with the comma-separated \p extensions, given without their dots ("png,jpg"), under
+    \p filter_name, and lets several be chosen when \p multiple.
+*/
+std::vector<std::string> open_file_paths(const char *title, const char *filter_name, const std::string &extensions,
+                                         bool multiple, void *glfw_window);
+
+/// The file a native save dialog over \p glfw_window returns, or an empty string if it was canceled or failed.
+std::string save_file_path(const char *title, const std::string &default_name, const char *filter_name,
+                           const std::string &extensions, void *glfw_window);
+
+/// The folder a native folder dialog over \p glfw_window returns, or an empty string if it was canceled or failed.
+std::string folder_path(const char *title, void *glfw_window);
 #endif
 
 #ifdef __EMSCRIPTEN__
