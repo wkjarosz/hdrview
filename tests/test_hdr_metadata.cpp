@@ -43,6 +43,7 @@ const float          k_max_cll = 1000.f, k_max_fall = 400.f;
 const float          k_min_nits = 0.005f, k_max_nits = 1000.f;
 const Chromaticities k_display{{0.68f, 0.32f}, {0.265f, 0.69f}, {0.15f, 0.06f}, {0.3127f, 0.329f}}; // P3 at D65
 
+#if defined(PNG_cLLI_SUPPORTED) && defined(PNG_mDCV_SUPPORTED) // libpng 1.6.46 and later
 uint16_t xy_units(float v) { return (uint16_t)std::lround(v / 0.00002f); }
 uint32_t nit_units(float v) { return (uint32_t)std::lround(double(v) * 10000.0); }
 
@@ -70,6 +71,7 @@ std::string png_with_light_levels()
     const size_t after_IHDR = 8 + 4 + 4 + 13 + 4;
     return bytes.substr(0, after_IHDR) + png_chunk("cLLI", cLLI) + png_chunk("mDCV", mDCV) + bytes.substr(after_IHDR);
 }
+#endif
 
 /// A 4x4 OpenEXR, with a whiteLuminance attribute if \p nits is positive.
 std::string exr_with_white_luminance(float nits)
