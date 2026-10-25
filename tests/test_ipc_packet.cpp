@@ -22,9 +22,10 @@ namespace
 /// Frame arbitrary payload bytes as a packet, filling in the length prefix the way a sender would.
 std::vector<char> framed(IpcPacketType type, const std::vector<char> &payload)
 {
-    std::vector<char> bytes(sizeof(uint32_t));
-    bytes.push_back(char(uint8_t(type)));
-    bytes.insert(bytes.end(), payload.begin(), payload.end());
+    // the length, the type and the payload, sized at once
+    std::vector<char> bytes(sizeof(uint32_t) + 1 + payload.size());
+    bytes[sizeof(uint32_t)] = char(uint8_t(type));
+    std::copy(payload.begin(), payload.end(), bytes.begin() + sizeof(uint32_t) + 1);
     write_as(reinterpret_cast<unsigned char *>(bytes.data()), uint32_t(bytes.size()), Endian::Little);
     return bytes;
 }
