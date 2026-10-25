@@ -563,8 +563,8 @@ void HDRViewApp::draw_annotations_window()
                 const float field_w = row_x + row_w - icon_sz.x - ImGui::GetCursorPosX();
 
                 ImGui::SetNextItemWidth(field_w);
-                const bool edited = ImGui::InputTextWithHint("##rename", a.display_label().c_str(), m_annotation_rename,
-                                                             sizeof(m_annotation_rename));
+                const bool typed = ImGui::InputTextWithHint("##rename", a.display_label().c_str(), m_annotation_rename,
+                                                            sizeof(m_annotation_rename));
 
                 // So the viewport can find this field's caret and selection and show them on the image.
                 m_annotation_rename_id = ImGui::GetItemID();
@@ -581,7 +581,7 @@ void HDRViewApp::draw_annotations_window()
                 // For a text annotation the row's name is what it says, so this is how the text is typed,
                 // and it is written as it is typed, so the image shows it before the field is left.
                 auto &named = a.shape == Annotation::Shape::Text ? a.text : a.label;
-                if (edited)
+                if (typed)
                     named = m_annotation_rename;
 
                 if (ImGui::IsItemDeactivated())
