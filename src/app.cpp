@@ -368,18 +368,17 @@ void HDRViewApp::setup_platform_backend_callbacks(vector<string> in_files)
 #if !defined(__EMSCRIPTEN__)
         // Without file dialogs no file can be opened or saved through the menus, which is better learned now than
         // with work to save, so this is an error, and their actions are disabled saying why.
-        m_file_dialog_problem = init_file_dialogs();
-        if (!m_file_dialog_problem.empty())
+        if (const std::string &problem = init_file_dialogs(); !problem.empty())
         {
             spdlog::error("File dialogs are unavailable: {}. Images can still be opened by dragging them onto the "
                           "window or naming them on the command line.",
-                          m_file_dialog_problem);
+                          problem);
             for (const char *name : {"Open image...", "Open folder...", "Add watched folder...", "Save session...",
                                      "Load session...", "Export session bundle..."})
             {
                 auto &a   = m_actions.at(name);
                 a.enabled = [] { return false; };
-                a.tooltip = fmt::format("File dialogs are unavailable: {}.", m_file_dialog_problem);
+                a.tooltip = fmt::format("File dialogs are unavailable: {}.", problem);
             }
         }
 #endif

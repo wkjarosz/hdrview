@@ -108,9 +108,11 @@ void show_in_file_manager(const char *filename)
 }
 
 #if !defined(__EMSCRIPTEN__)
-static bool s_file_dialogs_initialized = false;
+static bool        s_file_dialogs_initialized = false;
+static std::string s_file_dialog_problem;
 
-std::string init_file_dialogs()
+/// Sets up the native file dialogs, and returns why they cannot open, or an empty string when they can.
+static std::string set_up_file_dialogs()
 {
     if (NFD::Init() != NFD_OKAY)
         return NFD::GetError();
@@ -151,6 +153,14 @@ std::string init_file_dialogs()
     return "";
 #endif
 }
+
+const std::string &init_file_dialogs()
+{
+    s_file_dialog_problem = set_up_file_dialogs();
+    return s_file_dialog_problem;
+}
+
+const std::string &file_dialog_problem() { return s_file_dialog_problem; }
 
 void quit_file_dialogs()
 {

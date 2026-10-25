@@ -1029,7 +1029,6 @@ private:
     // Hello ImGui / app framework state
     //-----------------------------------------------------------------------------
     HelloImGui::RunnerParams m_params;
-    std::string              m_file_dialog_problem; ///< Why the native file dialogs cannot open, or empty when they can
 
 #ifdef HDRVIEW_ENABLE_GUI_TEST_ENGINE
     int         m_test_engine_tested = 0, m_test_engine_succeeded = 0; ///< see test_engine_result()

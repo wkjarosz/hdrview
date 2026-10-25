@@ -608,7 +608,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         ImGui::SameLine();
 
         // the native dialog this asks for the file name with is out of reach (see init_file_dialogs())
-        bool no_dialog = !m_file_dialog_problem.empty();
+        bool no_dialog = !file_dialog_problem().empty();
 #if defined(HDRVIEW_ENABLE_GUI_TEST_ENGINE)
         no_dialog = no_dialog && m_test_save_path.empty();
 #endif
@@ -617,7 +617,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         const bool save_clicked = ImGui::Button(save_as_name.c_str(), ImVec2{save_w, 0.f});
         ImGui::EndDisabled();
         if (no_dialog)
-            ImGui::Tooltip(fmt::format("File dialogs are unavailable: {}.", m_file_dialog_problem).c_str());
+            ImGui::Tooltip(fmt::format("File dialogs are unavailable: {}.", file_dialog_problem()).c_str());
         if (save_clicked)
         {
             filename = current_image()->path.stem().u8string() + save_extension;
