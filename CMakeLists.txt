@@ -1165,11 +1165,17 @@ else()
   endif()
 endif()
 
-# libheif finds its codecs with find_package(), which only turns up an installed library, and Emscripten has
-# none, so AVIF's AV1 codec is built here. CPM already leaves a redirect in CMAKE_FIND_PACKAGE_REDIRECTS_DIR
-# pointing libheif's find_package(AOM) at this build; the -extra.cmake below fills in the rest of what
-# libheif's own FindAOM.cmake would have set.
-if(EMSCRIPTEN AND HDRVIEW_ENABLE_AVIF)
+# libheif finds its codecs with find_package(), which only turns up an installed library. Emscripten has none,
+# and a macOS release must not link one, since Homebrew's bottles require the macOS they were built on, so there
+# AVIF's AV1 codec is built here unless one is installed. CPM already leaves a redirect in
+# CMAKE_FIND_PACKAGE_REDIRECTS_DIR pointing libheif's find_package(AOM) at this build; the -extra.cmake below
+# fills in the rest of what libheif's own FindAOM.cmake would have set.
+if(HDRVIEW_ENABLE_AVIF AND APPLE AND NOT EMSCRIPTEN)
+  # the same search libheif's FindAOM.cmake falls back to
+  find_path(HDRVIEW_AOM_INCLUDE_DIR NAMES aom/aom_decoder.h aom/aom_encoder.h)
+  find_library(HDRVIEW_AOM_LIBRARY NAMES libaom aom)
+endif()
+if(HDRVIEW_ENABLE_AVIF AND (EMSCRIPTEN OR (APPLE AND NOT (HDRVIEW_AOM_INCLUDE_DIR AND HDRVIEW_AOM_LIBRARY))))
   # aom appends the compiler flags it wants straight to the cache with FORCE. A cache entry is global and
   # read at generate time, so those flags reach every target in the build; the -std=c99 among them stops
   # OpenEXR's C sources compiling. Snapshot what aom rewrites and put both the cache entry and the
@@ -1187,15 +1193,31 @@ if(EMSCRIPTEN AND HDRVIEW_ENABLE_AVIF)
     set("HDRVIEW_SAVED_DOC_${_var}" "${_doc}")
   endforeach()
 
+  list(LENGTH CMAKE_OSX_ARCHITECTURES _osx_arch_count)
+  if(EMSCRIPTEN)
+    # no SIMD path, no thread pool, and no CPU to probe: wasm has none of aom's assembly, and this build has no
+    # pthreads
+    set(HDRVIEW_AOM_TARGET_OPTIONS "AOM_TARGET_CPU generic" "CONFIG_MULTITHREAD 0" "CONFIG_RUNTIME_CPU_DETECT 0")
+  elseif(_osx_arch_count GREATER 1)
+    # aom picks its SIMD code for one architecture, which a universal build's single compile cannot
+    set(HDRVIEW_AOM_TARGET_OPTIONS "AOM_TARGET_CPU generic")
+  elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64" AND NOT CMAKE_OSX_ARCHITECTURES MATCHES "arm64")
+    # aom's x86 SIMD is NASM assembly; without the assembler, the portable C is slower but correct
+    find_program(HDRVIEW_NASM nasm)
+    if(HDRVIEW_NASM)
+      set(HDRVIEW_AOM_TARGET_OPTIONS "CMAKE_ASM_NASM_COMPILER ${HDRVIEW_NASM}")
+    else()
+      set(HDRVIEW_AOM_TARGET_OPTIONS "AOM_TARGET_CPU generic")
+    endif()
+  else()
+    set(HDRVIEW_AOM_TARGET_OPTIONS "")
+  endif()
+
   CPMAddPackage(
     NAME aom
     VERSION 3.13.1
     URL https://storage.googleapis.com/aom-releases/libaom-3.13.1.tar.gz
-    OPTIONS # no SIMD path, no thread pool, and no CPU to probe: wasm has none of aom's assembly, and this
-            # build has no pthreads
-            "AOM_TARGET_CPU generic"
-            "CONFIG_MULTITHREAD 0"
-            "CONFIG_RUNTIME_CPU_DETECT 0"
+    OPTIONS ${HDRVIEW_AOM_TARGET_OPTIONS}
             "CONFIG_AV1_DECODER 1"
             "CONFIG_AV1_ENCODER 1"
             # container and scaling code only aom's own command-line tools use
@@ -1215,7 +1237,7 @@ if(EMSCRIPTEN AND HDRVIEW_ENABLE_AVIF)
   endforeach()
 
   if(NOT aom_ADDED)
-    message(FATAL_ERROR "Failed to fetch libaom, which the Emscripten build needs for AVIF support.")
+    message(FATAL_ERROR "Failed to fetch libaom, which AVIF support needs here.")
   endif()
   message(STATUS "Will build libaom library")
   mark_as_system_library(aom)

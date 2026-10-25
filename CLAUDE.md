@@ -318,7 +318,9 @@ sniff runs on every file a later loader claims, so it must decide from a header-
 
 libheif is the one dependency that finds its own codecs, with `find_package()` calls that only ever turn up
 an installed library, of which Emscripten and a bare Windows runner have none. So the build fetches libaom
-(AVIF) itself under Emscripten, and OpenJPEG whenever no installed copy answers — `imageio/j2k.cpp` needs it
+(AVIF) itself under Emscripten and on a macOS with none installed (a release runner installs no libraries, since a
+Homebrew bottle requires the macOS it was built on; `.github/scripts/check-macos-dmg.sh` holds every binary in the
+DMG to the app's `LSMinimumSystemVersion`), and OpenJPEG whenever no installed copy answers — `imageio/j2k.cpp` needs it
 too — in `CMakeLists.txt` just above the libheif block, reaching libheif through the `<pkg>-extra.cmake`
 files it writes into `CMAKE_FIND_PACKAGE_REDIRECTS_DIR`: CPM already leaves a redirect config there for every
 package it adds, and the `-extra.cmake` fills in the `AOM_*`/`OPENJPEG_*` variables libheif's own find
