@@ -22,9 +22,10 @@ namespace
 /// Frame arbitrary payload bytes as a packet, filling in the length prefix the way a sender would.
 std::vector<char> framed(IpcPacketType type, const std::vector<char> &payload)
 {
-    std::vector<char> bytes(sizeof(uint32_t));
-    bytes.push_back(char(uint8_t(type)));
-    bytes.insert(bytes.end(), payload.begin(), payload.end());
+    // the length, the type and the payload, sized at once
+    std::vector<char> bytes(sizeof(uint32_t) + 1 + payload.size());
+    bytes[sizeof(uint32_t)] = char(uint8_t(type));
+    std::copy(payload.begin(), payload.end(), bytes.begin() + sizeof(uint32_t) + 1);
     write_as(reinterpret_cast<unsigned char *>(bytes.data()), uint32_t(bytes.size()), Endian::Little);
     return bytes;
 }
@@ -279,10 +280,12 @@ void read_payload(const IpcPacket &p)
 
 TEST_CASE("IPC packets of every type round-trip through the wire format")
 {
-    for (const auto &[packet, check] : packets_of_every_type())
+    for (const PacketCase &c : packets_of_every_type())
     {
+        const IpcPacket &packet = c.packet; //< named rather than bound: CAPTURE() captures in a lambda, which a
+                                            //structured binding cannot be before C++20
         CAPTURE(int(packet.type()));
-        check(parse(packet.bytes()));
+        c.check(parse(packet.bytes()));
     }
 }
 
@@ -369,8 +372,9 @@ TEST_CASE("Malformed IPC packets are refused rather than believed")
         // Every field a packet carries is one its reader needs, so any prefix of a well-formed packet, framed
         // with a length that agrees with it, is missing something: a string's terminator, a count, an
         // argument, a sample.
-        for (const auto &[whole, check] : packets_of_every_type())
+        for (const PacketCase &c : packets_of_every_type())
         {
+            const IpcPacket &whole = c.packet;
             CAPTURE(int(whole.type()));
             REQUIRE_NOTHROW(read_payload(whole));
 

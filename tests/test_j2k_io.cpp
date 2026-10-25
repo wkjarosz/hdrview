@@ -417,7 +417,7 @@ TEST_CASE("A JP2's EXIF and XMP boxes reach the metadata the info panel reads")
                             "</rdf:RDF>\n</x:xmpmeta>\n<?xpacket end=\"w\"?>";
 
     // writers disagree over whether the EXIF box repeats JPEG's "Exif\0\0" marker before the TIFF header
-    for (const std::string prefix : {std::string{}, std::string("Exif\0\0", 6)})
+    for (const std::string &prefix : {std::string{}, std::string("Exif\0\0", 6)})
     {
         CAPTURE(prefix.size());
 

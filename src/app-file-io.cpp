@@ -466,8 +466,10 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
                 if (ctx.hdr)
                 {
                     ImGui::PE::Combo("Written for", &target,
-                                     "1000 cd/m\xc2\xb2 display\0002000 cd/m\xc2\xb2 display\0004000 cd/m\xc2\xb2 "
-                                     "display\0This display\0Custom\0",
+                                     "1000 cd/m\xc2\xb2 display\0"
+                                     "2000 cd/m\xc2\xb2 display\0"
+                                     "4000 cd/m\xc2\xb2 display\0"
+                                     "This display\0Custom\0",
                                      -1,
                                      "The display the rendition's highlights are fitted to. The peaks are in "
                                      "cd/m\xc2\xb2, with SDR white at the 203 cd/m\xc2\xb2 of BT.2408.");
@@ -513,12 +515,12 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
                                    ? std::string("SDR white")
                                    : fmt::format("{:.0f} cd/m\xc2\xb2", HDR_REFERENCE_WHITE_NITS * std::exp2(stops));
                     };
-                    const int   mode    = highlight_mode();
-                    const float ceiling = rolloff_for(target_ceiling).ceiling;
-                    const auto  outcome = mode == 0
-                                              ? std::string("Written unchanged; a display clips what it cannot show.")
-                                          : mode == 1 ? std::string("Values above SDR white clip.")
-                                                      : fmt::format("Compressed to fit under {}.", level(ceiling));
+                    const int   highlights = highlight_mode();
+                    const float ceiling    = rolloff_for(target_ceiling).ceiling;
+                    const auto outcome = highlights == 0
+                                             ? std::string("Written unchanged; a display clips what it cannot show.")
+                                         : highlights == 1 ? std::string("Values above SDR white clip.")
+                                                           : fmt::format("Compressed to fit under {}.", level(ceiling));
                     ImGui::PE::Entry(
                         "Highlights",
                         [&]

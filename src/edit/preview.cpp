@@ -111,8 +111,8 @@ ShaderEdit shader_edit(const EditPreview &preview)
     }
     else
     {
-        const PointEdit &e = preview.edit;
-        s                  = ShaderEdit{e.op, e.p0, e.p1, padded(e.m0), padded(e.m1)};
+        const PointEdit &point = preview.edit;
+        s                      = ShaderEdit{point.op, point.p0, point.p1, padded(point.m0), padded(point.m1)};
     }
     return s;
 }

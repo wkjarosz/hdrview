@@ -86,7 +86,7 @@ TEST_CASE("PNG save records the transfer function in gAMA, sRGB or an ICC profil
         // The loader reports gAMA as the decoding exponent, 1e5 over the stored value, and an absent one as NaN.
         // The sRGB chunk asserts BT.709's primaries as well as the transfer function, so a wide gamut takes gAMA
         // and cHRM instead.
-        constexpr float none = std::numeric_limits<float>::quiet_NaN();
+        [[maybe_unused]] constexpr float none = std::numeric_limits<float>::quiet_NaN(); // only cICP's cases
         struct Case
         {
             TransferFunction tf;

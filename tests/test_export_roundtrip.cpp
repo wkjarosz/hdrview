@@ -417,7 +417,11 @@ std::vector<ImagePtr> load(const Variant &v, const std::string &bytes, const Ima
     return load_image(in, std::string("a") + v.ext, opts);
 }
 
+#if defined(__APPLE__)
 /// The warning \p variant's dialog shows for \p tf, for the sweep's image, whose primaries are BT.2020's.
+/**
+    Only ImageIO's reads are held to the caveats, so this is macOS's alone.
+*/
 Caveat caveat_of(const Variant &variant, const TransferFunction &tf)
 {
     const std::string ext = variant.ext;
@@ -439,6 +443,7 @@ Caveat caveat_of(const Variant &variant, const TransferFunction &tf)
 #endif
     return {};
 }
+#endif
 
 } // namespace
 
