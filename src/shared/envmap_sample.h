@@ -94,16 +94,14 @@ SHARED_FN ivec3 envmap_wrap_face_texel(int face, ivec2 p, int n)
 /// Texel \p p of \p chart at \p level, whose charts are \p size, wrapped onto the sphere wherever it lies.
 SHARED_FN EnvValue envmap_texel(EnvSource src, int level, int chart, ivec2 size, ivec2 p)
 {
-    // the chart and texel first, either way, then the one fetch (see envmap_probe_line() on why it is one)
-    ivec3 q;
+    // A fetch in each branch, which the CPU's compiler specializes for its layout: a single fetch after the branch
+    // links the image shader 10% faster on NVIDIA, but remaps 5% slower.
     if (envmap_is_cube(src.mapping))
-        q = envmap_wrap_face_texel(chart, p, size.x);
-    else
     {
-        ivec2 w = envmap_wrap_texel(src.mapping, p, size);
-        q       = ivec3(chart, w.x, w.y);
+        ivec3 q = envmap_wrap_face_texel(chart, p, size.x);
+        return envmap_fetch(src, level, q.x, size, ivec2(q.y, q.z));
     }
-    return envmap_fetch(src, level, q.x, size, ivec2(q.y, q.z));
+    return envmap_fetch(src, level, chart, size, envmap_wrap_texel(src.mapping, p, size));
 }
 
 /// Where direction \p d falls in \p chart's coordinates, which for a cube face may be past its edges.
