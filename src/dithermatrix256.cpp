@@ -1,3 +1,4 @@
+#include "dithermatrix256.h"
 #include "stb_image.h"
 #include <hello_imgui/hello_imgui_assets.h> // for AssetFileData, AssetExists
 #include <memory>
@@ -36,6 +37,8 @@ void create_dither_texture()
             throw std::runtime_error("Failed to load dither texture from memory");
         if (width != height)
             throw std::runtime_error("Unexpected non-square dither texture");
+        if ((width & (width - 1)) != 0)
+            throw std::runtime_error("Dither texture's width is not a power of two");
         g_dither_texture_width = width;
     }
     catch (const std::exception &e)
@@ -69,24 +72,15 @@ void create_dither_texture()
     }
 }
 
-int dither_texture_width() { return g_dither_texture_width; }
+int dither_texture_width()
+{
+    dither_texture_data(); // which makes the texture, and so sets its width, the first time
+    return g_dither_texture_width;
+}
 
 const uint8_t *dither_texture_data()
 {
     if (g_dither_texture == nullptr)
         create_dither_texture();
     return g_dither_texture.get();
-}
-
-float box_dither(int x, int y)
-{
-    x %= dither_texture_width();
-    y %= dither_texture_width();
-    return (dither_texture_data()[x + y * dither_texture_width()]) / 255.f - 0.5f;
-}
-
-float tent_dither(int x, int y)
-{
-    float r = 2.f * box_dither(x, y);
-    return 0.5f * std::copysign(1.0f - std::sqrt(1.f - std::abs(r)), r);
 }

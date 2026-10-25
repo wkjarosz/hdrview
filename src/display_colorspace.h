@@ -59,6 +59,19 @@ struct DisplayColorSpace
 */
 DisplayColorSpace query_display_colorspace(void *window);
 
+/// The steps the frame is dithered by in the image shader and in the colorpass, either 0 for none there.
+struct DisplayDither
+{ float image_shader = 0.f, colorpass = 0.f; };
+
+/// Where a frame drawn for \p display is dithered, and by how large a step of the code values there.
+/**
+    PQ and HLG are dithered once the colorpass, which runs when \p color_managed, has encoded them, by a step of
+    the 10 bits such displays take; the image shader's extended sRGB is not that encoding. Everything else is
+    dithered as the image shader draws it: by a 10-bit step into a floating-point framebuffer (\p float_buffer:
+    macOS EDR, or scRGB), which holds more than any panel shows, and by an 8-bit one into a fixed-point one.
+*/
+DisplayDither display_dither(const DisplayColorSpace &display, bool color_managed, bool float_buffer);
+
 #if defined(__APPLE__)
 /**
     Headroom of the screen the window is on, as a multiple of SDR reference white (`NSScreen`'s

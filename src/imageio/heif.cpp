@@ -1166,12 +1166,12 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
             heif_encoder_descriptor_get_compression_format(s_encoder_descriptors[encoder_index]);
         const int bit_depth = heif_bit_depth(params->bit_depth, tf, encoder_format);
 
-        // 8-bit samples directly, or 16-bit ones that fill_plane() reduces to the file's depth
+        // samples at the file's depth: 8-bit ones in bytes, deeper ones in 16-bit words
         int                         w = 0, h = 0, n = 0;
         std::unique_ptr<uint8_t[]>  pixels8;
         std::unique_ptr<uint16_t[]> pixels16;
         if (bit_depth > 8)
-            pixels16 = img.as_interleaved<uint16_t>(&w, &h, &n, tf, true, true, convert_to_sRGB);
+            pixels16 = img.as_interleaved<uint16_t>(&w, &h, &n, tf, true, true, convert_to_sRGB, false, bit_depth);
         else
             pixels8 = img.as_interleaved<uint8_t>(&w, &h, &n, tf, true, true, convert_to_sRGB);
 
@@ -1236,15 +1236,12 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
             }(),
             heif_image_release);
 
-        // Copies channels [first, first + count) of every pixel into a plane, at the file's bit depth; samples
-        // above 8 bits are 16-bit words in the host's (little-endian) order, which the _LE chromas name. A 16-bit
-        // sample is rescaled to the depth's own full scale, (2^bits - 1) / 65535, not shifted down, which would
-        // stretch it by 2^bits / (2^bits - 1).
+        // Copies channels [first, first + count) of every pixel into a plane; samples above 8 bits are 16-bit words
+        // in the host's (little-endian) order, which the _LE chromas name.
         auto fill_plane = [&](heif_channel channel, int first, int count)
         {
-            int          stride = 0;
-            uint8_t     *plane  = heif_image_get_plane(heif_img.get(), channel, &stride);
-            const double scale  = double((1 << bit_depth) - 1) / 65535.0;
+            int      stride = 0;
+            uint8_t *plane  = heif_image_get_plane(heif_img.get(), channel, &stride);
             for (int y = 0; y < h; ++y)
                 for (int x = 0; x < w; ++x)
                     for (int c = 0; c < count; ++c)
@@ -1252,8 +1249,7 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
                         const size_t src = ((size_t)y * w + x) * n + first + c;
                         const size_t dst = (size_t)x * count + c;
                         if (pixels16)
-                            reinterpret_cast<uint16_t *>(plane + y * (size_t)stride)[dst] =
-                                uint16_t(std::lround(pixels16[src] * scale));
+                            reinterpret_cast<uint16_t *>(plane + y * (size_t)stride)[dst] = pixels16[src];
                         else
                             plane[y * (size_t)stride + dst] = pixels8[src];
                     }

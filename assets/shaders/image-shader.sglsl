@@ -36,12 +36,13 @@ void main()
 @include ../../src/shared/constants.h
 @include ../../src/shared/colorspace.h
 @include ../../src/shared/pipeline.h
+@include ../../src/shared/dither.h
 @include ../../src/shared/edits.h
 @include ../../src/shared/envmap.h
 
 layout(binding=1) uniform fs_params {
     int   has_reference;              // whether a reference image is blended with the current one
-    int   do_dither;                  // whether the output is dithered
+    float dither_step;                // the step the output is dithered by, in its code values, or 0 for none
     vec2  randomness;                 // a per-frame offset into the dither texture
     int   blend_mode;                 // how the reference is blended in, a BlendMode_
     int   channel;                    // which channels are shown, a Channels_
@@ -126,29 +127,16 @@ vec4 apply_tonemap(vec4 color)
     return tonemap(color, fsp.tonemap_mode, fsp.gamma, colormap_sRGB);
 }
 
-float rand_box(vec2 xy)
-{
-    // Result is in range (-0.5, 0.5)
-    return (texture(sampler2D(dither_texture, dither_sampler), xy / vec2(256, 256)).r + 0.5) / 65536.0 - 0.5;
-}
-
-float rand_tent(vec2 xy)
-{
-    float r = rand_box(xy);
-
-    // Convert uniform distribution into triangle-shaped distribution
-    // Result is in range (-0.5,0.5)
-    float rp = sqrt(2.0 * r);             // positive triangle
-    float rn = sqrt(2.0 * r + 1.0) - 1.0; // negative triangle
-    return (r < 0.0) ? 0.5 * rn : 0.5 * rp;
-}
-
+// Triangular noise on (-1, 1) of a step, as quantize_full() adds when saving; the texture holds 8-bit ranks, which
+// it reads normalized
 vec4 dither(vec4 color)
 {
-    if (fsp.do_dither == 0)
+    if (fsp.dither_step == 0.0)
         return color;
 
-    return color + vec4(vec3(rand_tent(gl_FragCoord.xy + fsp.randomness) / 256.0), 0.0);
+    vec2  xy   = gl_FragCoord.xy + fsp.randomness;
+    float rank = texture(sampler2D(dither_texture, dither_sampler), xy / vec2(256, 256)).r * 255.0;
+    return color + vec4(vec3(2.0 * tent_from_box(box_from_rank(rank)) * fsp.dither_step), 0.0);
 }
 
 float sample_channel(texture2D tex, sampler smp, vec2 uv, bool within_image)

@@ -146,6 +146,14 @@ string DisplayColorSpace::name() const
     return s;
 }
 
+DisplayDither display_dither(const DisplayColorSpace &display, bool color_managed, bool float_buffer)
+{
+    if (color_managed &&
+        (display.tf.type == TransferFunction::BT2100_PQ || display.tf.type == TransferFunction::BT2100_HLG))
+        return {0.f, 1.f / 1023.f};
+    return {float_buffer ? 1.f / 1023.f : 1.f / 255.f, 0.f};
+}
+
 DisplayColorSpace query_display_colorspace([[maybe_unused]] void *window)
 {
     DisplayColorSpace cs;
