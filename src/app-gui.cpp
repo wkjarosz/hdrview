@@ -1422,7 +1422,7 @@ void HDRViewApp::draw_about_dialog(bool &open)
                 // calculate left column based on the longest library name
                 ImGui::PushFont(hdrview()->font("sans bold"), ImGui::GetStyle().FontSizeBase);
 #ifndef __EMSCRIPTEN__
-                float col_width = ImGui::CalcTextSize("portable-file-dialogs").x;
+                float col_width = ImGui::CalcTextSize("nativefiledialog-extended").x;
 #else
                 float col_width = ImGui::CalcTextSize("emscripten-browser-file").x;
 #endif
@@ -1482,6 +1482,12 @@ void HDRViewApp::draw_about_dialog(bool &open)
                         "https://github.com/sgorsten/linalg");
                     ImGui::PE::Hyperlink("NanoGUI", "Bits of code from Wenzel Jakob's BSD-licensed NanoGUI library.",
                                          "https://github.com/mitsuba-renderer/nanogui");
+#ifndef __EMSCRIPTEN__
+                    ImGui::PE::Hyperlink(
+                        "nativefiledialog-extended",
+                        "Bernard Teo's zlib-licensed native file dialogs for Windows, macOS and Linux.",
+                        "https://github.com/btzy/nativefiledialog-extended");
+#endif
                     ImGui::PE::Hyperlink("OpenEXR", "High Dynamic-Range (HDR) image file format.",
                                          "https://github.com/AcademySoftwareFoundation/openexr");
                     if (HDRVIEW_ENABLE_AVCI)
@@ -1495,11 +1501,6 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     if (HDRVIEW_ENABLE_HTJ2K)
                         ImGui::PE::Hyperlink("OpenJPH", "For encoding HTJ2K-compressed HEIF images.",
                                              "https://github.com/aous72/OpenJPH");
-#ifndef __EMSCRIPTEN__
-                    ImGui::PE::Hyperlink("portable-file-dialogs",
-                                         "Sam Hocevar's WTFPL portable GUI dialogs library, C++11, single-header.",
-                                         "https://github.com/samhocevar/portable-file-dialogs");
-#endif
                     ImGui::PE::Hyperlink("smalldds", "Single-header library for loading DDS images.",
                                          "https://github.com/wkjarosz/smalldds");
                     ImGui::PE::Hyperlink("sokol-shdc", "For cross-compiling shaders from a single source.",

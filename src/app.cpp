@@ -15,8 +15,6 @@
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
-#else
-#include "portable-file-dialogs.h"
 #endif
 
 #ifdef HELLOIMGUI_USE_GLFW3
@@ -367,6 +365,25 @@ void HDRViewApp::setup_platform_backend_callbacks(vector<string> in_files)
                                 hdrview()->load_images(arg);
                             });
 
+#if !defined(__EMSCRIPTEN__)
+        // Without file dialogs no file can be opened or saved through the menus, which is better learned now than
+        // with work to save, so this is an error, and their actions are disabled saying why.
+        m_file_dialog_problem = init_file_dialogs();
+        if (!m_file_dialog_problem.empty())
+        {
+            spdlog::error("File dialogs are unavailable: {}. Images can still be opened by dragging them onto the "
+                          "window or naming them on the command line.",
+                          m_file_dialog_problem);
+            for (const char *name : {"Open image...", "Open folder...", "Add watched folder...", "Save session...",
+                                     "Load session...", "Export session bundle..."})
+            {
+                auto &a   = m_actions.at(name);
+                a.enabled = [] { return false; };
+                a.tooltip = fmt::format("File dialogs are unavailable: {}.", m_file_dialog_problem);
+            }
+        }
+#endif
+
         // Hello ImGui clears requestFloatBuffer when the request could not be satisfied, so by now this is
         // the achieved framebuffer, not the one we asked for.
         m_float_buffer = m_params.rendererBackendOptions.requestFloatBuffer;
@@ -518,6 +535,9 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
 
     m_params.callbacks.BeforeExit = [this]
     {
+#if !defined(__EMSCRIPTEN__)
+        quit_file_dialogs();
+#endif
         Image::cleanup_default_textures();
         Colormap::cleanup();
         cleanup_colorpass();
@@ -1441,12 +1461,7 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    ICON_MY_ADD_WATCHED_FOLDER,
                    ImGuiKey_None,
                    0,
-                   [this]()
-                   {
-                       if (m_image_loader.add_watched_directory(
-                               pfd::select_folder("Open images in folder", "").result(), true))
-                           m_watch_files_for_changes = true;
-                   },
+                   [this]() { add_watched_folder(); },
                    always_enabled,
                    false,
                    nullptr,

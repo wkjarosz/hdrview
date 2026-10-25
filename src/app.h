@@ -92,6 +92,7 @@ public:
     //-----------------------------------------------------------------------------
     void open_image();
     void open_folder();
+    void add_watched_folder();
     void load_images(const vector<string> &filenames);
     void load_image(const string filename, std::optional<string_view> buffer = std::nullopt, bool should_select = true,
                     const ImageLoadOptions &opts = {}, ImagePtr to_replace = nullptr);
@@ -1028,6 +1029,7 @@ private:
     // Hello ImGui / app framework state
     //-----------------------------------------------------------------------------
     HelloImGui::RunnerParams m_params;
+    std::string              m_file_dialog_problem; ///< Why the native file dialogs cannot open, or empty when they can
 
 #ifdef HDRVIEW_ENABLE_GUI_TEST_ENGINE
     int         m_test_engine_tested = 0, m_test_engine_succeeded = 0; ///< see test_engine_result()

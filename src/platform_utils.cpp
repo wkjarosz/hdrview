@@ -4,6 +4,21 @@
 #include <spdlog/spdlog.h>
 #include <string>
 
+#if !defined(__EMSCRIPTEN__)
+// nfd_glfw3.h reaches the native window through glfw3native.h, which brings in each window system's own headers
+// and their macros, so it is kept to this file
+#if defined(_WIN32)
+#define GLFW_EXPOSE_NATIVE_WIN32
+#elif defined(__APPLE__)
+#define GLFW_EXPOSE_NATIVE_COCOA
+#else
+#define GLFW_EXPOSE_NATIVE_X11
+#define GLFW_EXPOSE_NATIVE_WAYLAND
+#include <dbus/dbus.h>
+#endif
+#include <nfd_glfw3.h>
+#endif
+
 #ifdef __EMSCRIPTEN__
 #include "app.h"
 
@@ -89,6 +104,67 @@ void show_in_file_manager(const char *filename)
     // Unsupported platform
 #endif
 }
+
+#if !defined(__EMSCRIPTEN__)
+static bool s_file_dialogs_initialized = false;
+
+std::string init_file_dialogs()
+{
+    if (NFD::Init() != NFD_OKAY)
+        return NFD::GetError();
+    s_file_dialogs_initialized = true;
+    // under Wayland, the dialogs find HDRView's window through GLFW's display connection
+    NFD_SetDisplayPropertiesFromGLFW();
+#if defined(__linux__)
+    // Linux file dialogs are xdg-desktop-portal's, which exports its FileChooser interface only when a backend
+    // implements one (xdg-desktop-portal-wlr, for one, does not), so ask for that interface's version. A private
+    // connection keeps this apart from the one the dialogs share.
+    DBusError error;
+    dbus_error_init(&error);
+    std::string problem;
+    if (DBusConnection *bus = dbus_bus_get_private(DBUS_BUS_SESSION, &error))
+    {
+        DBusMessage *call =
+            dbus_message_new_method_call("org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop",
+                                         "org.freedesktop.DBus.Properties", "Get");
+        const char *iface  = "org.freedesktop.portal.FileChooser";
+        const char *member = "version";
+        dbus_message_append_args(call, DBUS_TYPE_STRING, &iface, DBUS_TYPE_STRING, &member, DBUS_TYPE_INVALID);
+        // long enough for the portal and its backend to be started on demand
+        if (DBusMessage *reply = dbus_connection_send_with_reply_and_block(bus, call, 5000, &error))
+            dbus_message_unref(reply);
+        else
+            problem = fmt::format("xdg-desktop-portal offers no file chooser ({}); install xdg-desktop-portal with a "
+                                  "backend that provides one, such as xdg-desktop-portal-gnome, -kde or -gtk",
+                                  error.message);
+        dbus_message_unref(call);
+        dbus_connection_close(bus);
+        dbus_connection_unref(bus);
+    }
+    else
+        problem = fmt::format("there is no D-Bus session bus to reach xdg-desktop-portal through ({})", error.message);
+    dbus_error_free(&error);
+    return problem;
+#else
+    return "";
+#endif
+}
+
+void quit_file_dialogs()
+{
+    if (s_file_dialogs_initialized)
+        NFD::Quit();
+    s_file_dialogs_initialized = false;
+}
+
+nfdwindowhandle_t file_dialog_parent(void *glfw_window)
+{
+    // a handle left empty, should this fail, opens the dialog unparented
+    nfdwindowhandle_t parent{};
+    NFD_GetNativeWindowFromGLFWWindow(static_cast<GLFWwindow *>(glfw_window), &parent);
+    return parent;
+}
+#endif
 
 #if defined(__EMSCRIPTEN__)
 //------------------------------------------------------------------------------
