@@ -1315,13 +1315,15 @@ if(HDRVIEW_ENABLE_DAV1D AND HDRVIEW_ENABLE_AVIF AND NOT EMSCRIPTEN)
     if(HDRVIEW_DAV1D_INCLUDE_DIR AND HDRVIEW_DAV1D_LIBRARY)
       set(HDRVIEW_DAV1D_FOUND TRUE)
     endif()
+      set(HDRVIEW_DAV1D_INCLUDE_DIRS ${HDRVIEW_DAV1D_INCLUDE_DIR})
   endif()
   if(HDRVIEW_DAV1D_FOUND)
     # libheif's dav1d plugin sets Dav1dSettings::n_threads, which arrived in dav1d 1.0.0; against an older
     # dav1d (Ubuntu 22.04 ships 0.9.2) the plugin, and with it all of libheif, fails to compile. Probe the
     # header for the member, since the find_path fallback above locates a dav1d without learning its version.
     include(CheckStructHasMember)
-    set(CMAKE_REQUIRED_INCLUDES ${HDRVIEW_DAV1D_INCLUDE_DIRS} ${HDRVIEW_DAV1D_INCLUDE_DIR})
+    # one -NOTFOUND entry would drop the whole list, so this takes only the search that succeeded
+    set(CMAKE_REQUIRED_INCLUDES ${HDRVIEW_DAV1D_INCLUDE_DIRS})
     check_struct_has_member("Dav1dSettings" n_threads "dav1d/dav1d.h" HDRVIEW_DAV1D_HAS_N_THREADS LANGUAGE C)
     unset(CMAKE_REQUIRED_INCLUDES)
     if(NOT HDRVIEW_DAV1D_HAS_N_THREADS)
