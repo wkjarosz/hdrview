@@ -162,9 +162,10 @@ float sample_channel(texture2D tex, sampler smp, vec2 uv, bool within_image)
 /// Texel \p p of \p tex at \p level; a slot showing no channel is a single texel, read wherever \p p is.
 float fetch_channel(texture2D tex, sampler smp, ivec2 p, int level)
 {
-    ivec2 n = textureSize(sampler2D(tex, smp), 0);
-    return n.x == 1 && n.y == 1 ? texelFetch(sampler2D(tex, smp), ivec2(0), 0).r
-                                : texelFetch(sampler2D(tex, smp), p, level).r;
+    // one fetch whichever it is: every read the previews make inlines this, many times over
+    ivec2 n   = textureSize(sampler2D(tex, smp), 0);
+    bool  one = n.x == 1 && n.y == 1;
+    return texelFetch(sampler2D(tex, smp), one ? ivec2(0) : p, one ? 0 : level).r;
 }
 
 /// Texel \p p of the four shown channels at \p level.

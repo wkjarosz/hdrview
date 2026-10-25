@@ -179,32 +179,39 @@ SHARED_FN float envmap_read_variance(EnvSource src, int level)
 
 /// A Gaussian of standard deviation \p sigma along \p dir through \p st, made of bilinear reads at \p level.
 /**
-    \p sigma is in texels of level 0, and \p dir is one such texel along the axis, in the chart's coordinates. A sigma
-    no wider than a read's own blur is three reads, at the middle and one blur to either side, weighted to add exactly
-    sigma^2. A wider one is Gaussian-weighted reads out to three sigma, no further apart than twice the blur or than
-    sigma; past \p max_half reads to a side, they spread further apart instead.
+    \p sigma is in texels of level 0, and \p dir is one such texel along the axis, in the chart's coordinates. No
+    sigma is the one read at \p st. A sigma no wider than a read's own blur is three reads, at the middle and one blur
+    to either side, weighted to add exactly sigma^2. A wider one is Gaussian-weighted reads out to three sigma, no
+    further apart than twice the blur or than sigma; past \p max_half reads to a side, they spread further apart
+    instead.
+
+    All three are one loop, so that the read is written once: the image shader's compiler inlines every call of
+    envmap_bilinear(), and a call site of it apiece made the shader take seconds to link.
 */
 SHARED_FN EnvValue envmap_probe_line(EnvSource src, int level, int chart, vec2 st, vec2 dir, float sigma, int max_half)
 {
     ivec2 size = envmap_chart_size(src, level);
-    if (sigma <= 0.0f)
-        return envmap_bilinear(src, level, chart, size, st);
+    float own  = sqrt(envmap_read_variance(src, level));
 
-    float own = sqrt(envmap_read_variance(src, level));
-    if (sigma <= own)
+    // the reads either side of the middle, how far apart, and the outer ones' weight when there are three
+    int   half_n  = 0;
+    float spacing = 0.0f, a = 0.0f;
+    bool  three = sigma > 0.0f && sigma <= own;
+    if (three)
     {
-        float a = 0.5f * sigma * sigma / (own * own);
-        return (1.0f - 2.0f * a) * envmap_bilinear(src, level, chart, size, st) +
-               a * (envmap_bilinear(src, level, chart, size, st - own * dir) +
-                    envmap_bilinear(src, level, chart, size, st + own * dir));
+        half_n  = 1;
+        spacing = own;
+        a       = 0.5f * sigma * sigma / (own * own);
     }
-
-    float spacing = min(2.0f * own, sigma);
-    int   half_n  = int(ceil(3.0f * sigma / spacing));
-    if (half_n > max_half)
+    else if (sigma > 0.0f)
     {
-        half_n  = max_half;
-        spacing = 3.0f * sigma / float(half_n);
+        spacing = min(2.0f * own, sigma);
+        half_n  = int(ceil(3.0f * sigma / spacing));
+        if (half_n > max_half)
+        {
+            half_n  = max_half;
+            spacing = 3.0f * sigma / float(half_n);
+        }
     }
 
     EnvValue sum   = EnvValue(0.0f);
@@ -212,11 +219,12 @@ SHARED_FN EnvValue envmap_probe_line(EnvSource src, int level, int chart, vec2 s
     for (int i = -half_n; i <= half_n; ++i)
     {
         float t = float(i) * spacing;
-        float w = exp(-0.5f * t * t / (sigma * sigma));
+        float w = three ? (i == 0 ? 1.0f - 2.0f * a : a) : half_n == 0 ? 1.0f : exp(-0.5f * t * t / (sigma * sigma));
         sum += w * envmap_bilinear(src, level, chart, size, st + t * dir);
         total += w;
     }
-    return sum / total;
+    // the three reads' weights sum to one already
+    return three ? sum : sum / total;
 }
 
 /// The output pixel's step along \p h, half a pixel from \p uv, as a step across \p chart from \p st.
@@ -281,12 +289,16 @@ SHARED_FN EnvValue envmap_ewa(EnvSource src, int dst, mat3 rotation, ivec2 pixel
     float g_hi = max(0.0f, major - b_hi);
     float g_lo = w < 1.0f ? max(0.0f, (major - w * (b_hi + g_hi)) / (1.0f - w) - b_lo) : 0.0f;
 
+    // the levels in one loop, which reads the finer one only where w < 1 and the coarser only where w > 0, so that
+    // envmap_probe_line(), and every read within it, is written once (see there)
     vec2     dir    = axis / res;
     EnvValue result = EnvValue(0.0f);
-    if (w < 1.0f)
-        result += (1.0f - w) * envmap_probe_line(src, lo, chart, st, dir, sqrt(g_lo), 3 * aniso);
-    if (w > 0.0f)
-        result += w * envmap_probe_line(src, hi, chart, st, dir, sqrt(g_hi), 3 * aniso);
+    for (int k = w < 1.0f ? 0 : 1; k < (w > 0.0f ? 2 : 1); ++k)
+    {
+        bool fine = k == 0;
+        result += (fine ? 1.0f - w : w) *
+                  envmap_probe_line(src, fine ? lo : hi, chart, st, dir, sqrt(fine ? g_lo : g_hi), 3 * aniso);
+    }
     return result;
 }
 
