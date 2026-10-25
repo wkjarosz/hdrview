@@ -336,7 +336,8 @@ include(cmake/SokolShaderCompiler.cmake)
 # new one is picked up
 file(GLOB HDRVIEW_SHARED_SHADER_HEADERS CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/*.h)
 
-# Generates the image-shader_{vert,frag}.{glsl,metal} that Shader::from_asset() loads at runtime.
+# Generates the image-shader_{vert,frag} and image-preview_{vert,frag} .glsl or .metal files that Shader::from_asset()
+# loads at runtime.
 # The output goes into ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders, which hello_imgui_add_app(...
 # ASSETS_LOCATION ...) below already treats as the runtime asset root.
 #
@@ -365,6 +366,11 @@ sokol_shdc_generate(
          image-shader_vert.${HDRVIEW_SHADER_EXT}
          image-shader_image_shader_${HDRVIEW_SHADER_SLANG}_fragment.${HDRVIEW_SHADER_EXT}
          image-shader_frag.${HDRVIEW_SHADER_EXT}
+         # the same shader with an edit dialog's preview, a program of its own (see image-shader.sglsl)
+         image-shader_image_preview_${HDRVIEW_SHADER_SLANG}_vertex.${HDRVIEW_SHADER_EXT}
+         image-preview_vert.${HDRVIEW_SHADER_EXT}
+         image-shader_image_preview_${HDRVIEW_SHADER_SLANG}_fragment.${HDRVIEW_SHADER_EXT}
+         image-preview_frag.${HDRVIEW_SHADER_EXT}
 )
 
 # The final HDR/EDR display color-management pass (see colorpass.sglsl). Only the desktop OpenGL backend

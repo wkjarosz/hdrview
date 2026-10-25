@@ -830,12 +830,11 @@ void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
     }
 }
 
-void Image::set_null_texture(Target_ target)
+void Image::set_null_texture(Target_ target, Shader &shader)
 {
-    auto s = hdrview()->shader();
     auto t = target_name(target);
 
-    for (int c = 0; c < 4; ++c) s->set_texture(fmt::format("{}_{}_texture", t, c), black_texture());
+    for (int c = 0; c < 4; ++c) shader.set_texture(fmt::format("{}_{}_texture", t, c), black_texture());
 }
 
 int4 Image::shader_slots(Target_ target) const
@@ -850,17 +849,16 @@ int4 Image::shader_slots(Target_ target) const
     }
 }
 
-void Image::set_as_texture(Target_ target)
+void Image::set_as_texture(Target_ target, Shader &shader)
 {
-    auto        s     = hdrview()->shader();
     auto        t     = target_name(target);
     const auto &group = groups[active_group_index(target)];
     const int4  slots = shader_slots(target);
     for (int k = 0; k < 4; ++k)
-        s->set_texture(fmt::format("{}_{}_texture", t, k), slots[k] >= 0
-                                                               ? channels[group.channels[slots[k]]].get_texture()
-                                                           : slots[k] == k_slot_white ? Image::white_texture()
-                                                                                      : Image::black_texture());
+        shader.set_texture(fmt::format("{}_{}_texture", t, k), slots[k] >= 0
+                                                                   ? channels[group.channels[slots[k]]].get_texture()
+                                                               : slots[k] == k_slot_white ? Image::white_texture()
+                                                                                          : Image::black_texture());
 }
 
 Image::Image() : id(s_next_image_id++) {}

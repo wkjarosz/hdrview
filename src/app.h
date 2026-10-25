@@ -85,7 +85,8 @@ public:
 #endif
 
     RenderPass *renderpass() { return m_render_pass.get(); }
-    Shader     *shader() { return m_shader.get(); }
+    /// Bind the current and reference images' shown channels to the image shaders' texture slots.
+    void set_image_textures();
 
     //-----------------------------------------------------------------------------
     // loading, saving, and closing images
@@ -705,7 +706,6 @@ private:
     void draw_developer_windows();
     void draw_tweak_window();
     void process_shortcuts();
-    void set_image_textures();
     void update_visibility();
 
     void setup_rendering();
@@ -870,6 +870,9 @@ private:
     //-----------------------------------------------------------------------------
     std::unique_ptr<RenderPass> m_render_pass;
     std::unique_ptr<Shader>     m_shader;
+    /// m_shader with an edit dialog's preview, made the first time one shows; see image-shader.sglsl.
+    std::unique_ptr<Shader> m_preview_shader;
+    bool                    m_preview_shader_failed = false; ///< so a shader that failed to build is not retried
 
     //-----------------------------------------------------------------------------
     // The colorpass: offscreen HDR color target, the pass that renders into it, the pass that resolves it to
@@ -1121,3 +1124,6 @@ void init_hdrview(optional<float> exposure, optional<float> gamma, optional<bool
 
 /// Return a pointer to the global singleton HDRViewApp instance
 HDRViewApp *hdrview();
+
+/// An image shader drawing into \p render_pass, the one with edit previews if \p preview, its quad and dither set.
+std::unique_ptr<Shader> make_image_shader(RenderPass *render_pass, bool preview);

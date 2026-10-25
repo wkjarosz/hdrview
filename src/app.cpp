@@ -522,6 +522,7 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
         Colormap::cleanup();
         cleanup_colorpass();
         m_shader.reset();
+        m_preview_shader.reset();
         m_render_pass.reset();
 
         spdlog::info("Saving user settings to '{}'", IniSettingsLocation(m_params).value_or("(disabled)"));

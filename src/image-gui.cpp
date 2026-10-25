@@ -129,7 +129,7 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id_, bool is
                     hdrview()->set_reference_image_index(img_idx);
                     reference_group = this_group;
                 }
-                set_as_texture(Target_Secondary);
+                hdrview()->set_image_textures();
             }
             else
             {
@@ -140,10 +140,9 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id_, bool is
                 else
                     hdrview()->select_group_alone(img_idx, this_group);
 
-                // Not necessarily this image: taking the current target out of the selection hands current
-                // to whatever is still in it, which can be another image entirely.
-                if (auto cur = hdrview()->current_image())
-                    cur->set_as_texture(Target_Primary);
+                // whatever is current now, which taking the current target out of the selection can hand to
+                // another image entirely
+                hdrview()->set_image_textures();
             }
         }
         else if (is_current_channel && scroll_to >= -0.5f)

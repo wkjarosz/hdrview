@@ -19,20 +19,11 @@ void HDRViewApp::setup_rendering()
         m_render_pass->set_depth_test(RenderPass::DepthTest::Always, false);
         m_render_pass->set_clear_color(float4(0.15f, 0.15f, 0.15f, 1.f));
 
-        m_shader = make_unique<Shader>(m_render_pass.get(),
-                                       /* An identifying name */
-                                       "ImageView", Shader::from_asset("shaders/image-shader_vert"),
-                                       Shader::from_asset("shaders/image-shader_frag"), Shader::BlendMode::AlphaBlend);
-
-        const float positions[] = {-1.f, -1.f, 1.f, -1.f, -1.f, 1.f, 1.f, -1.f, 1.f, 1.f, -1.f, 1.f};
-
-        m_shader->set_buffer("position", VariableType::Float32, {6, 2}, positions);
-        m_render_pass->set_cull_mode(RenderPass::CullMode::Disabled);
-
         Image::make_default_textures();
         Colormap::initialize();
 
-        m_shader->set_texture("dither_texture", Image::dither_texture());
+        // the viewer's shader only; the one with edit previews takes far longer to link, so the first preview makes it
+        m_shader = make_image_shader(m_render_pass.get(), false);
         set_image_textures();
         spdlog::info("Successfully initialized graphics API!");
     }
@@ -43,6 +34,19 @@ void HDRViewApp::setup_rendering()
         spdlog::critical("Shader initialization failed!:\n\t{}.", e.what());
         exit(EXIT_FAILURE);
     }
+}
+
+std::unique_ptr<Shader> make_image_shader(RenderPass *render_pass, bool preview)
+{
+    const string asset = preview ? "shaders/image-preview" : "shaders/image-shader";
+    auto         shader =
+        make_unique<Shader>(render_pass, preview ? "ImagePreview" : "ImageView", Shader::from_asset(asset + "_vert"),
+                            Shader::from_asset(asset + "_frag"), Shader::BlendMode::AlphaBlend);
+
+    const float positions[] = {-1.f, -1.f, 1.f, -1.f, -1.f, 1.f, 1.f, -1.f, 1.f, 1.f, -1.f, 1.f};
+    shader->set_buffer("position", VariableType::Float32, {6, 2}, positions);
+    shader->set_texture("dither_texture", Image::dither_texture());
+    return shader;
 }
 
 bool HDRViewApp::supports_hdr() const

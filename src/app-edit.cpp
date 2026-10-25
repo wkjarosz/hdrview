@@ -235,6 +235,19 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
                 {
                     m_edit_preview       = *p;
                     m_edit_preview_frame = ImGui::GetFrameCount();
+                    // the first preview makes the shader that draws it, which can take seconds to link
+                    if (!m_preview_shader && !m_preview_shader_failed)
+                        try
+                        {
+                            m_preview_shader = make_image_shader(renderpass(), true);
+                            set_image_textures();
+                        }
+                        catch (const std::exception &e)
+                        {
+                            m_preview_shader_failed = true;
+                            spdlog::error("Edit previews are unavailable: the shader that draws them failed:\n\t{}.",
+                                          e.what());
+                        }
                 }
         }
 
