@@ -26,16 +26,7 @@
 - [x] merge metal/glsl shaders + C++ colorspace stuff?
 - [ ] express app/viewport/image coordinate transforms using 2x2 matrices
 - [x] flip and mirror image view
-- [ ] native file dialogs on macOS that take keyboard focus
-  - portable-file-dialogs runs `osascript -e 'choose file name …'` in a child process, whose panel never becomes
-    the active app, so keys typed right after it opens reach HDRView's shortcuts (a Right arrow switches the
-    channel group). Affects every open/save/folder dialog.
-  - keep this in a small library, not in HDRView. A fork tweak (`tell me to activate`, then refocusing HDRView) is
-    only a workaround, since pfd's macOS design is the out-of-process AppleScript.
-  - candidate replacement: [nativefiledialog-extended](https://github.com/btzy/nativefiledialog-extended), which uses
-    in-process NSOpenPanel/NSSavePanel on macOS and IFileDialog on Windows. On Linux it uses GTK3 or, with
-    `NFD_PORTAL`, xdg-desktop-portal over D-Bus, a build dependency that pfd's zenity/kdialog child process avoids.
-    The web build keeps emscripten-browser-file.
+- [x] native file dialogs on macOS that take keyboard focus: nativefiledialog-extended, in process, with xdg-desktop-portal on Linux
 - [ ] write HEIF/AVIF gain maps (ISO 21496-1 `tmap`) on Export rendition, as Ultra HDR and JPEG XL do
   - libheif (1.23.3) has no API to write a gain map, or to read one: a `tmap` file needs a derived `tmap` item
     referencing the base and a hidden gain-map image item, and an `altr` entity group, none of which its API can
