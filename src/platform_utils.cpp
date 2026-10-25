@@ -208,16 +208,25 @@ static bool chosen(nfdresult_t result, const char *title)
     return result == NFD_OKAY;
 }
 
-std::vector<std::string> open_file_paths(const char *title, const char *filter_name, const std::string &extensions,
-                                         bool multiple, void *glfw_window)
+/// NFDe's view of \p filters, which must outlive it.
+static std::vector<nfdu8filteritem_t> nfd_filters(const std::vector<FileFilter> &filters)
 {
-    const nfdu8filteritem_t  filter{filter_name, extensions.c_str()};
-    const nfdwindowhandle_t  parent = file_dialog_parent(glfw_window);
+    std::vector<nfdu8filteritem_t> items;
+    for (const auto &f : filters) items.push_back({f.name.c_str(), f.extensions.c_str()});
+    return items;
+}
+
+std::vector<std::string> open_file_paths(const char *title, const std::vector<FileFilter> &filters, bool multiple,
+                                         void *glfw_window)
+{
+    const auto               items     = nfd_filters(filters);
+    const auto               n_filters = nfdfiltersize_t(items.size());
+    const nfdwindowhandle_t  parent    = file_dialog_parent(glfw_window);
     std::vector<std::string> paths;
     if (multiple)
     {
         const nfdpathset_t *set = nullptr;
-        if (!chosen(NFD::OpenDialogMultiple(set, &filter, 1, nullptr, parent, title), title))
+        if (!chosen(NFD::OpenDialogMultiple(set, items.data(), n_filters, nullptr, parent, title), title))
             return paths;
         NFD::UniquePathSet owned{set};
         nfdpathsetsize_t   count = 0;
@@ -229,7 +238,7 @@ std::vector<std::string> open_file_paths(const char *title, const char *filter_n
     else
     {
         nfdu8char_t *path = nullptr;
-        if (!chosen(NFD::OpenDialog(path, &filter, 1, nullptr, parent, title), title))
+        if (!chosen(NFD::OpenDialog(path, items.data(), n_filters, nullptr, parent, title), title))
             return paths;
         NFD::UniquePathU8 owned{path};
         paths.emplace_back(owned.get());
@@ -237,14 +246,14 @@ std::vector<std::string> open_file_paths(const char *title, const char *filter_n
     return paths;
 }
 
-std::string save_file_path(const char *title, const std::string &default_name, const char *filter_name,
-                           const std::string &extensions, void *glfw_window)
+std::string save_file_path(const char *title, const std::string &default_name, const std::vector<FileFilter> &filters,
+                           void *glfw_window)
 {
-    const nfdu8filteritem_t filter{filter_name, extensions.c_str()};
-    nfdu8char_t            *path = nullptr;
-    if (!chosen(
-            NFD::SaveDialog(path, &filter, 1, nullptr, default_name.c_str(), file_dialog_parent(glfw_window), title),
-            title))
+    const auto   items = nfd_filters(filters);
+    nfdu8char_t *path  = nullptr;
+    if (!chosen(NFD::SaveDialog(path, items.data(), nfdfiltersize_t(items.size()), nullptr, default_name.c_str(),
+                                file_dialog_parent(glfw_window), title),
+                title))
         return "";
     NFD::UniquePathU8 owned{path};
     return owned.get();

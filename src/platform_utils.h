@@ -28,17 +28,20 @@ const std::string &init_file_dialogs();
 /// Undoes init_file_dialogs(), if it got as far as setting the dialogs up.
 void quit_file_dialogs();
 
+/// A choice of file type in a native dialog: its name, and its comma-separated extensions without dots ("png,jpg").
+struct FileFilter
+{ std::string name, extensions; };
+
 /// The files a native open dialog over \p glfw_window returns, none if it was canceled or failed.
 /**
-    The dialog offers files with the comma-separated \p extensions, given without their dots ("png,jpg"), under
-    \p filter_name, and lets several be chosen when \p multiple.
+    The dialog offers \p filters, the first chosen to begin with, and lets several files be chosen when \p multiple.
 */
-std::vector<std::string> open_file_paths(const char *title, const char *filter_name, const std::string &extensions,
-                                         bool multiple, void *glfw_window);
+std::vector<std::string> open_file_paths(const char *title, const std::vector<FileFilter> &filters, bool multiple,
+                                         void *glfw_window);
 
 /// The file a native save dialog over \p glfw_window returns, or an empty string if it was canceled or failed.
-std::string save_file_path(const char *title, const std::string &default_name, const char *filter_name,
-                           const std::string &extensions, void *glfw_window);
+std::string save_file_path(const char *title, const std::string &default_name, const std::vector<FileFilter> &filters,
+                           void *glfw_window);
 
 /// The folder a native folder dialog over \p glfw_window returns, or an empty string if it was canceled or failed.
 std::string folder_path(const char *title, void *glfw_window);

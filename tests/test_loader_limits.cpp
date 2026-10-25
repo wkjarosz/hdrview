@@ -9,6 +9,8 @@
 
 #include <doctest/doctest.h>
 
+#include "common.h"
+#include "image.h"
 #include "imageio/dds.h"
 #include "imageio/image_loader.h"
 #include "imageio/qoi.h"
@@ -21,6 +23,7 @@
 #include <algorithm>
 #include <memory>
 #include <mutex>
+#include <set>
 
 #include <cstdint>
 #include <cstring>
@@ -297,4 +300,27 @@ TEST_CASE("No loader reads much more than a header to decide a file is not its o
     CHECK(load_image(is, "noise.bin").empty());
     CHECK_MESSAGE(is.delivered() < bytes.size() / 16, "the loaders read ", is.delivered(), " of ", bytes.size(),
                   " bytes");
+}
+
+TEST_CASE("Every loadable extension belongs to exactly one named format")
+{
+    // the open dialog offers each format as a filter of its own, so an extension in two would appear in both
+    std::set<std::string> seen;
+    for (const auto &group : Image::loadable_format_groups())
+    {
+        const std::string &name       = group.first;
+        const auto        &extensions = group.second;
+        CAPTURE(name);
+        CHECK(!name.empty());
+        CHECK(!extensions.empty());
+        for (const auto &ext : extensions)
+        {
+            CAPTURE(ext);
+            CHECK(seen.insert(ext).second);
+            CHECK(ext == to_lower(ext));
+            CHECK(ext.find('.') == std::string::npos);
+            CHECK(Image::loadable("." + ext));
+        }
+    }
+    CHECK(seen == Image::loadable_formats());
 }

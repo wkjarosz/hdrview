@@ -593,9 +593,10 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
             else
 #endif
 #if !defined(__EMSCRIPTEN__)
-                filename = save_file_path(
-                    save_as_name.c_str(), filename, (string(save_format_names[save_format]) + " images").c_str(),
-                    save_extension.substr(save_extension.rfind('.') + 1), m_params.backendPointers.glfwWindow);
+                filename = save_file_path(save_as_name.c_str(), filename,
+                                          {{string(save_format_names[save_format]) + " images",
+                                            save_extension.substr(save_extension.rfind('.') + 1)}},
+                                          m_params.backendPointers.glfwWindow);
 #endif
         }
 
@@ -770,9 +771,13 @@ void HDRViewApp::open_image()
             }
         });
 #else
-    load_images(open_file_paths("Open image(s)", "Image files",
-                                fmt::format("{},zip", fmt::join(Image::loadable_formats(), ",")), true,
-                                m_params.backendPointers.glfwWindow));
+    // every format at once to begin with, then one at a time, since the Linux dialogs spell out each filter's
+    // extensions in its name, which across all of them is a long one
+    vector<FileFilter> filters{{"All images", fmt::format("{},zip", fmt::join(Image::loadable_formats(), ","))}};
+    for (const auto &[name, extensions] : Image::loadable_format_groups())
+        filters.push_back({name, fmt::format("{}", fmt::join(extensions, ","))});
+    filters.push_back({"Zip archives", "zip"});
+    load_images(open_file_paths("Open image(s)", filters, true, m_params.backendPointers.glfwWindow));
 #endif
 }
 
@@ -1199,7 +1204,7 @@ void HDRViewApp::save_session()
         return;
 
 #if !defined(__EMSCRIPTEN__)
-    string filename = save_file_path("Save session", "session.hsess", "HDRView session", "hsess",
+    string filename = save_file_path("Save session", "session.hsess", {{"HDRView session", "hsess"}},
                                      m_params.backendPointers.glfwWindow);
     if (filename.empty())
         return;
@@ -1235,7 +1240,7 @@ void HDRViewApp::export_session_bundle()
         return;
 
 #if !defined(__EMSCRIPTEN__)
-    string filename = save_file_path("Export session bundle", "session.hsess.zip", "HDRView session bundle", "zip",
+    string filename = save_file_path("Export session bundle", "session.hsess.zip", {{"HDRView session bundle", "zip"}},
                                      m_params.backendPointers.glfwWindow);
     if (filename.empty())
         return;
@@ -1344,7 +1349,7 @@ void HDRViewApp::load_session()
 {
 #if !defined(__EMSCRIPTEN__)
     const auto selected =
-        open_file_paths("Load session", "HDRView session", "hsess,zip", false, m_params.backendPointers.glfwWindow);
+        open_file_paths("Load session", {{"HDRView session", "hsess,zip"}}, false, m_params.backendPointers.glfwWindow);
     if (!selected.empty())
         load_session(selected.front());
 #endif

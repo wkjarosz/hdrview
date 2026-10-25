@@ -486,7 +486,10 @@ struct Image : ImageMetadata
 {
 public:
     static bool                         loadable(const std::string &extension);
-    static const std::set<std::string> &loadable_formats(); /// Set of supported formats for image loading
+    /// The formats HDRView can load, each a name and the extensions of its files, without their dots.
+    static const std::vector<std::pair<std::string, std::vector<std::string>>> &loadable_format_groups();
+    /// Every extension in loadable_format_groups().
+    static const std::set<std::string> &loadable_formats();
     static void                         make_default_textures();
     static void                         cleanup_default_textures();
     static Texture                     *black_texture();
