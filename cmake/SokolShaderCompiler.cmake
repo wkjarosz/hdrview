@@ -25,8 +25,8 @@ endif()
 
 CPMAddPackage(
   NAME sokol_tools_bin
-  GITHUB_REPOSITORY floooh/sokol-tools-bin
-  GIT_TAG 9adef5465d8b9e7f412b0ffd48017e2741628c27
+  # an archive, not a clone: the repository's history of every platform's binaries is ten times their size
+  URL https://github.com/floooh/sokol-tools-bin/archive/9adef5465d8b9e7f412b0ffd48017e2741628c27.tar.gz
   DOWNLOAD_ONLY YES
 )
 

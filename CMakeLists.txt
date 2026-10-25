@@ -416,8 +416,7 @@ if((APPLE OR ((WIN32 OR (CMAKE_SYSTEM_NAME MATCHES "Linux")) AND HDRVIEW_ENABLE_
   endif()
   CPMAddPackage(
     NAME glfw
-    GITHUB_REPOSITORY Tom94/glfw
-    GIT_TAG 2cc924c234423f635aee654073e5bb5a216392dd
+    URL https://github.com/Tom94/glfw/archive/2cc924c234423f635aee654073e5bb5a216392dd.tar.gz
     OPTIONS "GLFW_BUILD_EXAMPLES OFF"
             "GLFW_BUILD_TESTS OFF"
             "GLFW_BUILD_DOCS OFF"
@@ -478,6 +477,7 @@ CPMAddPackage(
   NAME hello_imgui
   GITHUB_REPOSITORY pthom/hello_imgui
   GIT_TAG v1.92.900
+  GIT_SHALLOW TRUE
   OPTIONS ${HELLOIMGUI_CPM_OPTIONS}
   EXCLUDE_FROM_ALL YES
   SYSTEM YES
@@ -587,7 +587,7 @@ endif()
 # target_include_directories(stp INTERFACE "${smallthreadpool_SOURCE_DIR}")
 list(APPEND HDRVIEW_DEPENDENCIES "stp")
 
-CPMAddPackage("gh:wkjarosz/stb#491e9c3ac2add5bda0fffb5a8cb99868c483506b")
+CPMAddPackage(NAME stb URL https://github.com/wkjarosz/stb/archive/491e9c3ac2add5bda0fffb5a8cb99868c483506b.tar.gz)
 if(NOT stb_ADDED)
   message(FATAL_ERROR "Could not download stb library.")
 endif()
@@ -655,8 +655,7 @@ endif()
 
 CPMAddPackage(
   NAME libexif
-  GITHUB_REPOSITORY Tom94/libexif
-  GIT_TAG f99967d09f1424170388cb2c0b65dcf67d6f5ac3
+  URL https://github.com/Tom94/libexif/archive/f99967d09f1424170388cb2c0b65dcf67d6f5ac3.tar.gz
   FIND_PACKAGE_ARGUMENTS "QUIET"
   OPTIONS "BUILD_SHARED_LIBS OFF"
   VERSION 0.6.24
@@ -760,10 +759,8 @@ endif()
 if(HDRVIEW_ENABLE_LIBPNG)
   CPMAddPackage(
     NAME PNG
-    GITHUB_REPOSITORY pnggroup/libpng
-    GIT_TAG 62954d33fe729566e9d17b78ddaf013896a1f3c5
     VERSION 1.6.0
-    # URL https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.51.zip
+    URL https://github.com/pnggroup/libpng/archive/62954d33fe729566e9d17b78ddaf013896a1f3c5.tar.gz
     OPTIONS "PNG_SHARED OFF"
             "PNG_STATIC ON"
             "PNG_FRAMEWORK OFF"
@@ -1091,8 +1088,10 @@ if(HDRVIEW_ENABLE_LIBJXL)
     GITHUB_REPOSITORY libjxl/libjxl
     # VERSION 0.7.0 # version in ubuntu 24.04
     VERSION 0.11.1
-    URL https://github.com/libjxl/libjxl/archive/refs/tags/v0.11.1.zip
-    # GIT_TAG 6e83d97e73c68ff7d3374f939971bab617be4c3c
+    # only the submodules this configuration builds: the rest are test data, tools, and bundled copies of
+    # libraries it takes from elsewhere, and with their history they would be most of the download
+    GIT_SHALLOW TRUE
+    GIT_SUBMODULES third_party/highway third_party/brotli third_party/lcms
     OPTIONS "BUILD_SHARED_LIBS OFF"
             "BUILD_TESTING OFF"
             "JPEGXL_ENABLE_FUZZERS OFF"
@@ -1251,8 +1250,7 @@ if(HDRVIEW_ENABLE_J2K)
   CPMAddPackage(
     NAME OpenJPEG
     VERSION 2.5.0 # 2.5.0 is the first release whose decoder handles HTJ2K codestreams
-    GITHUB_REPOSITORY uclouvain/openjpeg
-    GIT_TAG v2.5.4
+    URL https://github.com/uclouvain/openjpeg/archive/refs/tags/v2.5.4.tar.gz
     FIND_PACKAGE_ARGUMENTS "QUIET"
     OPTIONS "BUILD_SHARED_LIBS OFF"
             "BUILD_CODEC OFF"
@@ -1460,8 +1458,7 @@ if(HDRVIEW_ENABLE_LIBTIFF)
   CPMAddPackage(
     NAME TIFF
     VERSION 4.7.1
-    GITHUB_REPOSITORY Tom94/libtiff
-    GIT_TAG 392d93518a813fe407e119aeb8596eb4891f3fd1
+    URL https://github.com/Tom94/libtiff/archive/392d93518a813fe407e119aeb8596eb4891f3fd1.tar.gz
     OPTIONS "BUILD_SHARED_LIBS OFF"
             # "HAVE_JPEGTURBO_DUAL_MODE_8_12 TRUE"
             "tiff-tools OFF"
@@ -1944,7 +1941,7 @@ endfunction()
 # minus src/hdrview.cpp, which defines the main() doctest supplies itself.
 option(HDRVIEW_BUILD_TESTS "Build unit tests (requires doctest, fetched via CPM)" OFF)
 if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
-  CPMAddPackage("gh:doctest/doctest@2.4.11")
+  CPMAddPackage(NAME doctest VERSION 2.4.11 URL https://github.com/doctest/doctest/archive/refs/tags/v2.4.11.tar.gz)
 
   list(REMOVE_ITEM HDRVIEW_SOURCES src/hdrview.cpp)
   add_executable(hdrview_tests ${HDRVIEW_SOURCES} tests/test_pixel_stats.cpp tests/test_colorspace.cpp
