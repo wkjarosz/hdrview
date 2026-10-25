@@ -524,8 +524,9 @@ TEST_CASE("Every gain-map writer's file reads back as the renditions it was writ
             CAPTURE(std::string(color_gamut_name(gamut)));
             const Chromaticities chr = gamut_chromaticities(gamut);
 
-            // with alpha, which the rendition of an image that has it carries: the top rows are fully transparent, and
-            // the comparisons start two rows below them, past the ringing a lossy codec leaves at their edge
+            // With alpha, which the rendition of an image that has it carries: the top rows are fully transparent, and
+            // the comparisons start at the first 8-row block clear of them, since the ringing a lossy codec leaves at
+            // their edge reaches through the block that holds it.
             const auto rgba = [&]
             {
                 auto img = std::make_shared<Image>();
@@ -533,7 +534,7 @@ TEST_CASE("Every gain-map writer's file reads back as the renditions it was writ
                 img->display_window = img->data_window = Box2i{int2{0}, size};
                 return img;
             };
-            constexpr int transparent_rows = 2;
+            constexpr int transparent_rows = 2, first_row = (transparent_rows + 7) / 8 * 8;
             auto          hdr = rgba(), sdr = rgba();
             for (int y = 0; y < size.y; ++y)
                 for (int x = 0; x < size.x; ++x)
@@ -591,7 +592,7 @@ TEST_CASE("Every gain-map writer's file reads back as the renditions it was writ
                 }
             } error;
             const auto compare = [&](float got, float want) { error.add(got, want); };
-            for (int y = transparent_rows + 2; y < size.y; ++y)
+            for (int y = first_row; y < size.y; ++y)
                 for (int x = 0; x < size.x; ++x)
                     for (int c = 0; c < 3; ++c)
                     {
@@ -628,7 +629,7 @@ TEST_CASE("Every gain-map writer's file reads back as the renditions it was writ
                 Error      apple_hdr_error, apple_sdr_error;
                 const auto rgb = [&](const Image &img, int x, int y)
                 { return float3{img.channels[0](x, y), img.channels[1](x, y), img.channels[2](x, y)}; };
-                for (int y = transparent_rows + 2; y < size.y; ++y)
+                for (int y = first_row; y < size.y; ++y)
                     for (int x = 0; x < size.x; ++x)
                     {
                         const float3 want_hdr = mul(hdr->M_to_sRGB, rgb(*hdr, x, y)),

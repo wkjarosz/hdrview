@@ -85,6 +85,17 @@ jobs:
         if: startsWith(matrix.config.os, 'ubuntu-24.04')
         run: sudo apt-get update && sudo apt-get install -y cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build libglfw3-dev libfreetype-dev libjpeg-dev libimath-dev libopenexr-dev libpng-dev libtiff-dev liblcms2-dev libwebp-dev libraw-dev libheif-dev libheif-plugin-x265 libheif-plugin-libde265 libheif-plugin-aomenc libheif-plugin-aomdec libheif-plugin-dav1d libaom-dev libdav1d-dev libde265-dev libx265-dev libjxl-dev libcli11-dev libspdlog-dev libfmt-dev libexif-dev libwayland-dev wayland-protocols libxkbcommon-dev libdbus-1-dev libopenh264-dev libopenjp2-7-dev xvfb
 
+      # Ubuntu packages no miniz, so linux-local builds one and installs it as a distro would, for the configure to
+      # take in place of the bundled copy; 3.1.2 is what Arch ships
+      - name: Install miniz (linux-local)
+        if: matrix.config.preset == 'linux-local'
+        run: |
+          git clone --depth 1 --branch 3.1.2 https://github.com/richgel999/miniz.git "$RUNNER_TEMP/miniz"
+          cmake -S "$RUNNER_TEMP/miniz" -B "$RUNNER_TEMP/miniz/build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON -DBUILD_EXAMPLES=OFF -DBUILD_FUZZERS=OFF -DBUILD_TESTS=OFF
+          sudo cmake --build "$RUNNER_TEMP/miniz/build" --target install
+          sudo ldconfig
+
       # appstream and desktop-file-utils make appimagetool validate the AppImage's metadata
       - name: Install dependencies (Ubuntu 22.04)
         if: startsWith(matrix.config.os, 'ubuntu-22.04')
@@ -165,7 +176,17 @@ jobs:
                 ;;
             esac
           fi
-          cmake --preset ${{ matrix.config.preset }} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache $EXTRA_FLAGS
+          set -o pipefail
+          cmake --preset ${{ matrix.config.preset }} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache $EXTRA_FLAGS | tee configure.log
+          # a local build must take the system copies of the libraries installed above, not fetch its own
+          if [ "${{ matrix.config.preset }}" = "linux-local" ]; then
+            if ! grep -q "Using system-installed miniz library" configure.log; then
+              echo "::error::linux-local did not use the system miniz"; exit 1
+            fi
+            if grep -q "Adding package LibRaw_src" configure.log; then
+              echo "::error::linux-local fetched LibRaw's sources despite the system LibRaw"; exit 1
+            fi
+          fi
 
       - name: Build
         run: |
