@@ -301,7 +301,7 @@ void HDRViewApp::update_rolloff()
         {
             bool   has  = false;
             float  peak = 0.f; ///< In stops above SDR white
-            string note, detail;
+            string note, detail = {};
         };
         auto found = [&](float value, string note, string detail = {})
         { return Found{true, display_stops(value), std::move(note), std::move(detail)}; };

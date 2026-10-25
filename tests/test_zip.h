@@ -36,8 +36,10 @@ inline std::string zip_bytes(const std::vector<std::pair<std::string, std::strin
     void       *buf  = nullptr;
     size_t      size = 0;
     std::string out;
+    // the finished archive is the caller's to free
     if (mz_zip_writer_finalize_heap_archive(&zip, &buf, &size))
         out.assign(reinterpret_cast<char *>(buf), size);
+    mz_free(buf);
     mz_zip_writer_end(&zip);
     return out;
 }

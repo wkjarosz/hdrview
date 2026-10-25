@@ -622,20 +622,34 @@ if(EMSCRIPTEN)
 
 else()
 
+  # The file dialogs run in HDRView's own process, so they take keyboard focus. On Linux they go through
+  # xdg-desktop-portal over D-Bus, which the GLFW fork needs anyway, rather than linking GTK; its Wayland support
+  # builds a protocol from a git submodule, which CPM fetches with the rest.
   CPMAddPackage(
-    NAME portable-file-dialogs
-    GITHUB_REPOSITORY wkjarosz/portable-file-dialogs
-    GIT_TAG 1d755d814b77e546f544266bc24ac76029b8763b
+    NAME nfd
+    GITHUB_REPOSITORY btzy/nativefiledialog-extended
+    GIT_TAG v1.4.1
+    VERSION 1.4.1
+    # NFD_APPEND_EXTENSION: a Linux save dialog otherwise returns a name typed without its extension as is
+    OPTIONS "NFD_PORTAL ON" "NFD_APPEND_EXTENSION ON" "NFD_BUILD_TESTS OFF" "NFD_INSTALL OFF" "BUILD_SHARED_LIBS OFF"
     SYSTEM YES
     EXCLUDE_FROM_ALL YES
   )
-  if(NOT portable-file-dialogs_ADDED)
-    message(FATAL_ERROR "Could not download portable-file-dialogs library.")
+  if(nfd_ADDED)
+    message(STATUS "nativefiledialog-extended library added")
+    disable_target_warnings(nfd)
+    mark_as_system_library(nfd)
+  elseif(NOT TARGET nfd::nfd)
+    message(FATAL_ERROR "Could not find or download nativefiledialog-extended library.")
   endif()
-  message(STATUS "portable-file-dialogs library added")
-  add_library(portable-file-dialogs INTERFACE IMPORTED)
-  target_include_directories(portable-file-dialogs INTERFACE "${portable-file-dialogs_SOURCE_DIR}")
-  list(APPEND HDRVIEW_DEPENDENCIES "portable-file-dialogs")
+  list(APPEND HDRVIEW_DEPENDENCIES "nfd::nfd")
+
+  if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+    # platform_utils.cpp asks the portal at startup whether it can show a file chooser
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(DBUS REQUIRED IMPORTED_TARGET dbus-1)
+    list(APPEND HDRVIEW_DEPENDENCIES "PkgConfig::DBUS")
+  endif()
 
 endif()
 
@@ -1872,8 +1886,20 @@ function(hdrview_prefer_bundled_headers name)
   target_include_directories(${name} SYSTEM BEFORE PRIVATE ${HDRVIEW_BUNDLED_INCLUDE_DIRS})
 endfunction()
 
+# Apple's linker warns whenever a static library repeats on a link line, which CMake does on purpose so that
+# libraries depending on each other resolve
+set(HDRVIEW_LINK_OPTIONS "")
+if(APPLE)
+  include(CheckLinkerFlag)
+  check_linker_flag(CXX "-Wl,-no_warn_duplicate_libraries" HDRVIEW_LINKER_HAS_NO_WARN_DUPLICATE_LIBRARIES)
+  if(HDRVIEW_LINKER_HAS_NO_WARN_DUPLICATE_LIBRARIES)
+    list(APPEND HDRVIEW_LINK_OPTIONS "-Wl,-no_warn_duplicate_libraries")
+  endif()
+endif()
+
 hdrview_prefer_bundled_headers(HDRView)
 target_link_libraries(HDRView PRIVATE ${HDRVIEW_DEPENDENCIES} hdrview_version)
+target_link_options(HDRView PRIVATE ${HDRVIEW_LINK_OPTIONS})
 target_compile_definitions(HDRView PRIVATE ${HDRVIEW_DEFINITIONS})
 
 if(NOT EMSCRIPTEN)
@@ -1900,6 +1926,7 @@ function(hdrview_setup_target name)
   target_compile_definitions(${name} PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets")
   hdrview_prefer_bundled_headers(${name})
   target_link_libraries(${name} PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui hdrview_version)
+  target_link_options(${name} PRIVATE ${HDRVIEW_LINK_OPTIONS})
 
   if(WIN32)
     # same long-path opt-in as the HDRView target above, which tests/test_long_paths.cpp needs

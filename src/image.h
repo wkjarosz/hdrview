@@ -52,7 +52,7 @@ inline constexpr double axis_scale_a_0 = 0.01;
 inline double axis_scale_fwd(double value, AxisScale x_scale)
 {
     if (x_scale == AxisScale_SRGB)
-        return linear_to_sRGB(value);
+        return linear_to_sRGB(float(value)); //< the shared transfer functions are float only
     else if (x_scale == AxisScale_SymLog)
         return value > 0 ? (std::log10(value + axis_scale_eps) - axis_scale_log_eps)
                          : -(std::log10(-value + axis_scale_eps) - axis_scale_log_eps);
@@ -66,7 +66,7 @@ inline double axis_scale_fwd(double value, AxisScale x_scale)
 inline double axis_scale_inv(double value, AxisScale x_scale)
 {
     if (x_scale == AxisScale_SRGB)
-        return sRGB_to_linear(value);
+        return sRGB_to_linear(float(value));
     else if (x_scale == AxisScale_SymLog)
         return value > 0 ? (std::pow(10., value + axis_scale_log_eps) - axis_scale_eps)
                          : -(std::pow(10., -value + axis_scale_log_eps) - axis_scale_eps);
@@ -486,7 +486,10 @@ struct Image : ImageMetadata
 {
 public:
     static bool                         loadable(const std::string &extension);
-    static const std::set<std::string> &loadable_formats(); /// Set of supported formats for image loading
+    /// The formats HDRView can load, each a name and the extensions of its files, without their dots.
+    static const std::vector<std::pair<std::string, std::vector<std::string>>> &loadable_format_groups();
+    /// Every extension in loadable_format_groups().
+    static const std::set<std::string> &loadable_formats();
     static void                         make_default_textures();
     static void                         cleanup_default_textures();
     static Texture                     *black_texture();
