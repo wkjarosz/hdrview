@@ -412,12 +412,18 @@ TEST_CASE("Profiles encoding the same color space agree on its primaries")
     }
     CHECK(read >= 40);
 
-    for (const auto &[space, profiles] : by_space)
+    for (const auto &group : by_space)
     {
+        // named rather than bound: CAPTURE() captures in a lambda, which a structured binding cannot be before C++20
+        const std::string &space    = group.first;
+        const auto        &profiles = group.second;
         CAPTURE(space);
-        const auto &[first_name, want] = profiles.front();
-        for (const auto &[name, got] : profiles)
+        const std::string    &first_name = profiles.front().first;
+        const Chromaticities &want       = profiles.front().second;
+        for (const auto &profile : profiles)
         {
+            const std::string    &name = profile.first;
+            const Chromaticities &got  = profile.second;
             CAPTURE(first_name);
             CAPTURE(name);
             CHECK(got.red.x == doctest::Approx(want.red.x).epsilon(1e-3));
@@ -435,8 +441,10 @@ TEST_CASE("Profiles encoding the same color space agree on its primaries")
     // match each other. sRGB's primaries are published, so one group is anchored to them.
     const auto srgb = by_space.find("sRGB");
     REQUIRE(srgb != by_space.end());
-    for (const auto &[name, got] : srgb->second)
+    for (const auto &profile : srgb->second)
     {
+        const std::string    &name = profile.first;
+        const Chromaticities &got  = profile.second;
         CAPTURE(name);
         CHECK(got.red.x == doctest::Approx(0.64f).epsilon(1e-3));
         CHECK(got.red.y == doctest::Approx(0.33f).epsilon(1e-3));
