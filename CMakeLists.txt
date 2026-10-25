@@ -1708,6 +1708,11 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "G
          -Wno-deprecated-register
     )
   endif()
+  if(APPLE)
+    # an API newer than the deployment target is weakly linked, so an unguarded call to it would crash on an
+    # older macOS only once reached; the compiler sees every such call, where no launch test could
+    list(APPEND HDRVIEW_WARNING_OPTIONS -Werror=unguarded-availability-new)
+  endif()
 endif()
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)

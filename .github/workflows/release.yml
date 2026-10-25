@@ -39,7 +39,7 @@ jobs:
     steps:
       # Tools only, no libraries: a Homebrew bottle requires the macOS it was built on, the runner's, and one
       # bundled into the app makes the whole app require it. Everything HDRView links is built from source
-      # instead, which check-macos-dmg.sh in test_macos holds the DMG to. NASM assembles aom's and dav1d's x86
+      # instead, which check-macos-dmg.sh below holds the DMG to. NASM assembles aom's and dav1d's x86
       # SIMD code, and meson builds dav1d.
       - name: Install dependencies
         run: brew install ninja create-dmg dylibbundler nasm meson
@@ -105,44 +105,24 @@ jobs:
             fi
           done
 
+      # The build tree's assets go first: a binary looks for them there before its own bundle, which would hide
+      # any missing from the DMG.
+      - name: Checking the DMG
+        run: |
+          mv build/${{ matrix.config.preset }}/assets build/${{ matrix.config.preset }}/assets.aside
+          .github/scripts/check-macos-dmg.sh build/${{ matrix.config.preset }}/HDRView-*.dmg
+
       - name: Archive DMG
         uses: actions/upload-artifact@v6
         with:
           name: dmg-${{ matrix.config.preset }}
           path: ${{github.workspace}}/build/${{ matrix.config.preset }}/HDRView-*.dmg
 
-  # The build runners are the newest macOS, which cannot show what an older one makes of the app: dyld refuses a
-  # library built for a newer macOS, and a symbol the older one lacks fails only at launch. So each DMG is
-  # launched on the oldest macOS GitHub offers before it is published, the Intel one under Rosetta.
-  test_macos:
-    name: Test ${{ matrix.preset }} on macOS 14
-    needs: build_macos
-    runs-on: macos-14
-    strategy:
-      fail-fast: false
-      matrix:
-        preset: [macos-arm64-cpm, macos-x86_64-cpm]
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Install Rosetta
-        if: matrix.preset == 'macos-x86_64-cpm'
-        run: sudo softwareupdate --install-rosetta --agree-to-license
-
-      - uses: actions/download-artifact@v7
-        with:
-          name: dmg-${{ matrix.preset }}
-          path: dmg
-
-      - name: Checking the DMG
-        run: .github/scripts/check-macos-dmg.sh dmg/HDRView-*.dmg
-
       - name: Release
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v3
         with:
-          files: dmg/HDRView-*.dmg
+          files: "${{github.workspace}}/build/${{ matrix.config.preset }}/HDRView-*.dmg"
           prerelease: ${{ contains(github.ref_name, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
