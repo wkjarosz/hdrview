@@ -22,6 +22,9 @@ const std::string &init_file_dialogs();
 /// What init_file_dialogs() returned.
 const std::string &file_dialog_problem();
 
+/// Why the native folder dialogs cannot open when the file dialogs can, or an empty string when they can too.
+const std::string &folder_dialog_problem();
+
 /// Undoes init_file_dialogs(), if it got as far as setting the dialogs up.
 void quit_file_dialogs();
 

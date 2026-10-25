@@ -368,18 +368,29 @@ void HDRViewApp::setup_platform_backend_callbacks(vector<string> in_files)
 #if !defined(__EMSCRIPTEN__)
         // Without file dialogs no file can be opened or saved through the menus, which is better learned now than
         // with work to save, so this is an error, and their actions are disabled saying why.
+        const auto disable = [this](std::initializer_list<const char *> names, const std::string &why)
+        {
+            for (const char *name : names)
+            {
+                auto &a   = m_actions.at(name);
+                a.enabled = [] { return false; };
+                a.tooltip = why;
+            }
+        };
         if (const std::string &problem = init_file_dialogs(); !problem.empty())
         {
             spdlog::error("File dialogs are unavailable: {}. Images can still be opened by dragging them onto the "
                           "window or naming them on the command line.",
                           problem);
-            for (const char *name : {"Open image...", "Open folder...", "Add watched folder...", "Save session...",
-                                     "Load session...", "Export session bundle..."})
-            {
-                auto &a   = m_actions.at(name);
-                a.enabled = [] { return false; };
-                a.tooltip = fmt::format("File dialogs are unavailable: {}.", problem);
-            }
+            disable({"Open image...", "Open folder...", "Add watched folder...", "Save session...", "Load session...",
+                     "Export session bundle..."},
+                    fmt::format("File dialogs are unavailable: {}.", problem));
+        }
+        else if (const std::string &folder_problem = folder_dialog_problem(); !folder_problem.empty())
+        {
+            spdlog::error("Folder dialogs are unavailable: {}.", folder_problem);
+            disable({"Open folder...", "Add watched folder..."},
+                    fmt::format("Folder dialogs are unavailable: {}.", folder_problem));
         }
 #endif
 

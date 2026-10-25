@@ -111,7 +111,7 @@ void show_in_file_manager(const char *filename)
 
 #if !defined(__EMSCRIPTEN__)
 static bool        s_file_dialogs_initialized = false;
-static std::string s_file_dialog_problem;
+static std::string s_file_dialog_problem, s_folder_dialog_problem;
 
 /// Sets up the native file dialogs, and returns why they cannot open, or an empty string when they can.
 static std::string set_up_file_dialogs()
@@ -123,8 +123,9 @@ static std::string set_up_file_dialogs()
     NFD_SetDisplayPropertiesFromGLFW();
 #if defined(NFD_PORTAL)
     // The dialogs are xdg-desktop-portal's, which exports its FileChooser interface only when a backend implements
-    // one (xdg-desktop-portal-wlr, for one, does not), so ask for that interface's version. A private connection
-    // keeps this apart from the one the dialogs share. A system NFDe built on GTK instead needs no portal.
+    // one (xdg-desktop-portal-wlr, for one, does not), so ask for that interface's version, from 3 on (portal 1.7.1)
+    // also the one that picks folders. A private connection keeps this apart from the one the dialogs share. A
+    // system NFDe built on GTK instead needs no portal.
     DBusError error;
     dbus_error_init(&error);
     std::string problem;
@@ -138,7 +139,23 @@ static std::string set_up_file_dialogs()
         dbus_message_append_args(call, DBUS_TYPE_STRING, &iface, DBUS_TYPE_STRING, &member, DBUS_TYPE_INVALID);
         // long enough for the portal and its backend to be started on demand
         if (DBusMessage *reply = dbus_connection_send_with_reply_and_block(bus, call, 5000, &error))
+        {
+            // the property comes back as a variant holding a uint32
+            dbus_uint32_t   version = 0;
+            DBusMessageIter iter, value;
+            if (dbus_message_iter_init(reply, &iter) && dbus_message_iter_get_arg_type(&iter) == DBUS_TYPE_VARIANT)
+            {
+                dbus_message_iter_recurse(&iter, &value);
+                if (dbus_message_iter_get_arg_type(&value) == DBUS_TYPE_UINT32)
+                    dbus_message_iter_get_basic(&value, &version);
+            }
+            if (version < 3)
+                s_folder_dialog_problem =
+                    fmt::format("the xdg-desktop-portal file chooser is version {}, and picking a folder needs version "
+                                "3, from xdg-desktop-portal 1.7.1",
+                                version);
             dbus_message_unref(reply);
+        }
         else
             problem = fmt::format("xdg-desktop-portal offers no file chooser ({}); install xdg-desktop-portal with a "
                                   "backend that provides one, such as xdg-desktop-portal-gnome, -kde or -gtk",
@@ -163,6 +180,8 @@ const std::string &init_file_dialogs()
 }
 
 const std::string &file_dialog_problem() { return s_file_dialog_problem; }
+
+const std::string &folder_dialog_problem() { return s_folder_dialog_problem; }
 
 void quit_file_dialogs()
 {
