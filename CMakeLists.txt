@@ -1303,7 +1303,8 @@ endif()
 # it is the AVIF encoder, and its decoder is the fallback when dav1d is absent.
 #
 # dav1d builds only under meson, so there is no CPM fallback: this uses a dav1d the system already has, and
-# leaves libheif on libaom when there is none. Emscripten never has one.
+# leaves libheif on libaom when there is none. Emscripten never has one; a macOS release builds a static one
+# first, with .github/scripts/build-dav1d.sh.
 if(HDRVIEW_ENABLE_DAV1D AND HDRVIEW_ENABLE_AVIF AND NOT EMSCRIPTEN)
   find_package(PkgConfig QUIET)
   if(PkgConfig_FOUND)
@@ -1314,8 +1315,8 @@ if(HDRVIEW_ENABLE_DAV1D AND HDRVIEW_ENABLE_AVIF AND NOT EMSCRIPTEN)
     find_library(HDRVIEW_DAV1D_LIBRARY NAMES dav1d libdav1d)
     if(HDRVIEW_DAV1D_INCLUDE_DIR AND HDRVIEW_DAV1D_LIBRARY)
       set(HDRVIEW_DAV1D_FOUND TRUE)
-    endif()
       set(HDRVIEW_DAV1D_INCLUDE_DIRS ${HDRVIEW_DAV1D_INCLUDE_DIR})
+    endif()
   endif()
   if(HDRVIEW_DAV1D_FOUND)
     # libheif's dav1d plugin sets Dav1dSettings::n_threads, which arrived in dav1d 1.0.0; against an older

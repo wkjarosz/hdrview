@@ -39,9 +39,10 @@ jobs:
     steps:
       # Tools only, no libraries: a Homebrew bottle requires the macOS it was built on, the runner's, and one
       # bundled into the app makes the whole app require it. Everything HDRView links is built from source
-      # instead, which check-macos-dmg.sh below holds the DMG to. NASM assembles aom's x86 SIMD code.
+      # instead, which check-macos-dmg.sh in test_macos holds the DMG to. NASM assembles aom's and dav1d's x86
+      # SIMD code, and meson builds dav1d.
       - name: Install dependencies
-        run: brew install ninja create-dmg dylibbundler nasm
+        run: brew install ninja create-dmg dylibbundler nasm meson
 
       - uses: actions/checkout@v5
         with:
@@ -70,9 +71,13 @@ jobs:
         with:
           key: ${{ matrix.config.os }}-${{ matrix.config.preset }}
 
+      - name: Build dav1d
+        run: .github/scripts/build-dav1d.sh "$RUNNER_TEMP/dav1d"
+
       - name: Configure CMake
         run: |
-          cmake --preset ${{ matrix.config.preset }} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache ${{ matrix.config.flags }}
+          export PKG_CONFIG_PATH="$RUNNER_TEMP/dav1d/lib/pkgconfig"
+          cmake --preset ${{ matrix.config.preset }} -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/dav1d" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache ${{ matrix.config.flags }}
 
       - name: Build
         run: cmake --build --preset ${{ matrix.config.preset }}-release

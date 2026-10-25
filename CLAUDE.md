@@ -333,7 +333,9 @@ AVIF has two AV1 decoders in play. libaom is always there, and is also the AVIF 
 be, but dav1d decodes several times faster, so `HDRVIEW_ENABLE_DAV1D` asks libheif for its dav1d plugin too
 and libheif then prefers it (plugin priority 150 vs libaom's 100). Output is bit-identical, AV1 decoding
 being specified exactly. dav1d builds only under meson, so unlike libaom there is no CPM fallback: the CMake
-block finds a system dav1d or leaves AVIF on libaom, as currently happens on Windows and Emscripten.
+block finds a system dav1d or leaves AVIF on libaom, as currently happens on Windows and Emscripten. A macOS
+release builds a static dav1d for its deployment target first (`.github/scripts/build-dav1d.sh`) and points the
+configure at it.
 
 Saving has two entries, each opening `draw_save_dialog()` in a fixed `SaveMode`. **Save as...** writes the image's
 data, whole or cropped to the selection. **Export rendition...** writes what the view shows, blended with the
