@@ -1477,14 +1477,21 @@ endif()
 
 
 if(HDRVIEW_ENABLE_LIBRAW)
-  CPMAddPackage(
-      NAME LibRaw_src
-      GITHUB_REPOSITORY LibRaw/LibRaw
-      GIT_TAG 0.21.4
-      VERSION 0.21.4
-      DOWNLOAD_ONLY YES
-      SYSTEM YES
-  )
+  # LibRaw-cmake builds LibRaw from a checkout of LibRaw's own sources, which a system LibRaw has no use for, so look for
+  # one first, as CPMAddPackage(LibRaw) below would, and fetch the sources only when it will build them
+  if(CPM_USE_LOCAL_PACKAGES OR CPM_LOCAL_PACKAGES_ONLY)
+    find_package(LibRaw 0.21.0 QUIET)
+  endif()
+  if(NOT LibRaw_FOUND)
+    CPMAddPackage(
+        NAME LibRaw_src
+        GITHUB_REPOSITORY LibRaw/LibRaw
+        GIT_TAG 0.21.4
+        VERSION 0.21.4
+        DOWNLOAD_ONLY YES
+        SYSTEM YES
+    )
+  endif()
 
   # Before the LibRaw CPMAddPackage: 
   if(WIN32 OR MSVC OR EMSCRIPTEN)
