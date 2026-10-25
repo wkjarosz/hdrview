@@ -1872,8 +1872,20 @@ function(hdrview_prefer_bundled_headers name)
   target_include_directories(${name} SYSTEM BEFORE PRIVATE ${HDRVIEW_BUNDLED_INCLUDE_DIRS})
 endfunction()
 
+# Apple's linker warns whenever a static library repeats on a link line, which CMake does on purpose so that
+# libraries depending on each other resolve
+set(HDRVIEW_LINK_OPTIONS "")
+if(APPLE)
+  include(CheckLinkerFlag)
+  check_linker_flag(CXX "-Wl,-no_warn_duplicate_libraries" HDRVIEW_LINKER_HAS_NO_WARN_DUPLICATE_LIBRARIES)
+  if(HDRVIEW_LINKER_HAS_NO_WARN_DUPLICATE_LIBRARIES)
+    list(APPEND HDRVIEW_LINK_OPTIONS "-Wl,-no_warn_duplicate_libraries")
+  endif()
+endif()
+
 hdrview_prefer_bundled_headers(HDRView)
 target_link_libraries(HDRView PRIVATE ${HDRVIEW_DEPENDENCIES} hdrview_version)
+target_link_options(HDRView PRIVATE ${HDRVIEW_LINK_OPTIONS})
 target_compile_definitions(HDRView PRIVATE ${HDRVIEW_DEFINITIONS})
 
 if(NOT EMSCRIPTEN)
@@ -1900,6 +1912,7 @@ function(hdrview_setup_target name)
   target_compile_definitions(${name} PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets")
   hdrview_prefer_bundled_headers(${name})
   target_link_libraries(${name} PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui hdrview_version)
+  target_link_options(${name} PRIVATE ${HDRVIEW_LINK_OPTIONS})
 
   if(WIN32)
     # same long-path opt-in as the HDRView target above, which tests/test_long_paths.cpp needs

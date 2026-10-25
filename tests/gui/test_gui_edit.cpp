@@ -279,11 +279,11 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
             struct Case
             {
                 /// Run before the dialog opens, on the image it will edit.
-                std::function<void(ImGuiTestContext *, const ImagePtr &)> before_open;
+                std::function<void(ImGuiTestContext *, const ImagePtr &)> before_open = nullptr;
                 /// Run in the dialog, with the ref set to it, each time it opens.
-                std::function<void(ImGuiTestContext *)> settings;
+                std::function<void(ImGuiTestContext *)> settings = nullptr;
                 /// Checks particular to the command, once its edit has landed, given the samples it started from.
-                std::function<void(ImGuiTestContext *, const ConstImagePtr &, const vector<float> &)> check;
+                std::function<void(ImGuiTestContext *, const ConstImagePtr &, const vector<float> &)> check = nullptr;
                 bool enter       = false; ///< Confirmed with Enter, rather than with the confirm button
                 int  adds_images = 0;     ///< Images it puts in the list, in place of an edit to the current one
             };
