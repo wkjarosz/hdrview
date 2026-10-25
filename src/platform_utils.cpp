@@ -14,9 +14,11 @@
 #else
 #define GLFW_EXPOSE_NATIVE_X11
 #define GLFW_EXPOSE_NATIVE_WAYLAND
-#include <dbus/dbus.h>
 #endif
 #include <nfd_glfw3.h>
+#if defined(NFD_PORTAL)
+#include <dbus/dbus.h>
+#endif
 #endif
 
 #ifdef __EMSCRIPTEN__
@@ -115,10 +117,10 @@ std::string init_file_dialogs()
     s_file_dialogs_initialized = true;
     // under Wayland, the dialogs find HDRView's window through GLFW's display connection
     NFD_SetDisplayPropertiesFromGLFW();
-#if defined(__linux__)
-    // Linux file dialogs are xdg-desktop-portal's, which exports its FileChooser interface only when a backend
-    // implements one (xdg-desktop-portal-wlr, for one, does not), so ask for that interface's version. A private
-    // connection keeps this apart from the one the dialogs share.
+#if defined(NFD_PORTAL)
+    // The dialogs are xdg-desktop-portal's, which exports its FileChooser interface only when a backend implements
+    // one (xdg-desktop-portal-wlr, for one, does not), so ask for that interface's version. A private connection
+    // keeps this apart from the one the dialogs share. A system NFDe built on GTK instead needs no portal.
     DBusError error;
     dbus_error_init(&error);
     std::string problem;

@@ -13,8 +13,9 @@ void        show_in_file_manager(const char *filename);
 
 /// Sets up the native file dialogs once GLFW is, and returns why they cannot open, or an empty string when they can.
 /**
-    On Linux the dialogs need an xdg-desktop-portal with a file chooser, which a desktop may lack, and which would
-    otherwise surface only as a failed dialog once the user tries to open or save.
+    With NFDe's portal backend, which HDRView builds on Linux, the dialogs need an xdg-desktop-portal with a file
+    chooser. A desktop may lack one, which would otherwise surface only as a failed dialog once the user tries to open
+    or save.
 */
 std::string init_file_dialogs();
 
