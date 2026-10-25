@@ -458,10 +458,18 @@ set(IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON)
 set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY TRUE)
 
 # HDRView loads no SVG or color fonts, so it has no use for plutosvg, which hello_imgui would otherwise always
-# download and build, even when the system has it
-set(HELLOIMGUI_CPM_OPTIONS "HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF" "HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF"
-                           "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON" "HELLOIMGUI_USE_FREETYPE_PLUTOSVG OFF"
-                           "HELLOIMGUI_USE_IMGUI_CMAKE_PACKAGE OFF"
+# download and build, even when the system has it. A freetype that hello_imgui builds needs none of its optional
+# libraries either (HarfBuzz for OpenType hinting, Brotli for WOFF2, bzip2), and would otherwise link whatever
+# copies are installed, which ties a macOS release to the macOS that built them.
+set(HELLOIMGUI_CPM_OPTIONS
+    "HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF"
+    "HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF"
+    "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON"
+    "HELLOIMGUI_USE_FREETYPE_PLUTOSVG OFF"
+    "HELLOIMGUI_USE_IMGUI_CMAKE_PACKAGE OFF"
+    "FT_DISABLE_HARFBUZZ ON"
+    "FT_DISABLE_BROTLI ON"
+    "FT_DISABLE_BZIP2 ON"
 )
 # Dear ImGui must be the docking-branch copy hello_imgui vendors, so an installed one (typically the release
 # branch, without docking) can't stand in; hide it, or hello_imgui refuses to build its own once it sees one
@@ -1216,8 +1224,8 @@ if(HDRVIEW_ENABLE_AVIF AND (EMSCRIPTEN OR (APPLE AND NOT (HDRVIEW_AOM_INCLUDE_DI
 
   CPMAddPackage(
     NAME aom
-    VERSION 3.13.1
-    URL https://storage.googleapis.com/aom-releases/libaom-3.13.1.tar.gz
+    VERSION 3.13.3 # 3.13.2 is the first whose NASM check accepts NASM 3
+    URL https://storage.googleapis.com/aom-releases/libaom-3.13.3.tar.gz
     OPTIONS ${HDRVIEW_AOM_TARGET_OPTIONS}
             "CONFIG_AV1_DECODER 1"
             "CONFIG_AV1_ENCODER 1"
