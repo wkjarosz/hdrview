@@ -82,6 +82,7 @@ enum Caps : unsigned
     Cap_White         = 1u << 5, ///< records the luminance the values' (1, 1, 1) stands for
     Cap_Premultiplied = 1u << 6, ///< quantizes color multiplied by alpha, so straight color moves by step / alpha
     Cap_Refuses_Cut   = 1u << 7, ///< refuses a file cut short rather than decoding what arrived
+    Cap_Dithers       = 1u << 8, ///< dithers what it quantizes, a step of the depth it stores
 };
 
 #if defined(PNG_cICP_SUPPORTED) && defined(PNG_cLLI_SUPPORTED) && defined(PNG_mDCV_SUPPORTED)
@@ -114,7 +115,8 @@ struct Variant
 
 constexpr float k_8bit          = 1.f / 255.f;  ///< a code value step at 8 bits, which rounding stays within
 constexpr float k_8bit_dithered = 1.5f / 255.f; ///< a tent dither moves a sample a step, then rounding half of one
-constexpr float k_10bit         = 1.f / 1023.f;
+constexpr float k_10bit_dithered = 1.5f / 1023.f;
+constexpr float k_12bit_dithered = 1.5f / 4095.f;
 
 bool offers_linear(TransferFunction tf) { return tf.type == TransferFunction::Linear; }
 bool always(TransferFunction) { return true; }
@@ -220,13 +222,13 @@ const Variant k_variants[] = {
 #if HDRVIEW_ENABLE_LIBTIFF
     // the save dialog's compressions (0 none, 1 LZW, 2 ZIP, 3 PackBits) and data types (0 8-bit, 1 16-bit, 2 float);
     // an ICC profile, which lcms reads in float, moves float samples by a few 1e-6
-    {"tiff8 lzw", ".tif", "libtiff", Cap_Default | Cap_Alpha | Cap_Premultiplied, k_8bit_dithered, [](TransferFunction t) { return tiff_offers_tf(t, 0); }, icc_labels,
+    {"tiff8 lzw", ".tif", "libtiff", Cap_Default | Cap_Alpha | Cap_Premultiplied | Cap_Dithers, k_8bit_dithered, [](TransferFunction t) { return tiff_offers_tf(t, 0); }, icc_labels,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, 1, 0); }},
-    {"tiff8 none", ".tif", "libtiff", Cap_Alpha | Cap_Premultiplied, k_8bit_dithered, [](TransferFunction t) { return tiff_offers_tf(t, 0); }, icc_labels,
+    {"tiff8 none", ".tif", "libtiff", Cap_Alpha | Cap_Premultiplied | Cap_Dithers, k_8bit_dithered, [](TransferFunction t) { return tiff_offers_tf(t, 0); }, icc_labels,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, 0, 0); }},
-    {"tiff16 zip", ".tif", "libtiff", Cap_Alpha | Cap_Premultiplied, 1e-4f, [](TransferFunction t) { return tiff_offers_tf(t, 1); }, icc_labels,
+    {"tiff16 zip", ".tif", "libtiff", Cap_Alpha | Cap_Premultiplied | Cap_Dithers, 1e-4f, [](TransferFunction t) { return tiff_offers_tf(t, 1); }, icc_labels,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, 2, 1); }},
-    {"tiff16 packbits", ".tif", "libtiff", Cap_Alpha | Cap_Premultiplied, 1e-4f, [](TransferFunction t) { return tiff_offers_tf(t, 1); }, icc_labels,
+    {"tiff16 packbits", ".tif", "libtiff", Cap_Alpha | Cap_Premultiplied | Cap_Dithers, 1e-4f, [](TransferFunction t) { return tiff_offers_tf(t, 1); }, icc_labels,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, 3, 1); }},
     {"tiff float lzw", ".tif", "libtiff", Cap_Float | Cap_Alpha, 1e-5f, [](TransferFunction t) { return tiff_offers_tf(t, 2); }, icc_labels,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, 1, 2); }},
@@ -247,12 +249,12 @@ const Variant k_variants[] = {
     // both syntaxes, every bit depth the dialog offers, and its lossy mode
     {"jp2 16", ".jp2", "openjpeg", Cap_Default | Cap_Alpha, 1e-4f, [](TransferFunction t) { return j2k_offers_tf(t, J2KContainer::JP2); }, icc_labels,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_j2k_image(i, o, "a.jp2", true, 16, J2KContainer::JP2, t, false); }},
-    {"jp2 12", ".jp2", "openjpeg", Cap_Alpha, 1.f / 4095.f, [](TransferFunction t) { return j2k_offers_tf(t, J2KContainer::JP2); }, icc_labels,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_j2k_image(i, o, "a.jp2", true, 12, J2KContainer::JP2, t, false); }},
-    {"jp2 10", ".jp2", "openjpeg", Cap_Alpha, k_10bit, [](TransferFunction t) { return j2k_offers_tf(t, J2KContainer::JP2); }, icc_labels,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_j2k_image(i, o, "a.jp2", true, 10, J2KContainer::JP2, t, false); }},
-    {"jp2 8", ".jp2", "openjpeg", Cap_Alpha, k_8bit, [](TransferFunction t) { return j2k_offers_tf(t, J2KContainer::JP2); }, icc_labels,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_j2k_image(i, o, "a.jp2", true, 8, J2KContainer::JP2, t, false); }},
+    {"jp2 12", ".jp2", "openjpeg", Cap_Alpha | Cap_Dithers, k_12bit_dithered, [](TransferFunction t) { return j2k_offers_tf(t, J2KContainer::JP2); }, icc_labels,
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_j2k_image(i, o, "a.jp2", true, 12, J2KContainer::JP2, t, true); }},
+    {"jp2 10", ".jp2", "openjpeg", Cap_Alpha | Cap_Dithers, k_10bit_dithered, [](TransferFunction t) { return j2k_offers_tf(t, J2KContainer::JP2); }, icc_labels,
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_j2k_image(i, o, "a.jp2", true, 10, J2KContainer::JP2, t, true); }},
+    {"jp2 8", ".jp2", "openjpeg", Cap_Alpha | Cap_Dithers, k_8bit_dithered, [](TransferFunction t) { return j2k_offers_tf(t, J2KContainer::JP2); }, icc_labels,
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_j2k_image(i, o, "a.jp2", true, 8, J2KContainer::JP2, t, true); }},
     // the dialog's compression ratio leaves an 8x6 image few bytes, its alpha's included
     {"jp2 16 lossy", ".jp2", "openjpeg", Cap_Alpha | Cap_Lossy, 0.15f, [](TransferFunction t) { return j2k_offers_tf(t, J2KContainer::JP2); }, icc_labels,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_j2k_image(i, o, "a.jp2", false, 16, J2KContainer::JP2, t, false); }},
@@ -263,7 +265,7 @@ const Variant k_variants[] = {
     // lossy WebP is 8-bit 4:2:0, whose error at quality 95 a steep transfer function such as Log 100 amplifies
     {"webp q95", ".webp", "libwebp", Cap_Default | Cap_Alpha | Cap_Lossy, 0.05f, webp_offers_tf, icc_labels,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_webp_image(i, o, "a.webp", 95.f, false, t); }},
-    {"webp lossless", ".webp", "libwebp", Cap_Alpha, k_8bit_dithered, webp_offers_tf, icc_labels,
+    {"webp lossless", ".webp", "libwebp", Cap_Alpha | Cap_Dithers, k_8bit_dithered, webp_offers_tf, icc_labels,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_webp_image(i, o, "a.webp", 100.f, true, t); }},
 #endif
 #if HDRVIEW_ENABLE_LIBJXL && !defined(HDRVIEW_TEST_ASAN) // see test_asan.h
@@ -275,26 +277,26 @@ const Variant k_variants[] = {
      [](const Image &i, std::ostream &o, TransferFunction t) { save_jxl_image(i, o, "a.jxl", true, 100.f, t, JXL_TYPE_FLOAT); }},
     {"jxl f16 lossless", ".jxl", "libjxl", Cap_Alpha, 1e-3f, [](TransferFunction t) { return jxl_offers_tf(t); }, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_jxl_image(i, o, "a.jxl", true, 100.f, t, JXL_TYPE_FLOAT16); }},
-    {"jxl u16 lossless", ".jxl", "libjxl", Cap_Alpha, 3e-4f, [](TransferFunction t) { return jxl_offers_tf(t); }, always,
+    {"jxl u16 lossless", ".jxl", "libjxl", Cap_Alpha | Cap_Dithers, 3e-4f, [](TransferFunction t) { return jxl_offers_tf(t); }, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_jxl_image(i, o, "a.jxl", true, 100.f, t, JXL_TYPE_UINT16); }},
-    {"jxl u8 lossless", ".jxl", "libjxl", Cap_Alpha, k_8bit_dithered, [](TransferFunction t) { return jxl_offers_tf(t); }, always,
+    {"jxl u8 lossless", ".jxl", "libjxl", Cap_Alpha | Cap_Dithers, k_8bit_dithered, [](TransferFunction t) { return jxl_offers_tf(t); }, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_jxl_image(i, o, "a.jxl", true, 100.f, t, JXL_TYPE_UINT8); }},
 #endif
 #if HDRVIEW_ENABLE_LIBHEIF
     // both codecs the dialog offers, since they take different paths through libheif
     {"heif", ".heif", "libheif", Cap_Default | Cap_Alpha | Cap_Lossy | k_heif_levels, 0.055f, heif_offers_tf, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.heif", 95, false, true, HEIFCodec::HEVC, t); }},
-    {"heif lossless 8", ".heif", "libheif", Cap_Alpha | k_heif_levels, k_8bit_dithered, heif_offers_tf, always,
+    {"heif lossless 8", ".heif", "libheif", Cap_Alpha | k_heif_levels | Cap_Dithers, k_8bit_dithered, heif_offers_tf, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.heif", 100, true, true, HEIFCodec::HEVC, t, 8); }},
-    {"heif lossless 10", ".heif", "libheif", Cap_Alpha | k_heif_levels, k_10bit, heif_offers_tf, always,
+    {"heif lossless 10", ".heif", "libheif", Cap_Alpha | k_heif_levels | Cap_Dithers, k_10bit_dithered, heif_offers_tf, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.heif", 100, true, true, HEIFCodec::HEVC, t, 10); }},
     {"avif", ".avif", "libheif", Cap_Default | Cap_Alpha | Cap_Lossy | k_heif_levels, 0.055f, heif_offers_tf, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.avif", 95, false, true, HEIFCodec::AV1, t); }},
-    {"avif lossless 8", ".avif", "libheif", Cap_Alpha | k_heif_levels, k_8bit_dithered, heif_offers_tf, always,
+    {"avif lossless 8", ".avif", "libheif", Cap_Alpha | k_heif_levels | Cap_Dithers, k_8bit_dithered, heif_offers_tf, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.avif", 100, true, true, HEIFCodec::AV1, t, 8); }},
-    {"avif lossless 10", ".avif", "libheif", Cap_Alpha | k_heif_levels, k_10bit, heif_offers_tf, always,
+    {"avif lossless 10", ".avif", "libheif", Cap_Alpha | k_heif_levels | Cap_Dithers, k_10bit_dithered, heif_offers_tf, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.avif", 100, true, true, HEIFCodec::AV1, t, 10); }},
-    {"avif lossless 12", ".avif", "libheif", Cap_Alpha | k_heif_levels, 1.f / 4095.f, heif_offers_tf, always,
+    {"avif lossless 12", ".avif", "libheif", Cap_Alpha | k_heif_levels | Cap_Dithers, k_12bit_dithered, heif_offers_tf, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.avif", 100, true, true, HEIFCodec::AV1, t, 12); }},
 #endif
 };
@@ -417,7 +419,11 @@ std::vector<ImagePtr> load(const Variant &v, const std::string &bytes, const Ima
     return load_image(in, std::string("a") + v.ext, opts);
 }
 
+#if defined(__APPLE__)
 /// The warning \p variant's dialog shows for \p tf, for the sweep's image, whose primaries are BT.2020's.
+/**
+    Only ImageIO's reads are held to the caveats, so this is macOS's alone.
+*/
 Caveat caveat_of(const Variant &variant, const TransferFunction &tf)
 {
     const std::string ext = variant.ext;
@@ -439,6 +445,7 @@ Caveat caveat_of(const Variant &variant, const TransferFunction &tf)
 #endif
     return {};
 }
+#endif
 
 } // namespace
 
@@ -830,6 +837,88 @@ TEST_CASE("every writer's file, cut short anywhere, loads cleanly or not at all"
                 CHECK_FALSE(img->channels.empty());
                 for (const auto &c : img->channels) CHECK(c.size() == img->size());
             }
+        }
+    }
+}
+
+TEST_CASE("every lossless integer writer quantizes at the depth it stores: values on its grid come back exactly, and "
+          "a dithering one averages others back to themselves")
+{
+    // a patch large enough for the dither to average out over, every sample at one encoded value
+    const int2 size{64, 64};
+    const auto patch = [&](float encoded, const TransferFunction &tf)
+    {
+        auto img = std::make_shared<Image>();
+        for (auto name : {"R", "G", "B"}) img->channels.emplace_back(name, size);
+        img->display_window = img->data_window = Box2i{int2{0}, size};
+        const float linear                     = to_linear(encoded, tf);
+        for (auto &c : img->channels)
+            for (int i = 0; i < c.num_elements(); ++i) c(i) = linear;
+        img->finalize();
+        return img;
+    };
+
+    for (const auto &writer : k_variants)
+    {
+        if (writer.caps & (Cap_Float | Cap_Lossy))
+            continue;
+        CAPTURE(std::string(writer.name));
+        const TransferFunction tf = default_tf(writer);
+        REQUIRE(writer.offers(tf));
+
+        const auto probe = save(writer, *patch(0.5f, tf), tf);
+        if (!probe)
+            continue;
+        const auto probed = load(writer, *probe);
+        REQUIRE(probed.size() == 1);
+        // the depth the file stores, as its loader reports it; 0 for floating-point samples, which nothing quantizes,
+        // and which a writer that dithers cannot be storing
+        const int bits = probed.front()->channels.front().bits_per_sample;
+        CAPTURE(bits);
+        if (bits == 0)
+        {
+            CHECK((writer.caps & Cap_Dithers) == 0);
+            continue;
+        }
+        REQUIRE((bits >= 8 && bits <= 16));
+        const float max_code = float((1u << bits) - 1u);
+
+        // the codes a patch at \p encoded comes back as: their mean, and the furthest from \p want
+        const auto read_back = [&](float encoded, float want) -> std::optional<std::pair<double, float>>
+        {
+            const auto bytes = save(writer, *patch(encoded, tf), tf);
+            if (!bytes)
+                return std::nullopt;
+            const auto loaded = load(writer, *bytes);
+            REQUIRE(loaded.size() == 1);
+            const auto &img   = *loaded.front();
+            double      sum   = 0.0;
+            float       worst = 0.f;
+            for (int c = 0; c < 3; ++c)
+                for (int i = 0; i < img.channels[c].num_elements(); ++i)
+                {
+                    const float code = from_linear(img.channels[c](i), tf) * max_code;
+                    sum += code;
+                    worst = std::max(worst, std::abs(code - want));
+                }
+            return std::pair{sum / (3.0 * size.x * size.y), worst};
+        };
+
+        // on the grid, at both ends and between: an ICC profile read in float moves a sample by a few 1e-6
+        for (float code : {0.f, 1.f, std::round(max_code / 3.f), max_code - 1.f, max_code})
+        {
+            CAPTURE(code);
+            if (const auto got = read_back(code / max_code, code))
+                CHECK(got->second < 0.1f);
+        }
+
+        // halfway between two codes, which rounding alone takes half a step off
+        if (writer.caps & Cap_Dithers)
+        {
+            const float want = std::round(0.4f * max_code) + 0.5f;
+            CAPTURE(want);
+            if (const auto got = read_back(want / max_code, want))
+                CHECK(std::abs(got->first - want) < 0.05);
         }
     }
 }

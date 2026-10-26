@@ -3,6 +3,25 @@
 #include <cstdlib>
 #include <spdlog/spdlog.h>
 #include <string>
+#include <vector>
+
+#if !defined(__EMSCRIPTEN__)
+// nfd_glfw3.h reaches the native window through glfw3native.h, which brings in each window system's own headers
+// and their macros, so it is kept to this file
+#if defined(_WIN32)
+#define GLFW_EXPOSE_NATIVE_WIN32
+#elif defined(__APPLE__)
+#define GLFW_EXPOSE_NATIVE_COCOA
+#else
+#define GLFW_EXPOSE_NATIVE_X11
+#define GLFW_EXPOSE_NATIVE_WAYLAND
+#endif
+#include <nfd.hpp>
+#include <nfd_glfw3.h>
+#if defined(NFD_PORTAL)
+#include <dbus/dbus.h>
+#endif
+#endif
 
 #ifdef __EMSCRIPTEN__
 #include "app.h"
@@ -89,6 +108,166 @@ void show_in_file_manager(const char *filename)
     // Unsupported platform
 #endif
 }
+
+static std::string s_file_dialog_problem, s_folder_dialog_problem;
+
+const std::string &file_dialog_problem() { return s_file_dialog_problem; }
+
+const std::string &folder_dialog_problem() { return s_folder_dialog_problem; }
+
+#if !defined(__EMSCRIPTEN__)
+static bool s_file_dialogs_initialized = false;
+
+/// Sets up the native file dialogs, and returns why they cannot open, or an empty string when they can.
+static std::string set_up_file_dialogs()
+{
+    if (NFD::Init() != NFD_OKAY)
+        return NFD::GetError();
+    s_file_dialogs_initialized = true;
+    // under Wayland, the dialogs find HDRView's window through GLFW's display connection
+    NFD_SetDisplayPropertiesFromGLFW();
+#if defined(NFD_PORTAL)
+    // The dialogs are xdg-desktop-portal's, which exports its FileChooser interface only when a backend implements
+    // one (xdg-desktop-portal-wlr, for one, does not), so ask for that interface's version, from 3 on (portal 1.7.1)
+    // also the one that picks folders. A private connection keeps this apart from the one the dialogs share. A
+    // system NFDe built on GTK instead needs no portal.
+    DBusError error;
+    dbus_error_init(&error);
+    std::string problem;
+    if (DBusConnection *bus = dbus_bus_get_private(DBUS_BUS_SESSION, &error))
+    {
+        DBusMessage *call =
+            dbus_message_new_method_call("org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop",
+                                         "org.freedesktop.DBus.Properties", "Get");
+        const char *iface  = "org.freedesktop.portal.FileChooser";
+        const char *member = "version";
+        dbus_message_append_args(call, DBUS_TYPE_STRING, &iface, DBUS_TYPE_STRING, &member, DBUS_TYPE_INVALID);
+        // long enough for the portal and its backend to be started on demand
+        if (DBusMessage *reply = dbus_connection_send_with_reply_and_block(bus, call, 5000, &error))
+        {
+            // the property comes back as a variant holding a uint32
+            dbus_uint32_t   version = 0;
+            DBusMessageIter iter, value;
+            if (dbus_message_iter_init(reply, &iter) && dbus_message_iter_get_arg_type(&iter) == DBUS_TYPE_VARIANT)
+            {
+                dbus_message_iter_recurse(&iter, &value);
+                if (dbus_message_iter_get_arg_type(&value) == DBUS_TYPE_UINT32)
+                    dbus_message_iter_get_basic(&value, &version);
+            }
+            if (version < 3)
+                s_folder_dialog_problem =
+                    fmt::format("the xdg-desktop-portal file chooser is version {}, and picking a folder needs version "
+                                "3, from xdg-desktop-portal 1.7.1",
+                                version);
+            dbus_message_unref(reply);
+        }
+        else
+            problem = fmt::format("xdg-desktop-portal offers no file chooser ({}); install xdg-desktop-portal with a "
+                                  "backend that provides one, such as xdg-desktop-portal-gnome, -kde or -gtk",
+                                  error.message);
+        dbus_message_unref(call);
+        dbus_connection_close(bus);
+        dbus_connection_unref(bus);
+    }
+    else
+        problem = fmt::format("there is no D-Bus session bus to reach xdg-desktop-portal through ({})", error.message);
+    dbus_error_free(&error);
+    return problem;
+#else
+    return "";
+#endif
+}
+
+const std::string &init_file_dialogs()
+{
+    s_file_dialog_problem = set_up_file_dialogs();
+    return s_file_dialog_problem;
+}
+
+void quit_file_dialogs()
+{
+    if (s_file_dialogs_initialized)
+        NFD::Quit();
+    s_file_dialogs_initialized = false;
+}
+
+/// The handle that makes a native file dialog a child of the GLFW window \p glfw_window.
+static nfdwindowhandle_t file_dialog_parent(void *glfw_window)
+{
+    // a handle left empty, should this fail, opens the dialog unparented
+    nfdwindowhandle_t parent{};
+    NFD_GetNativeWindowFromGLFWWindow(static_cast<GLFWwindow *>(glfw_window), &parent);
+    return parent;
+}
+
+/// Whether a native file dialog returned a choice, logging why if it failed rather than was canceled.
+static bool chosen(nfdresult_t result, const char *title)
+{
+    if (result == NFD_ERROR)
+        spdlog::error("The '{}' dialog failed: {}.", title, NFD::GetError());
+    return result == NFD_OKAY;
+}
+
+/// NFDe's view of \p filters, which must outlive it.
+static std::vector<nfdu8filteritem_t> nfd_filters(const std::vector<FileFilter> &filters)
+{
+    std::vector<nfdu8filteritem_t> items;
+    for (const auto &f : filters) items.push_back({f.name.c_str(), f.extensions.c_str()});
+    return items;
+}
+
+std::vector<std::string> open_file_paths(const char *title, const std::vector<FileFilter> &filters, bool multiple,
+                                         void *glfw_window)
+{
+    const auto               items     = nfd_filters(filters);
+    const auto               n_filters = nfdfiltersize_t(items.size());
+    const nfdwindowhandle_t  parent    = file_dialog_parent(glfw_window);
+    std::vector<std::string> paths;
+    if (multiple)
+    {
+        const nfdpathset_t *set = nullptr;
+        if (!chosen(NFD::OpenDialogMultiple(set, items.data(), n_filters, nullptr, parent, title), title))
+            return paths;
+        NFD::UniquePathSet owned{set};
+        nfdpathsetsize_t   count = 0;
+        NFD::PathSet::Count(owned, count);
+        for (nfdpathsetsize_t i = 0; i < count; ++i)
+            if (NFD::UniquePathSetPathU8 path; NFD::PathSet::GetPath(owned, i, path) == NFD_OKAY)
+                paths.emplace_back(path.get());
+    }
+    else
+    {
+        nfdu8char_t *path = nullptr;
+        if (!chosen(NFD::OpenDialog(path, items.data(), n_filters, nullptr, parent, title), title))
+            return paths;
+        NFD::UniquePathU8 owned{path};
+        paths.emplace_back(owned.get());
+    }
+    return paths;
+}
+
+std::string save_file_path(const char *title, const std::string &default_name, const std::vector<FileFilter> &filters,
+                           void *glfw_window)
+{
+    const auto   items = nfd_filters(filters);
+    nfdu8char_t *path  = nullptr;
+    if (!chosen(NFD::SaveDialog(path, items.data(), nfdfiltersize_t(items.size()), nullptr, default_name.c_str(),
+                                file_dialog_parent(glfw_window), title),
+                title))
+        return "";
+    NFD::UniquePathU8 owned{path};
+    return owned.get();
+}
+
+std::string folder_path(const char *title, void *glfw_window)
+{
+    nfdu8char_t *path = nullptr;
+    if (!chosen(NFD::PickFolder(path, nullptr, file_dialog_parent(glfw_window), title), title))
+        return "";
+    NFD::UniquePathU8 owned{path};
+    return owned.get();
+}
+#endif
 
 #if defined(__EMSCRIPTEN__)
 //------------------------------------------------------------------------------

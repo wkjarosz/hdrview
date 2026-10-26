@@ -20,6 +20,9 @@
 	<key>CFBundleVersion</key>
 	<string>${HELLO_IMGUI_BUNDLE_VERSION}</string>
 
+	<key>LSMinimumSystemVersion</key>
+	<string>${CMAKE_OSX_DEPLOYMENT_TARGET}</string>
+
 	<key>NSHumanReadableCopyright</key>
 	<string>${HELLO_IMGUI_BUNDLE_COPYRIGHT}</string>
 

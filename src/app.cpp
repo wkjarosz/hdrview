@@ -15,8 +15,6 @@
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
-#else
-#include "portable-file-dialogs.h"
 #endif
 
 #ifdef HELLOIMGUI_USE_GLFW3
@@ -367,6 +365,35 @@ void HDRViewApp::setup_platform_backend_callbacks(vector<string> in_files)
                                 hdrview()->load_images(arg);
                             });
 
+#if !defined(__EMSCRIPTEN__)
+        // Without file dialogs no file can be opened or saved through the menus, which is better learned now than
+        // with work to save, so this is an error, and their actions are disabled saying why.
+        const auto disable = [this](std::initializer_list<const char *> names, const std::string &why)
+        {
+            for (const char *name : names)
+            {
+                auto &a   = m_actions.at(name);
+                a.enabled = [] { return false; };
+                a.tooltip = why;
+            }
+        };
+        if (const std::string &problem = init_file_dialogs(); !problem.empty())
+        {
+            spdlog::error("File dialogs are unavailable: {}. Images can still be opened by dragging them onto the "
+                          "window or naming them on the command line.",
+                          problem);
+            disable({"Open image...", "Open folder...", "Add watched folder...", "Save session...", "Load session...",
+                     "Export session bundle..."},
+                    fmt::format("File dialogs are unavailable: {}.", problem));
+        }
+        else if (const std::string &folder_problem = folder_dialog_problem(); !folder_problem.empty())
+        {
+            spdlog::error("Folder dialogs are unavailable: {}.", folder_problem);
+            disable({"Open folder...", "Add watched folder..."},
+                    fmt::format("Folder dialogs are unavailable: {}.", folder_problem));
+        }
+#endif
+
         // Hello ImGui clears requestFloatBuffer when the request could not be satisfied, so by now this is
         // the achieved framebuffer, not the one we asked for.
         m_float_buffer = m_params.rendererBackendOptions.requestFloatBuffer;
@@ -518,6 +545,9 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
 
     m_params.callbacks.BeforeExit = [this]
     {
+#if !defined(__EMSCRIPTEN__)
+        quit_file_dialogs();
+#endif
         Image::cleanup_default_textures();
         Colormap::cleanup();
         cleanup_colorpass();
@@ -1445,8 +1475,8 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    0,
                    [this]()
                    {
-                       if (m_image_loader.add_watched_directory(
-                               pfd::select_folder("Open images in folder", "").result(), true))
+                       if (const string folder = folder_path("Add watched folder", m_params.backendPointers.glfwWindow);
+                           !folder.empty() && m_image_loader.add_watched_directory(folder, true))
                            m_watch_files_for_changes = true;
                    },
                    always_enabled,

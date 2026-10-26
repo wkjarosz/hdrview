@@ -422,8 +422,7 @@ if((APPLE OR ((WIN32 OR (CMAKE_SYSTEM_NAME MATCHES "Linux")) AND HDRVIEW_ENABLE_
   endif()
   CPMAddPackage(
     NAME glfw
-    GITHUB_REPOSITORY Tom94/glfw
-    GIT_TAG 2cc924c234423f635aee654073e5bb5a216392dd
+    URL https://github.com/Tom94/glfw/archive/2cc924c234423f635aee654073e5bb5a216392dd.tar.gz
     OPTIONS "GLFW_BUILD_EXAMPLES OFF"
             "GLFW_BUILD_TESTS OFF"
             "GLFW_BUILD_DOCS OFF"
@@ -464,10 +463,18 @@ set(IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON)
 set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY TRUE)
 
 # HDRView loads no SVG or color fonts, so it has no use for plutosvg, which hello_imgui would otherwise always
-# download and build, even when the system has it
-set(HELLOIMGUI_CPM_OPTIONS "HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF" "HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF"
-                           "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON" "HELLOIMGUI_USE_FREETYPE_PLUTOSVG OFF"
-                           "HELLOIMGUI_USE_IMGUI_CMAKE_PACKAGE OFF"
+# download and build, even when the system has it. A freetype that hello_imgui builds needs none of its optional
+# libraries either (HarfBuzz for OpenType hinting, Brotli for WOFF2, bzip2), and would otherwise link whatever
+# copies are installed, which ties a macOS release to the macOS that built them.
+set(HELLOIMGUI_CPM_OPTIONS
+    "HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF"
+    "HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF"
+    "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON"
+    "HELLOIMGUI_USE_FREETYPE_PLUTOSVG OFF"
+    "HELLOIMGUI_USE_IMGUI_CMAKE_PACKAGE OFF"
+    "FT_DISABLE_HARFBUZZ ON"
+    "FT_DISABLE_BROTLI ON"
+    "FT_DISABLE_BZIP2 ON"
 )
 # Dear ImGui must be the docking-branch copy hello_imgui vendors, so an installed one (typically the release
 # branch, without docking) can't stand in; hide it, or hello_imgui refuses to build its own once it sees one
@@ -484,6 +491,7 @@ CPMAddPackage(
   NAME hello_imgui
   GITHUB_REPOSITORY pthom/hello_imgui
   GIT_TAG v1.92.900
+  GIT_SHALLOW TRUE
   OPTIONS ${HELLOIMGUI_CPM_OPTIONS}
   EXCLUDE_FROM_ALL YES
   SYSTEM YES
@@ -593,7 +601,7 @@ endif()
 # target_include_directories(stp INTERFACE "${smallthreadpool_SOURCE_DIR}")
 list(APPEND HDRVIEW_DEPENDENCIES "stp")
 
-CPMAddPackage("gh:wkjarosz/stb#491e9c3ac2add5bda0fffb5a8cb99868c483506b")
+CPMAddPackage(NAME stb URL https://github.com/wkjarosz/stb/archive/491e9c3ac2add5bda0fffb5a8cb99868c483506b.tar.gz)
 if(NOT stb_ADDED)
   message(FATAL_ERROR "Could not download stb library.")
 endif()
@@ -628,27 +636,40 @@ if(EMSCRIPTEN)
 
 else()
 
+  # The file dialogs run in HDRView's own process, so they take keyboard focus. On Linux they go through
+  # xdg-desktop-portal over D-Bus, which the GLFW fork needs anyway, rather than linking GTK; its Wayland support
+  # builds a protocol from a git submodule, which CPM fetches with the rest.
   CPMAddPackage(
-    NAME portable-file-dialogs
-    GITHUB_REPOSITORY wkjarosz/portable-file-dialogs
-    GIT_TAG 1d755d814b77e546f544266bc24ac76029b8763b
+    NAME nfd
+    GITHUB_REPOSITORY btzy/nativefiledialog-extended
+    GIT_TAG v1.4.1
+    VERSION 1.4.1
+    # NFD_APPEND_EXTENSION: a Linux save dialog otherwise returns a name typed without its extension as is
+    OPTIONS "NFD_PORTAL ON" "NFD_APPEND_EXTENSION ON" "NFD_BUILD_TESTS OFF" "NFD_INSTALL OFF" "BUILD_SHARED_LIBS OFF"
     SYSTEM YES
     EXCLUDE_FROM_ALL YES
   )
-  if(NOT portable-file-dialogs_ADDED)
-    message(FATAL_ERROR "Could not download portable-file-dialogs library.")
+  if(nfd_ADDED)
+    message(STATUS "nativefiledialog-extended library added")
+    disable_target_warnings(nfd)
+    mark_as_system_library(nfd)
+  elseif(NOT TARGET nfd::nfd)
+    message(FATAL_ERROR "Could not find or download nativefiledialog-extended library.")
   endif()
-  message(STATUS "portable-file-dialogs library added")
-  add_library(portable-file-dialogs INTERFACE IMPORTED)
-  target_include_directories(portable-file-dialogs INTERFACE "${portable-file-dialogs_SOURCE_DIR}")
-  list(APPEND HDRVIEW_DEPENDENCIES "portable-file-dialogs")
+  list(APPEND HDRVIEW_DEPENDENCIES "nfd::nfd")
+
+  if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+    # platform_utils.cpp asks the portal at startup whether it can show a file chooser
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(DBUS REQUIRED IMPORTED_TARGET dbus-1)
+    list(APPEND HDRVIEW_DEPENDENCIES "PkgConfig::DBUS")
+  endif()
 
 endif()
 
 CPMAddPackage(
   NAME libexif
-  GITHUB_REPOSITORY Tom94/libexif
-  GIT_TAG f99967d09f1424170388cb2c0b65dcf67d6f5ac3
+  URL https://github.com/Tom94/libexif/archive/f99967d09f1424170388cb2c0b65dcf67d6f5ac3.tar.gz
   FIND_PACKAGE_ARGUMENTS "QUIET"
   OPTIONS "BUILD_SHARED_LIBS OFF"
   VERSION 0.6.24
@@ -752,10 +773,8 @@ endif()
 if(HDRVIEW_ENABLE_LIBPNG)
   CPMAddPackage(
     NAME PNG
-    GITHUB_REPOSITORY pnggroup/libpng
-    GIT_TAG 62954d33fe729566e9d17b78ddaf013896a1f3c5
     VERSION 1.6.0
-    # URL https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.51.zip
+    URL https://github.com/pnggroup/libpng/archive/62954d33fe729566e9d17b78ddaf013896a1f3c5.tar.gz
     OPTIONS "PNG_SHARED OFF"
             "PNG_STATIC ON"
             "PNG_FRAMEWORK OFF"
@@ -1083,8 +1102,10 @@ if(HDRVIEW_ENABLE_LIBJXL)
     GITHUB_REPOSITORY libjxl/libjxl
     # VERSION 0.7.0 # version in ubuntu 24.04
     VERSION 0.11.1
-    URL https://github.com/libjxl/libjxl/archive/refs/tags/v0.11.1.zip
-    # GIT_TAG 6e83d97e73c68ff7d3374f939971bab617be4c3c
+    # only the submodules this configuration builds: the rest are test data, tools, and bundled copies of
+    # libraries it takes from elsewhere, and with their history they would be most of the download
+    GIT_SHALLOW TRUE
+    GIT_SUBMODULES third_party/highway third_party/brotli third_party/lcms
     OPTIONS "BUILD_SHARED_LIBS OFF"
             "BUILD_TESTING OFF"
             "JPEGXL_ENABLE_FUZZERS OFF"
@@ -1096,6 +1117,9 @@ if(HDRVIEW_ENABLE_LIBJXL)
             "JPEGXL_ENABLE_OPENEXR OFF"
             "JPEGXL_ENABLE_DOXYGEN OFF"
             "JPEGXL_ENABLE_MANPAGES OFF"
+            # jpegli needs the libjpeg-turbo submodule, which is not fetched; libjxl would otherwise keep a
+            # build tree's earlier choice to build it
+            "JPEGXL_ENABLE_JPEGLI OFF"
             "JPEGXL_ENABLE_JPEGLI_LIBJPEG OFF"
             "JPEGXL_ENABLE_SKCMS OFF"
             "JPEGXL_ENABLE_VIEWERS OFF"
@@ -1171,11 +1195,17 @@ else()
   endif()
 endif()
 
-# libheif finds its codecs with find_package(), which only turns up an installed library, and Emscripten has
-# none, so AVIF's AV1 codec is built here. CPM already leaves a redirect in CMAKE_FIND_PACKAGE_REDIRECTS_DIR
-# pointing libheif's find_package(AOM) at this build; the -extra.cmake below fills in the rest of what
-# libheif's own FindAOM.cmake would have set.
-if(EMSCRIPTEN AND HDRVIEW_ENABLE_AVIF)
+# libheif finds its codecs with find_package(), which only turns up an installed library. Emscripten has none,
+# and a macOS release must not link one, since Homebrew's bottles require the macOS they were built on, so there
+# AVIF's AV1 codec is built here unless one is installed. CPM already leaves a redirect in
+# CMAKE_FIND_PACKAGE_REDIRECTS_DIR pointing libheif's find_package(AOM) at this build; the -extra.cmake below
+# fills in the rest of what libheif's own FindAOM.cmake would have set.
+if(HDRVIEW_ENABLE_AVIF AND APPLE AND NOT EMSCRIPTEN)
+  # the same search libheif's FindAOM.cmake falls back to
+  find_path(HDRVIEW_AOM_INCLUDE_DIR NAMES aom/aom_decoder.h aom/aom_encoder.h)
+  find_library(HDRVIEW_AOM_LIBRARY NAMES libaom aom)
+endif()
+if(HDRVIEW_ENABLE_AVIF AND (EMSCRIPTEN OR (APPLE AND NOT (HDRVIEW_AOM_INCLUDE_DIR AND HDRVIEW_AOM_LIBRARY))))
   # aom appends the compiler flags it wants straight to the cache with FORCE. A cache entry is global and
   # read at generate time, so those flags reach every target in the build; the -std=c99 among them stops
   # OpenEXR's C sources compiling. Snapshot what aom rewrites and put both the cache entry and the
@@ -1192,16 +1222,33 @@ if(EMSCRIPTEN AND HDRVIEW_ENABLE_AVIF)
     get_property(_doc CACHE "${_var}" PROPERTY HELPSTRING)
     set("HDRVIEW_SAVED_DOC_${_var}" "${_doc}")
   endforeach()
+  get_property(HDRVIEW_CACHE_BEFORE_AOM DIRECTORY PROPERTY CACHE_VARIABLES)
+
+  list(LENGTH CMAKE_OSX_ARCHITECTURES _osx_arch_count)
+  if(EMSCRIPTEN)
+    # no SIMD path, no thread pool, and no CPU to probe: wasm has none of aom's assembly, and this build has no
+    # pthreads
+    set(HDRVIEW_AOM_TARGET_OPTIONS "AOM_TARGET_CPU generic" "CONFIG_MULTITHREAD 0" "CONFIG_RUNTIME_CPU_DETECT 0")
+  elseif(_osx_arch_count GREATER 1)
+    # aom picks its SIMD code for one architecture, which a universal build's single compile cannot
+    set(HDRVIEW_AOM_TARGET_OPTIONS "AOM_TARGET_CPU generic")
+  elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64" AND NOT CMAKE_OSX_ARCHITECTURES MATCHES "arm64")
+    # aom's x86 SIMD is NASM assembly; without the assembler, the portable C is slower but correct
+    find_program(HDRVIEW_NASM nasm)
+    if(HDRVIEW_NASM)
+      set(HDRVIEW_AOM_TARGET_OPTIONS "CMAKE_ASM_NASM_COMPILER ${HDRVIEW_NASM}")
+    else()
+      set(HDRVIEW_AOM_TARGET_OPTIONS "AOM_TARGET_CPU generic")
+    endif()
+  else()
+    set(HDRVIEW_AOM_TARGET_OPTIONS "")
+  endif()
 
   CPMAddPackage(
     NAME aom
-    VERSION 3.13.1
-    URL https://storage.googleapis.com/aom-releases/libaom-3.13.1.tar.gz
-    OPTIONS # no SIMD path, no thread pool, and no CPU to probe: wasm has none of aom's assembly, and this
-            # build has no pthreads
-            "AOM_TARGET_CPU generic"
-            "CONFIG_MULTITHREAD 0"
-            "CONFIG_RUNTIME_CPU_DETECT 0"
+    VERSION 3.13.3 # 3.13.2 is the first whose NASM check accepts NASM 3
+    URL https://storage.googleapis.com/aom-releases/libaom-3.13.3.tar.gz
+    OPTIONS ${HDRVIEW_AOM_TARGET_OPTIONS}
             "CONFIG_AV1_DECODER 1"
             "CONFIG_AV1_ENCODER 1"
             # container and scaling code only aom's own command-line tools use
@@ -1219,9 +1266,19 @@ if(EMSCRIPTEN AND HDRVIEW_ENABLE_AVIF)
     set("${_var}" "${HDRVIEW_SAVED_CACHE_${_var}}" CACHE STRING "${HDRVIEW_SAVED_DOC_${_var}}" FORCE)
     set("${_var}" "${HDRVIEW_SAVED_${_var}}")
   endforeach()
+  # aom also caches what it detects under the names other libraries' checks use (HAVE_UNISTD_H,
+  # HAVE_PTHREAD_H, ...), and a check finding its variable already set takes that answer instead of running:
+  # aom's HAVE_UNISTD_H of 0 leaves libtiff's tif_unix.c without read() and write(). aom has written its own
+  # config header by now, so drop every such entry it added.
+  get_property(_cache_after_aom DIRECTORY PROPERTY CACHE_VARIABLES)
+  foreach(_var IN LISTS _cache_after_aom)
+    if(_var MATCHES "^HAVE_" AND NOT _var IN_LIST HDRVIEW_CACHE_BEFORE_AOM)
+      unset("${_var}" CACHE)
+    endif()
+  endforeach()
 
   if(NOT aom_ADDED)
-    message(FATAL_ERROR "Failed to fetch libaom, which the Emscripten build needs for AVIF support.")
+    message(FATAL_ERROR "Failed to fetch libaom, which AVIF support needs here.")
   endif()
   message(STATUS "Will build libaom library")
   mark_as_system_library(aom)
@@ -1243,8 +1300,7 @@ if(HDRVIEW_ENABLE_J2K)
   CPMAddPackage(
     NAME OpenJPEG
     VERSION 2.5.0 # 2.5.0 is the first release whose decoder handles HTJ2K codestreams
-    GITHUB_REPOSITORY uclouvain/openjpeg
-    GIT_TAG v2.5.4
+    URL https://github.com/uclouvain/openjpeg/archive/refs/tags/v2.5.4.tar.gz
     FIND_PACKAGE_ARGUMENTS "QUIET"
     OPTIONS "BUILD_SHARED_LIBS OFF"
             "BUILD_CODEC OFF"
@@ -1287,7 +1343,8 @@ endif()
 # it is the AVIF encoder, and its decoder is the fallback when dav1d is absent.
 #
 # dav1d builds only under meson, so there is no CPM fallback: this uses a dav1d the system already has, and
-# leaves libheif on libaom when there is none. Emscripten never has one.
+# leaves libheif on libaom when there is none. Emscripten never has one; a macOS release builds a static one
+# first, with .github/scripts/build-dav1d.sh.
 if(HDRVIEW_ENABLE_DAV1D AND HDRVIEW_ENABLE_AVIF AND NOT EMSCRIPTEN)
   find_package(PkgConfig QUIET)
   if(PkgConfig_FOUND)
@@ -1298,6 +1355,7 @@ if(HDRVIEW_ENABLE_DAV1D AND HDRVIEW_ENABLE_AVIF AND NOT EMSCRIPTEN)
     find_library(HDRVIEW_DAV1D_LIBRARY NAMES dav1d libdav1d)
     if(HDRVIEW_DAV1D_INCLUDE_DIR AND HDRVIEW_DAV1D_LIBRARY)
       set(HDRVIEW_DAV1D_FOUND TRUE)
+      set(HDRVIEW_DAV1D_INCLUDE_DIRS ${HDRVIEW_DAV1D_INCLUDE_DIR})
     endif()
   endif()
   if(HDRVIEW_DAV1D_FOUND)
@@ -1305,7 +1363,8 @@ if(HDRVIEW_ENABLE_DAV1D AND HDRVIEW_ENABLE_AVIF AND NOT EMSCRIPTEN)
     # dav1d (Ubuntu 22.04 ships 0.9.2) the plugin, and with it all of libheif, fails to compile. Probe the
     # header for the member, since the find_path fallback above locates a dav1d without learning its version.
     include(CheckStructHasMember)
-    set(CMAKE_REQUIRED_INCLUDES ${HDRVIEW_DAV1D_INCLUDE_DIRS} ${HDRVIEW_DAV1D_INCLUDE_DIR})
+    # one -NOTFOUND entry would drop the whole list, so this takes only the search that succeeded
+    set(CMAKE_REQUIRED_INCLUDES ${HDRVIEW_DAV1D_INCLUDE_DIRS})
     check_struct_has_member("Dav1dSettings" n_threads "dav1d/dav1d.h" HDRVIEW_DAV1D_HAS_N_THREADS LANGUAGE C)
     unset(CMAKE_REQUIRED_INCLUDES)
     if(NOT HDRVIEW_DAV1D_HAS_N_THREADS)
@@ -1452,8 +1511,7 @@ if(HDRVIEW_ENABLE_LIBTIFF)
   CPMAddPackage(
     NAME TIFF
     VERSION 4.7.1
-    GITHUB_REPOSITORY Tom94/libtiff
-    GIT_TAG 392d93518a813fe407e119aeb8596eb4891f3fd1
+    URL https://github.com/Tom94/libtiff/archive/392d93518a813fe407e119aeb8596eb4891f3fd1.tar.gz
     OPTIONS "BUILD_SHARED_LIBS OFF"
             # "HAVE_JPEGTURBO_DUAL_MODE_8_12 TRUE"
             "tiff-tools OFF"
@@ -1689,6 +1747,11 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "G
          -Wno-deprecated-register
     )
   endif()
+  if(APPLE)
+    # an API newer than the deployment target is weakly linked, so an unguarded call to it would crash on an
+    # older macOS only once reached; the compiler sees every such call, where no launch test could
+    list(APPEND HDRVIEW_WARNING_OPTIONS -Werror=unguarded-availability-new)
+  endif()
 endif()
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -1878,8 +1941,20 @@ function(hdrview_prefer_bundled_headers name)
   target_include_directories(${name} SYSTEM BEFORE PRIVATE ${HDRVIEW_BUNDLED_INCLUDE_DIRS})
 endfunction()
 
+# Apple's linker warns whenever a static library repeats on a link line, which CMake does on purpose so that
+# libraries depending on each other resolve
+set(HDRVIEW_LINK_OPTIONS "")
+if(APPLE)
+  include(CheckLinkerFlag)
+  check_linker_flag(CXX "-Wl,-no_warn_duplicate_libraries" HDRVIEW_LINKER_HAS_NO_WARN_DUPLICATE_LIBRARIES)
+  if(HDRVIEW_LINKER_HAS_NO_WARN_DUPLICATE_LIBRARIES)
+    list(APPEND HDRVIEW_LINK_OPTIONS "-Wl,-no_warn_duplicate_libraries")
+  endif()
+endif()
+
 hdrview_prefer_bundled_headers(HDRView)
 target_link_libraries(HDRView PRIVATE ${HDRVIEW_DEPENDENCIES} hdrview_version)
+target_link_options(HDRView PRIVATE ${HDRVIEW_LINK_OPTIONS})
 target_compile_definitions(HDRView PRIVATE ${HDRVIEW_DEFINITIONS})
 
 if(NOT EMSCRIPTEN)
@@ -1906,6 +1981,7 @@ function(hdrview_setup_target name)
   target_compile_definitions(${name} PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets")
   hdrview_prefer_bundled_headers(${name})
   target_link_libraries(${name} PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui hdrview_version)
+  target_link_options(${name} PRIVATE ${HDRVIEW_LINK_OPTIONS})
 
   if(WIN32)
     # same long-path opt-in as the HDRView target above, which tests/test_long_paths.cpp needs
@@ -1923,7 +1999,7 @@ endfunction()
 # minus src/hdrview.cpp, which defines the main() doctest supplies itself.
 option(HDRVIEW_BUILD_TESTS "Build unit tests (requires doctest, fetched via CPM)" OFF)
 if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
-  CPMAddPackage("gh:doctest/doctest@2.4.11")
+  CPMAddPackage(NAME doctest VERSION 2.4.11 URL https://github.com/doctest/doctest/archive/refs/tags/v2.4.11.tar.gz)
 
   list(REMOVE_ITEM HDRVIEW_SOURCES src/hdrview.cpp)
   add_executable(hdrview_tests ${HDRVIEW_SOURCES} tests/test_pixel_stats.cpp tests/test_colorspace.cpp

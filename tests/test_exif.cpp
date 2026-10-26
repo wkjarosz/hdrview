@@ -243,17 +243,20 @@ TEST_CASE("A real camera file's tags and maker note survive into the metadata")
 
         // the strings libexif reads out of the same bytes have to be the strings that arrive here
         const auto dump = j.dump();
-        for (const auto &[tag, value] : entries)
+        for (const auto &entry : entries)
         {
+            const std::string &value = entry.second; //< named rather than bound: CAPTURE() captures in a lambda, which
+                                                     //a structured binding cannot be before C++20
             CAPTURE(value);
             CHECK(dump.find(value) != std::string::npos);
         }
 
         // and against the tag each belongs to, under the title HDRView keys by rather than libexif's name.
         // Presence alone would not notice a build that lost every title and filed them under tag numbers.
-        for (const auto &[name, title] :
+        for (const auto &names :
              {std::pair{"Make", "Manufacturer"}, std::pair{"Model", "Model"}, std::pair{"DateTime", "Date and Time"}})
         {
+            const char *name = names.first, *title = names.second;
             const auto reported = entries.find(name);
             if (reported == entries.end())
                 continue;

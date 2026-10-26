@@ -318,7 +318,9 @@ sniff runs on every file a later loader claims, so it must decide from a header-
 
 libheif is the one dependency that finds its own codecs, with `find_package()` calls that only ever turn up
 an installed library, of which Emscripten and a bare Windows runner have none. So the build fetches libaom
-(AVIF) itself under Emscripten, and OpenJPEG whenever no installed copy answers — `imageio/j2k.cpp` needs it
+(AVIF) itself under Emscripten and on a macOS with none installed (a release runner installs no libraries, since a
+Homebrew bottle requires the macOS it was built on; `.github/scripts/check-macos-dmg.sh` holds every binary in the
+DMG to the app's `LSMinimumSystemVersion`), and OpenJPEG whenever no installed copy answers — `imageio/j2k.cpp` needs it
 too — in `CMakeLists.txt` just above the libheif block, reaching libheif through the `<pkg>-extra.cmake`
 files it writes into `CMAKE_FIND_PACKAGE_REDIRECTS_DIR`: CPM already leaves a redirect config there for every
 package it adds, and the `-extra.cmake` fills in the `AOM_*`/`OPENJPEG_*` variables libheif's own find
@@ -331,7 +333,9 @@ AVIF has two AV1 decoders in play. libaom is always there, and is also the AVIF 
 be, but dav1d decodes several times faster, so `HDRVIEW_ENABLE_DAV1D` asks libheif for its dav1d plugin too
 and libheif then prefers it (plugin priority 150 vs libaom's 100). Output is bit-identical, AV1 decoding
 being specified exactly. dav1d builds only under meson, so unlike libaom there is no CPM fallback: the CMake
-block finds a system dav1d or leaves AVIF on libaom, as currently happens on Windows and Emscripten.
+block finds a system dav1d or leaves AVIF on libaom, as currently happens on Windows and Emscripten. A macOS
+release builds a static dav1d for its deployment target first (`.github/scripts/build-dav1d.sh`) and points the
+configure at it.
 
 Saving has two entries, each opening `draw_save_dialog()` in a fixed `SaveMode`. **Save as...** writes the image's
 data, whole or cropped to the selection. **Export rendition...** writes what the view shows, blended with the

@@ -1,5 +1,7 @@
 name: Publish to releases and github.io website
 
+# A run from a tag publishes; one dispatched from a branch is a dry run, which builds and checks everything and
+# leaves the packages as workflow artifacts instead.
 on:
   push:
     tags:
@@ -35,12 +37,23 @@ jobs:
             }
 
     steps:
-      # jpeg-xl/libultrahdr/libheif/libpng/imath/cli11/spdlog/fmt are left out: both configs here use -cpm
-      # presets, which build them from source, and the Homebrew packages leak /usr/local/include into the CPM
-      # build's implicit search path on the Intel runner (a default system include dir there, unlike
-      # /opt/homebrew on Apple Silicon), shadowing CPM's own headers and breaking the build.
+      # Tools only, no libraries: a Homebrew bottle requires the macOS it was built on, the runner's, and one
+      # bundled into the app makes the whole app require it. Everything HDRView links is built from source
+      # instead, which check-macos-dmg.sh below holds the DMG to. NASM assembles aom's and dav1d's x86
+      # SIMD code, and meson builds dav1d.
       - name: Install dependencies
-        run: brew install ninja create-dmg dylibbundler little-cms2 aom libde265 x265
+        run: brew install ninja create-dmg dylibbundler nasm meson
+
+      # The runner image comes with some of these installed, which the build would otherwise find and link.
+      # check-macos-dmg.sh names any that this list misses.
+      - name: Remove the runner's libraries
+        run: |
+          installed=$(brew list --formula -1)
+          for lib in aom dav1d libvmaf freetype libpng jpeg-turbo webp libtiff little-cms2 openexr imath libraw \
+                     jpeg-xl highway brotli libheif libde265 x265 openjpeg openjph libultrahdr libexif glfw giflib \
+                     libdeflate; do
+            if grep -qx "$lib" <<<"$installed"; then brew uninstall --ignore-dependencies "$lib"; fi
+          done
 
       - uses: actions/checkout@v5
         with:
@@ -48,7 +61,8 @@ jobs:
 
       - name: Set version variables
         run: |
-          VERSION="${{ github.ref_name }}"
+          VERSION="${{ github.ref_type == 'tag' && github.ref_name || '' }}"
+          VERSION="${VERSION:-$(git describe --tags --always)}"
           VERSION_NO_V="${VERSION#v}"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "VERSION_NO_V=$VERSION_NO_V" >> $GITHUB_ENV
@@ -68,9 +82,13 @@ jobs:
         with:
           key: ${{ matrix.config.os }}-${{ matrix.config.preset }}
 
+      - name: Build dav1d
+        run: .github/scripts/build-dav1d.sh "$RUNNER_TEMP/dav1d"
+
       - name: Configure CMake
         run: |
-          cmake --preset ${{ matrix.config.preset }} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache ${{ matrix.config.flags }}
+          export PKG_CONFIG_PATH="$RUNNER_TEMP/dav1d/lib/pkgconfig"
+          cmake --preset ${{ matrix.config.preset }} -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/dav1d" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache ${{ matrix.config.flags }}
 
       - name: Build
         run: cmake --build --preset ${{ matrix.config.preset }}-release
@@ -98,14 +116,21 @@ jobs:
             fi
           done
 
-      # - name: Archive build artifacts
-      #   uses: actions/upload-artifact@v6
-      #   with:
-      #     name: build-artifacts-${{ matrix.config.os }}-${{ matrix.config.preset }}
-      #     path: |
-      #       ${{github.workspace}}/build/${{ matrix.config.preset }}
+      # The build tree's assets go first: a binary looks for them there before its own bundle, which would hide
+      # any missing from the DMG.
+      - name: Checking the DMG
+        run: |
+          mv build/${{ matrix.config.preset }}/assets build/${{ matrix.config.preset }}/assets.aside
+          .github/scripts/check-macos-dmg.sh build/${{ matrix.config.preset }}/HDRView-*.dmg
+
+      - name: Archive DMG
+        uses: actions/upload-artifact@v6
+        with:
+          name: dmg-${{ matrix.config.preset }}
+          path: ${{github.workspace}}/build/${{ matrix.config.preset }}/HDRView-*.dmg
 
       - name: Release
+        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v3
         with:
           files: "${{github.workspace}}/build/${{ matrix.config.preset }}/HDRView-*.dmg"
@@ -139,7 +164,8 @@ jobs:
 
       - name: Set version variables
         run: |
-          VERSION="${{ github.ref_name }}"
+          VERSION="${{ github.ref_type == 'tag' && github.ref_name || '' }}"
+          VERSION="${VERSION:-$(git describe --tags --always)}"
           VERSION_NO_V="${VERSION#v}"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "VERSION_NO_V=$VERSION_NO_V" >> $GITHUB_ENV
@@ -179,14 +205,16 @@ jobs:
       - name: Checking that the AppImage runs
         run: xvfb-run -a ${{github.workspace}}/.github/scripts/check-appimage.sh ${{github.workspace}}/build/${{ matrix.config.preset }}/*.appimage
 
-      # - name: Archive build artifacts
-      #   uses: actions/upload-artifact@v6
-      #   with:
-      #     name: build-artifacts-${{ matrix.config.os }}-${{ matrix.config.preset }}-${{ env.BUILD_TYPE }}
-      #     path: |
-      #       ${{github.workspace}}/build/${{ matrix.config.preset }}/${{ env.BUILD_TYPE }}
+      - name: Archive AppImage
+        uses: actions/upload-artifact@v6
+        with:
+          name: appimage-${{ matrix.config.arch }}
+          path: |
+            ${{github.workspace}}/build/${{ matrix.config.preset }}/*.appimage
+            ${{github.workspace}}/build/${{ matrix.config.preset }}/*.appimage.zsync
 
       - name: Release
+        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v3
         with:
           files: |
@@ -221,7 +249,8 @@ jobs:
 
       - name: Set version variables
         run: |
-          $VERSION = "${{ github.ref_name }}"
+          $VERSION = "${{ github.ref_type == 'tag' && github.ref_name || '' }}"
+          if (-not $VERSION) { $VERSION = git describe --tags --always }
           if ($VERSION.StartsWith('v')) {
             $VERSION_NO_V = $VERSION.Substring(1)
           } else {
@@ -263,6 +292,7 @@ jobs:
           directory: ${{github.workspace}}/build/${{ matrix.config.preset }}/deploy
 
       - name: Release
+        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v3
         with:
           files: |
@@ -336,7 +366,7 @@ jobs:
       # peaceiris/actions-gh-pages' default "wipe the deploy scope first" cannot delete the other's files
 
       - name: Publish final release to /release
-        if: ${{ !contains(github.ref_name, '-') }}
+        if: ${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
         uses: peaceiris/actions-gh-pages@v4
         with:
           personal_token: ${{ secrets.GITHUB_TOKEN }}
@@ -345,7 +375,7 @@ jobs:
           publish_dir: ${{github.workspace}}/build/emscripten/deploy
 
       - name: Publish prerelease to /dev
-        if: ${{ contains(github.ref_name, '-') }}
+        if: ${{ github.ref_type == 'tag' && contains(github.ref_name, '-') }}
         uses: peaceiris/actions-gh-pages@v4
         with:
           personal_token: ${{ secrets.GITHUB_TOKEN }}
@@ -356,13 +386,13 @@ jobs:
       # The root is a static redirect to /release/, redeployed each final release. keep_files: true since its
       # destination_dir is the branch root, unlike the steps above.
       - name: Stage root redirect
-        if: ${{ !contains(github.ref_name, '-') }}
+        if: ${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
         run: |
           mkdir -p "${{github.workspace}}/build/emscripten/root_redirect"
           cp resources/gh-pages-redirect.html "${{github.workspace}}/build/emscripten/root_redirect/index.html"
 
       - name: Publish root redirect
-        if: ${{ !contains(github.ref_name, '-') }}
+        if: ${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
         uses: peaceiris/actions-gh-pages@v4
         with:
           personal_token: ${{ secrets.GITHUB_TOKEN }}

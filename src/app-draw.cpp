@@ -453,7 +453,8 @@ void HDRViewApp::draw_image() const
         shader.set_uniform("fsp.rolloff_ceiling", m_rolloff.ceiling);
         shader.set_uniform("fsp.rolloff_has_peak", (int)m_rolloff.has_peak);
         shader.set_uniform("fsp.rolloff_peak", m_rolloff.peak);
-        shader.set_uniform("fsp.do_dither", (int)m_dither);
+        shader.set_uniform("fsp.dither_step",
+                           m_dither ? display_dither(m_display_cs, m_color_managed, m_float_buffer).image_shader : 0.f);
         shader.set_uniform("fsp.blend_mode", (int)m_blend_mode);
         shader.set_uniform("fsp.channel", (int)m_channel);
         shader.set_uniform("fsp.bg_mode", (int)m_bg_mode);

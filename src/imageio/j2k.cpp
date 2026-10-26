@@ -739,7 +739,9 @@ void save_j2k_image(const Image &img, ostream &os, string_view filename, const J
     const bool             icc  = jp2 && (tf.type != TransferFunction::sRGB || wide) && ICCProfile::can_label(tf);
 
     int  w = 0, h = 0, n = 0;
-    auto pixels = img.as_interleaved<uint16_t>(&w, &h, &n, tf, params->dither, true, /*convert_to_sRGB*/ !icc);
+    // samples at the file's depth, so the dither is a step of it
+    auto pixels =
+        img.as_interleaved<uint16_t>(&w, &h, &n, tf, params->dither, true, /*convert_to_sRGB*/ !icc, false, bit_depth);
     if (!pixels || w <= 0 || h <= 0 || n < 1 || n > 4)
         throw runtime_error{"JPEG 2000: unsupported image dimensions or channel count"};
 
@@ -796,11 +798,10 @@ void save_j2k_image(const Image &img, ostream &os, string_view filename, const J
     if (has_alpha)
         img_out->comps[n - 1].alpha = 1;
 
-    const int shift = 16 - bit_depth;
     for (int c = 0; c < n; ++c)
     {
         OPJ_INT32 *dst = img_out->comps[c].data;
-        for (size_t i = 0, num = (size_t)w * h; i < num; ++i) dst[i] = (OPJ_INT32)(pixels[i * n + c] >> shift);
+        for (size_t i = 0, num = (size_t)w * h; i < num; ++i) dst[i] = (OPJ_INT32)pixels[i * n + c];
     }
 
     opj_cparameters_t cp;

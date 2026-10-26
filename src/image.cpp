@@ -165,113 +165,114 @@ Texture *Image::white_texture() { return s_white_texture.get(); }
 Texture *Image::dither_texture() { return s_dither_texture.get(); }
 Texture *Image::chromaticity_texture() { return s_chromaticity_texture.get(); }
 
-const std::set<std::string> &Image::loadable_formats()
+const std::vector<std::pair<std::string, std::vector<std::string>>> &Image::loadable_format_groups()
 {
-    static const std::set<std::string> formats = {
-        "dng",
-        "jpg",
-        "jpeg",
-#if HDRVIEW_ENABLE_LIBJXL
-        "jxl",
-#endif
-#if HDRVIEW_ENABLE_J2K
-        "jp2",
-        "j2k",
-        "j2c",
-        "jpc",
-        "jpf",
-        "jpx",
-        "jpm",
-        "jph",
-        "jhc",
-#endif
-#if HDRVIEW_ENABLE_LIBHEIF
-        "heif",
-        "heifs",
-        "hej2",
-#endif
-#if HDRVIEW_ENABLE_HEIC
-        "heic",
-        "heics",
-#endif
+    static const std::vector<std::pair<std::string, std::vector<std::string>>> groups = {
 #if HDRVIEW_ENABLE_AVIF
-        "avif",
-        "avifs",
+        {"AVIF", {"avif", "avifs"}},
+#endif
+        {"Camera raw",
+         {
+             "dng",
+#if HDRVIEW_ENABLE_LIBRAW
+             // the RAW formats LibRaw reads
+             "3fr",
+             "arw",
+             "bay",
+             "bmq",
+             "cap",
+             "cine",
+             "cr2",
+             "cr3",
+             "crw",
+             "cs1",
+             "dc2",
+             "dcr",
+             "drf",
+             "dsc",
+             "erf",
+             "fff",
+             "ia",
+             "iiq",
+             "k25",
+             "kc2",
+             "kdc",
+             "mdc",
+             "mef",
+             "mos",
+             "mrw",
+             "nef",
+             "nrw",
+             "orf",
+             "pef",
+             "ptx",
+             "pxn",
+             "qtk",
+             "raf",
+             "raw",
+             "rdc",
+             "rw2",
+             "rwl",
+             "rwz",
+             "sr2",
+             "srf",
+             "srw",
+             "sti",
+#if HDRVIEW_ENABLE_X3F
+             "x3f",
+#endif
+#endif
+         }},
+        {"DDS", {"dds"}},
+#if HDRVIEW_ENABLE_LIBHEIF
+        {"HEIF",
+         {
+             "heif",
+             "heifs",
+             "hej2",
+#if HDRVIEW_ENABLE_HEIC
+             "heic",
+             "heics",
 #endif
 #if HDRVIEW_ENABLE_AVCI
-        "avci",
-        "avcs",
+             "avci",
+             "avcs",
 #endif
-        "pic",
-        "png",
-        "pnm",
-        "pgm",
-        "ppm",
-        "bmp",
-        "dds",
-        "psd",
-        "pfm",
-        "tga",
-        "gif",
-        "hdr",
-        "exr",
-        "qoi",
+         }},
+#endif
+        {"JPEG", {"jpg", "jpeg"}},
+#if HDRVIEW_ENABLE_J2K
+        {"JPEG 2000", {"jp2", "j2k", "j2c", "jpc", "jpf", "jpx", "jpm", "jph", "jhc"}},
+#endif
+#if HDRVIEW_ENABLE_LIBJXL
+        {"JPEG XL", {"jxl"}},
+#endif
+        {"Netpbm", {"pnm", "pgm", "ppm"}},
+        {"OpenEXR", {"exr"}},
+        {"PFM", {"pfm"}},
+        {"Photoshop", {"psd"}},
+        {"PNG", {"png"}},
+        {"QOI", {"qoi"}},
+        {"Radiance HDR", {"hdr"}},
 #if HDRVIEW_ENABLE_LIBTIFF
-        "tif",
-        "tiff",
-#endif
-#if HDRVIEW_ENABLE_LIBRAW
-        // RAW formats supported by LibRaw
-        "bay",
-        "bmq",
-        "cr2",
-        "cr3",
-        "crw",
-        "cs1",
-        "dc2",
-        "dcr",
-        "erf",
-        "fff",
-        "k25",
-        "kdc",
-        "mdc",
-        "mos",
-        "mrw",
-        "nef",
-        "orf",
-        "pef",
-        "pxn",
-        "raf",
-        "raw",
-        "rdc",
-        "sr2",
-        "srf",
-#if HDRVIEW_ENABLE_X3F
-        "x3f",
-#endif
-        "arw",
-        "3fr",
-        "cine",
-        "ia",
-        "kc2",
-        "mef",
-        "nrw",
-        "qtk",
-        "rw2",
-        "sti",
-        "rwl",
-        "srw",
-        "drf",
-        "dsc",
-        "ptx",
-        "cap",
-        "iiq",
-        "rwz",
+        {"TIFF", {"tif", "tiff"}},
 #endif
 #if HDRVIEW_ENABLE_LIBWEBP
-        "webp",
+        {"WebP", {"webp"}},
 #endif
+        {"Other", {"bmp", "gif", "pic", "tga"}},
     };
+    return groups;
+}
+
+const std::set<std::string> &Image::loadable_formats()
+{
+    static const std::set<std::string> formats = []
+    {
+        std::set<std::string> all;
+        for (const auto &group : loadable_format_groups()) all.insert(group.second.begin(), group.second.end());
+        return all;
+    }();
     return formats;
 }
 

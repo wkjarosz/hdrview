@@ -564,7 +564,7 @@ void RegisterTests_Screenshots(ImGuiTestEngine *engine)
             c->SetRef("");
         };
 
-        const size_t before = hdrview()->current_image()->history.size();
+        const int before = hdrview()->current_image()->history.size();
         blur(ctx, 48.f);
         wait_until(ctx, [before] { return hdrview()->current_image()->history.size() > before; });
 
@@ -573,7 +573,7 @@ void RegisterTests_Screenshots(ImGuiTestEngine *engine)
         // a test thread cannot undo safely -- textures rebuild on the main thread.
         for (const char *name : {"Invert", "Clamp to [0,1]"})
         {
-            const size_t n = hdrview()->current_image()->history.size();
+            const int n = hdrview()->current_image()->history.size();
             ctx->SetRef("##MainMenuBar");
             ctx->MenuClick(edit_menu_item(name).c_str());
             ctx->SetRef("");
