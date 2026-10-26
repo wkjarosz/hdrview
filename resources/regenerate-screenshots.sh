@@ -81,8 +81,10 @@ for png in "$HDRVIEW_SCREENSHOT_DIR"/screenshot-*.png; do
     rm "$png"
 done
 
+# The dithering pair's 8-bit values are tripled, as saved: one code of banding is at the edge of what a screen
+# shows, and a uniform gain on the quantized values widens each step to three codes without hiding or adding any.
 for png in "$HDRVIEW_SCREENSHOT_DIR"/screenshot-dither-*.png; do
-    [[ -e "$png" ]] && "$magick" "$png" -alpha off -strip "$png"
+    [[ -e "$png" ]] && "$magick" "$png" -alpha off -strip -evaluate multiply 3 "$png"
 done
 
 echo

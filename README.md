@@ -20,11 +20,11 @@ Most image viewers are built to display and browse images. You can of course do 
 - Shadow and highlight clip warnings via zebra striping, with adjustable thresholds.
 - Continuous zoom from 1:100 to 512:1, fit-to-display-window / data-window / selection, and mirroring the view horizontally and vertically.
 
-A smooth gradient on an SDR display, with dithering off and on:
+A smooth gradient on an SDR display, with dithering off and on, each brightened 3× after being saved as 8-bit so the one-step bands are easier to see:
 
 | Dithering off | Dithering on |
 |---|---|
-| ![A smooth gradient with dithering off, showing bands one 8-bit code apart](resources/screenshot-dither-off.png) | ![The same gradient with dithering on, without bands](resources/screenshot-dither-on.png) |
+| ![A smooth gradient with dithering off, showing bands](resources/screenshot-dither-off.png) | ![The same gradient with dithering on, without bands](resources/screenshot-dither-on.png) |
 
 **True HDR output** — HDRView asks the display what it can actually show and converts to it, rather than assuming sRGB:
 
