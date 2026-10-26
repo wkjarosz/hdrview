@@ -804,11 +804,14 @@ public:
         samples. `premultiply_encoded` then multiplies them back once the transfer has been applied, which
         is the associated-alpha convention every TIFF writer uses -- and is not the same as leaving
         `unpremultiply` off, which would multiply in linear light instead. See imageio/alpha.h.
+
+        An integer `T` is filled to its full range, or, given `bits` fewer than it has, to that depth's
+        (2^bits - 1), so that the dither is a step of the depth the file stores.
     */
     template <typename T>
     std::unique_ptr<T[]> as_interleaved(int *w, int *h, int *n, TransferFunction tf = {TransferFunction::Linear, 1.f},
                                         bool dither = true, bool unpremultiply = true, bool convert_to_sRGB = true,
-                                        bool premultiply_encoded = false) const;
+                                        bool premultiply_encoded = false, int bits = 0) const;
 
     void draw_histogram();
     void draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_current, bool is_reference,
@@ -867,8 +870,12 @@ std::unique_ptr<uint8_t[]> widen_to_rgb(const uint8_t *src, int w, int h, int n,
 
 template <typename T>
 std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, TransferFunction tf, bool dither, bool unpremultiply,
-                                           bool convert_to_sRGB, bool premultiply_encoded) const
+                                           bool convert_to_sRGB, bool premultiply_encoded, int bits) const
 {
+    // the largest code an integer T is filled to
+    float max_code = 0.f;
+    if constexpr (std::is_integral_v<T>)
+        max_code = bits > 0 ? float((1u << bits) - 1u) : float(std::numeric_limits<T>::max());
     const ChannelGroup &group = groups[selected_group];
 
     *w = size().x;
@@ -890,7 +897,7 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, TransferFunct
         // process RGB channels together
         parallel_for(blocked_range<int>(0, *h, block_size),
                      [this, alpha, w = *w, n = *n, data = pixels.get(), tf, dither, unpremultiply, convert_to_sRGB,
-                      luminance_chroma, premultiply_encoded](int begin_y, int end_y, int, int)
+                      luminance_chroma, premultiply_encoded, max_code](int begin_y, int end_y, int, int)
                      {
                          int y_stride = w * n;
                          for (int y = begin_y; y < end_y; ++y)
@@ -923,13 +930,13 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, TransferFunct
                                  auto rgba_pixel = data + y * y_stride + n * x;
                                  for (int c = 0; c < 3; ++c)
                                      rgba_pixel[c] = (std::is_integral_v<T>)
-                                                         ? quantize_full<T>(rgb_out[c], x, y, dither)
+                                                         ? quantize_full<T>(rgb_out[c], x, y, dither, max_code)
                                                          : T(rgb_out[c]);
 
                                  // Copy alpha if present
                                  if (alpha)
                                      rgba_pixel[3] = std::is_integral_v<T>
-                                                         ? quantize_full<T>((*alpha)(x, y), x, y, dither)
+                                                         ? quantize_full<T>((*alpha)(x, y), x, y, dither, max_code)
                                                          : T((*alpha)(x, y));
                              }
                      });
@@ -938,8 +945,8 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, TransferFunct
     {
         // A one- or two-channel group: a lone channel, a U,V pair, or gray plus alpha.
         parallel_for(blocked_range<int>(0, *h, block_size),
-                     [this, alpha, w = *w, n = *n, data = pixels.get(), tf, dither, unpremultiply,
-                      premultiply_encoded](int begin_y, int end_y, int, int)
+                     [this, alpha, w = *w, n = *n, data = pixels.get(), tf, dither, unpremultiply, premultiply_encoded,
+                      max_code](int begin_y, int end_y, int, int)
                      {
                          int y_stride  = w * n;
                          int num_color = alpha ? n - 1 : n;
@@ -959,12 +966,13 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, TransferFunct
                                      if (alpha && premultiply_encoded)
                                          v *= (*alpha)(x, y);
 
-                                     out[c] = std::is_integral_v<T> ? quantize_full<T>(v, x, y, dither) : T(v);
+                                     out[c] =
+                                         std::is_integral_v<T> ? quantize_full<T>(v, x, y, dither, max_code) : T(v);
                                  }
 
                                  if (alpha)
                                      out[num_color] = std::is_integral_v<T>
-                                                          ? quantize_full<T>((*alpha)(x, y), x, y, dither)
+                                                          ? quantize_full<T>((*alpha)(x, y), x, y, dither, max_code)
                                                           : T((*alpha)(x, y));
                              }
                      });

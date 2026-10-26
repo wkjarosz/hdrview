@@ -7,14 +7,26 @@
 
 #pragma once
 
+#include "shared/dither.h"
+
 #include <cstdint>
 
-void           create_dither_texture();
+void create_dither_texture();
+/// The dither texture's width and height, a power of two.
 int            dither_texture_width();
 const uint8_t *dither_texture_data();
 
-/// Zero-mean dither uniformly distributed in range (-0.5, 0.5)
-float box_dither(int x, int y);
+/// Zero-mean dither uniformly distributed in range (-0.5, 0.5).
+/**
+    Inline, since saving quantizes every sample through it: the texture, made once, is held here, and its width,
+    a power of two, wraps \p x and \p y with a mask.
+*/
+inline float box_dither(int x, int y)
+{
+    static const uint8_t *data = dither_texture_data();
+    static const int      mask = dither_texture_width() - 1;
+    return shader::box_from_rank(data[(x & mask) + (y & mask) * (mask + 1)]);
+}
 
-/// Zero-mean dither with a triangle-shaped distribution in range (-0.5,0.5)
-float tent_dither(int x, int y);
+/// Zero-mean dither with a triangle-shaped distribution in range (-0.5, 0.5).
+inline float tent_dither(int x, int y) { return shader::tent_from_box(box_dither(x, y)); }

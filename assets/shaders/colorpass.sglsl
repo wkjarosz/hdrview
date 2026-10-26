@@ -19,6 +19,7 @@ void main()
 // color math shared with C++; see src/shared/shim.h
 @include ../../src/shared/shim.h
 @include ../../src/shared/colorspace.h
+@include ../../src/shared/dither.h
 
 layout(binding=0) uniform colorpass_params {
     int   tf_type;        // TransferFunction::Type_ the display wants
@@ -28,10 +29,14 @@ layout(binding=0) uniform colorpass_params {
     float min_nits;       // display's reported minimum luminance, in nits (0.0 == unknown)
     float max_nits;       // display's reported maximum luminance, in nits (0.0 == unknown)
     mat3  gamut_matrix;   // Rec.709 -> display primaries; identity when they already match
+    float dither_step;    // the step the encoded output is dithered by, or 0 for none
+    vec2  randomness;     // a per-frame offset into the dither texture
 } cpp;
 
 layout(binding=0) uniform texture2D color_texture;
 layout(binding=0) uniform sampler   color_sampler;
+layout(binding=1) uniform texture2D dither_texture;
+layout(binding=1) uniform sampler   dither_sampler;
 
 in vec2 uv;
 
@@ -64,6 +69,13 @@ void main()
         // everything else is defined relative to a reference white. wp_color_manager_v1's ext_srgb shares
         // sRGB's curve, which from_linear() sign-extends; a transfer it does not know is left linear.
         encoded = from_linear(nits / cpp.tf_white_nits, cpp.tf_type, cpp.tf_gamma);
+
+    // dithered in the display's own encoding, as the image shader dithers its own output; see display_dither()
+    if (cpp.dither_step > 0.0)
+    {
+        float rank = texture(sampler2D(dither_texture, dither_sampler), (gl_FragCoord.xy + cpp.randomness) / 256.0).r;
+        encoded += vec3(2.0 * tent_from_box(box_from_rank(rank * 255.0)) * cpp.dither_step);
+    }
 
     frag_color = vec4(encoded, color.a);
 }

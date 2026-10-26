@@ -4,6 +4,8 @@
 #include "image.h"
 #include "texture.h"
 
+#include <random>
+
 using namespace std;
 
 void HDRViewApp::setup_rendering()
@@ -202,6 +204,13 @@ void HDRViewApp::end_colorpass_frame()
     m_colorpass_shader->set_uniform("cpp.min_nits", m_display_cs.min_nits);
     m_colorpass_shader->set_uniform("cpp.max_nits", m_display_cs.max_nits);
     m_colorpass_shader->set_uniform("cpp.gamut_matrix", m_gamut_matrix);
+    // a different offset into the dither texture each frame, as the image shader takes
+    static mt19937 rng(97);
+    m_colorpass_shader->set_uniform(
+        "cpp.dither_step", m_dither ? display_dither(m_display_cs, m_color_managed, m_float_buffer).colorpass : 0.f);
+    m_colorpass_shader->set_uniform(
+        "cpp.randomness", float2{generate_canonical<float, 10>(rng) * 255, generate_canonical<float, 10>(rng) * 255});
+    m_colorpass_shader->set_texture("dither_texture", Image::dither_texture());
     m_colorpass_shader->begin();
     m_colorpass_shader->draw_array(Shader::PrimitiveType::Triangle, 0, 6, false);
     m_colorpass_shader->end();

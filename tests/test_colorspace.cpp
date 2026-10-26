@@ -8,6 +8,7 @@
 
 #include "colorspace.h"
 #include "common.h" // for blend_mode_names()
+#include "display_colorspace.h"
 #include "image.h"
 
 #include <algorithm>
@@ -60,8 +61,9 @@ TEST_CASE("to_linear/from_linear round-trip for every TransferFunction")
     }
 }
 
-TEST_CASE("full-range quantization round-trips within its error and keeps non-finite input representable, and "
-          "narrow range maps the studio range to [0,1]")
+TEST_CASE("full-range quantization round-trips within its error and keeps non-finite input representable, its "
+          "dither averages a value to itself at every depth a file stores, and narrow range maps the studio range "
+          "to [0,1]")
 {
     for (float x : {0.0f, 0.1f, 0.25f, 0.5f, 0.75f, 0.9f, 1.0f})
     {
@@ -79,11 +81,97 @@ TEST_CASE("full-range quantization round-trips within its error and keeps non-fi
     CHECK(quantize_full<uint8_t>(inf, 0, 0, false) == 255);
     CHECK(quantize_full<uint8_t>(-inf, 0, 0, false) == 0);
 
+    // Dithered, at every depth a writer stores, read at every texel of the dither texture: a value on the target's
+    // grid comes back as its code, and any other averages to itself, and lands within a step and a half of it.
+    const int  width   = dither_texture_width();
+    const auto dithers = [width](auto zero, int bits)
+    {
+        using T              = decltype(zero);
+        const float max_code = float((1u << bits) - 1u);
+        CAPTURE(bits);
+
+        int off_grid = 0;
+        for (int k = 0; k <= int(max_code); k += std::max(1, int(max_code) / 509))
+            for (int y = 0; y < width; y += 5)
+                for (int x = 0; x < width; x += 3)
+                    off_grid += quantize_full<T>(k / max_code, x, y, true, max_code) != k;
+        CHECK(off_grid == 0);
+
+        // mid-range, where the noise is triangular, and within a step of either end, where it is uniform
+        const float middle = std::round(0.37f * max_code);
+        for (float want : {middle + 0.1f, middle + 0.25f, middle + 0.5f, middle + 0.73f, 0.3f, max_code - 0.3f})
+        {
+            CAPTURE(want);
+            double sum   = 0.0;
+            float  worst = 0.f;
+            for (int y = 0; y < width; ++y)
+                for (int x = 0; x < width; ++x)
+                {
+                    const float got = quantize_full<T>(want / max_code, x, y, true, max_code);
+                    sum += got;
+                    worst = std::max(worst, std::abs(got - want));
+                }
+            CHECK(std::abs(sum / (width * width) - want) < 0.01);
+            CHECK(worst < 1.5f);
+        }
+    };
+    dithers(uint8_t{}, 8);
+    dithers(uint16_t{}, 10);
+    dithers(uint16_t{}, 12);
+    dithers(uint16_t{}, 16);
+
+    // 8-bit data is on the 16-bit grid too, at 257 times its code
+    int widened = 0;
+    for (int k = 0; k < 256; ++k)
+        for (int x = 0; x < width; x += 7) widened += quantize_full<uint16_t>(k / 255.f, x, k, true) != k * 257;
+    CHECK(widened == 0);
+
+    // the noise itself, shared with the shaders: centered, and triangular, whose variance on (-0.5, 0.5) is 1/24
+    double mean = 0.0, variance = 0.0;
+    for (int y = 0; y < width; ++y)
+        for (int x = 0; x < width; ++x)
+        {
+            const double d = tent_dither(x, y);
+            mean += d;
+            variance += d * d;
+        }
+    mean /= width * width;
+    variance /= width * width;
+    CHECK(std::abs(mean) < 1e-4);
+    CHECK(variance == doctest::Approx(1.0 / 24.0).epsilon(0.02));
+
     // narrow (studio) range packs luma into 16..235 at 8 bits, and into those codes shifted up 8 bits at 16
     CHECK(dequantize_narrow<uint8_t>(16) == doctest::Approx(0.f));
     CHECK(dequantize_narrow<uint8_t>(235) == doctest::Approx(1.f));
     CHECK(dequantize_narrow<uint16_t>(16 * 256) == doctest::Approx(0.f));
     CHECK(dequantize_narrow<uint16_t>(235 * 256) == doctest::Approx(1.f));
+}
+
+TEST_CASE("a display is dithered once, by a step of the depth it shows")
+{
+    DisplayColorSpace sdr, pq, hlg;
+    pq.tf  = TransferFunction{TransferFunction::BT2100_PQ};
+    hlg.tf = TransferFunction{TransferFunction::BT2100_HLG};
+
+    // an 8-bit SDR framebuffer, and a floating-point one (macOS EDR or scRGB), are dithered as the image shader
+    // draws them, whether or not a colorpass then converts them
+    for (bool color_managed : {false, true})
+    {
+        CAPTURE(color_managed);
+        CHECK(display_dither(sdr, color_managed, false).image_shader == doctest::Approx(1.f / 255.f));
+        CHECK(display_dither(sdr, color_managed, false).colorpass == 0.f);
+        CHECK(display_dither(sdr, color_managed, true).image_shader == doctest::Approx(1.f / 1023.f));
+        CHECK(display_dither(sdr, color_managed, true).colorpass == 0.f);
+    }
+
+    // PQ and HLG once the colorpass has encoded them, at 10 bits, and not before as well
+    for (const auto &display : {pq, hlg})
+        for (bool float_buffer : {false, true})
+        {
+            CAPTURE(float_buffer);
+            CHECK(display_dither(display, true, float_buffer).image_shader == 0.f);
+            CHECK(display_dither(display, true, float_buffer).colorpass == doctest::Approx(1.f / 1023.f));
+        }
 }
 
 TEST_CASE("color_u32_to_f128/color_f128_to_u32 round-trip exactly")

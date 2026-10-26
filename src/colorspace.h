@@ -437,9 +437,17 @@ inline float dequantize_full<float>(float v)
     return v;
 }
 
-/// see https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#QUANTIZATION_FULL
+/// \p v quantized to the full range of an integer \p T, dithered at pixel (\p x, \p y) when \p dither.
+/**
+    See https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#QUANTIZATION_FULL. An
+    unsigned \p T may hold fewer bits than it has, which \p max_code, the largest code it stores (2^bits - 1),
+    says. Dithering adds up to a step of triangular noise, so that a value averages to itself rather than
+    rounding to its nearest code, except to a value within 1/64 of a step of a code, which is that code: data
+    already on the target's grid, such as an 8-bit image saved at 8 bits or 16, comes back exactly.
+*/
 template <typename T>
-T quantize_full(float v, int x = 0, int y = 0, bool dither = true)
+T quantize_full(float v, int x = 0, int y = 0, bool dither = true,
+                [[maybe_unused]] float max_code = float(std::numeric_limits<T>::max()))
 {
     constexpr auto min_val = std::numeric_limits<T>::min();
     constexpr auto max_val = std::numeric_limits<T>::max();
@@ -457,13 +465,13 @@ T quantize_full(float v, int x = 0, int y = 0, bool dither = true)
     }
     else
     {
-        // unsigned normalized, map [0, 1] to [min, max]
-        float ci = v * max_val;
-        // Symmetric triangular distribution on [-1, 1] for general case; uniform distribution on [-0.5,
-        // 0.5] when near boundary
-        float d =
-            (ci - 1.f + 0.5f < 0.0 || ci + 1.f + 0.5f >= max_val + 1.0f) ? box_dither(x, y) : 2.f * tent_dither(x, y);
-        return (T)std::clamp(ci + (dither ? d : 0.f) + 0.5f, (float)min_val, (float)max_val);
+        // unsigned normalized, map [0, 1] to [0, max_code]
+        float ci = v * max_code;
+        if (dither && std::abs(ci - std::floor(ci + 0.5f)) > 1.f / 64.f)
+            // triangular on [-1, 1], but uniform on [-0.5, 0.5] within a step of either end, where the clamp
+            // would otherwise fold the wider noise back onto the end code and bias it
+            ci += (ci < 0.5f || ci + 1.5f >= max_code + 1.f) ? box_dither(x, y) : 2.f * tent_dither(x, y);
+        return (T)std::clamp(ci + 0.5f, 0.f, max_code);
     }
 }
 
