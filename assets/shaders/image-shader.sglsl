@@ -30,15 +30,17 @@ void main()
 }
 @end
 
-@fs fs
+// The fragment shader is two programs from these three blocks: image_shader, the viewer, and image_preview, the same
+// with an edit dialog's preview applied to the current image's samples. The preview's sampling inlines into a far
+// longer program, which takes seconds to link on some drivers, so the viewer does without it.
+
+@block fs_common
 // constants and per-pixel math shared with C++; see src/shared/shim.h
 @include ../../src/shared/shim.h
 @include ../../src/shared/constants.h
 @include ../../src/shared/colorspace.h
 @include ../../src/shared/pipeline.h
 @include ../../src/shared/dither.h
-@include ../../src/shared/edits.h
-@include ../../src/shared/envmap.h
 
 layout(binding=1) uniform fs_params {
     int   has_reference;              // whether a reference image is blended with the current one
@@ -147,12 +149,19 @@ float sample_channel(texture2D tex, sampler smp, vec2 uv, bool within_image)
     return within_image ? value : 0.0;
 }
 
+@end
+
+@block fs_preview_code
+@include ../../src/shared/edits.h
+@include ../../src/shared/envmap.h
+
 /// Texel \p p of \p tex at \p level; a slot showing no channel is a single texel, read wherever \p p is.
 float fetch_channel(texture2D tex, sampler smp, ivec2 p, int level)
 {
-    ivec2 n = textureSize(sampler2D(tex, smp), 0);
-    return n.x == 1 && n.y == 1 ? texelFetch(sampler2D(tex, smp), ivec2(0), 0).r
-                                : texelFetch(sampler2D(tex, smp), p, level).r;
+    // one fetch whichever it is: every read the previews make inlines this, many times over
+    ivec2 n   = textureSize(sampler2D(tex, smp), 0);
+    bool  one = n.x == 1 && n.y == 1;
+    return texelFetch(sampler2D(tex, smp), one ? ivec2(0) : p, one ? 0 : level).r;
 }
 
 /// Texel \p p of the four shown channels at \p level.
@@ -298,6 +307,9 @@ vec4 edit_preview(vec4 value, vec2 uv, bool in_img)
     return edited;
 }
 
+@end
+
+@block fs_main
 void main()
 {
     vec2 pixel      = vec2(gl_FragCoord.x, -gl_FragCoord.y);
@@ -371,4 +383,18 @@ void main()
 }
 @end
 
+@fs fs
+@include_block fs_common
+// the viewer's: the samples as they are
+vec4 edit_preview(vec4 value, vec2 uv, bool in_img) { return value; }
+@include_block fs_main
+@end
+
+@fs fs_preview
+@include_block fs_common
+@include_block fs_preview_code
+@include_block fs_main
+@end
+
 @program image_shader vs fs
+@program image_preview vs fs_preview

@@ -680,8 +680,8 @@ public:
     int next_visible_group_index(int index, Direction_ direction) const;
     int nth_visible_group_index(int n) const;
 
-    static void set_null_texture(Target_ target = Target_Primary);
-    void        set_as_texture(Target_ target = Target_Primary);
+    static void set_null_texture(Target_ target, Shader &shader);
+    void        set_as_texture(Target_ target, Shader &shader);
 
     static constexpr int k_slot_white = -1; ///< A shader slot bound to a texture of ones
     static constexpr int k_slot_black = -2; ///< A shader slot bound to a texture of zeros

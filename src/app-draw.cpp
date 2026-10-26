@@ -386,7 +386,16 @@ void HDRViewApp::draw_tool_decorations() const
 
 void HDRViewApp::draw_image() const
 {
-    auto set_color = [this](Target_ target, ConstImagePtr img)
+    // An edit dialog's preview, applied to the current image's samples as stored (see edit_preview()), through the
+    // shader that has it, once the first preview has made it; the viewer's draws until then, and whenever nothing
+    // edits the samples, a retag included, which the color matrix below shows.
+    const EditPreview *preview = edit_preview();
+    const EditPreview  shown   = preview ? *preview : EditPreview{};
+    const ShaderEdit   edit    = shader_edit(shown);
+    const bool         editing = edit.op != shader::EDIT_NONE && m_preview_shader;
+    Shader            &shader  = editing ? *m_preview_shader : *m_shader;
+
+    auto set_color = [this, &shader](Target_ target, ConstImagePtr img)
     {
         float4x4 M_to_sRGB{la::identity};
         int      luminance_chroma = 0;
@@ -399,8 +408,8 @@ void HDRViewApp::draw_image() const
             const ChannelGroup &group     = img->groups[group_idx];
 
             // an edit preview that retags the current image shows it through the matrix the new tag gives
-            const auto *preview = target == Target_Primary ? edit_preview() : nullptr;
-            M_to_sRGB           = padded(preview && preview->M_to_sRGB ? *preview->M_to_sRGB : img->M_to_sRGB);
+            const EditPreview *retag = target == Target_Primary ? edit_preview() : nullptr;
+            M_to_sRGB                = padded(retag && retag->M_to_sRGB ? *retag->M_to_sRGB : img->M_to_sRGB);
             luminance_chroma =
                 (int)(group.type == ChannelGroup::YC_Channels || group.type == ChannelGroup::YCA_Channels);
             straight_alpha = (int)(img->transparency == TransparencyType_Straight);
@@ -410,10 +419,10 @@ void HDRViewApp::draw_image() const
         // Each target reports its own alpha convention, since choose_channel() isolates each image's channels
         // with that image's alpha, before the two are blended.
         const string prefix = (target == Target_Primary) ? "fsp.primary_" : "fsp.secondary_";
-        m_shader->set_uniform(prefix + "M_to_sRGB", M_to_sRGB);
-        m_shader->set_uniform(prefix + "luminance_chroma", luminance_chroma);
-        m_shader->set_uniform(prefix + "yw", yw);
-        m_shader->set_uniform(prefix + "straight_alpha", straight_alpha);
+        shader.set_uniform(prefix + "M_to_sRGB", M_to_sRGB);
+        shader.set_uniform(prefix + "luminance_chroma", luminance_chroma);
+        shader.set_uniform(prefix + "yw", yw);
+        shader.set_uniform(prefix + "straight_alpha", straight_alpha);
     };
 
     set_color(Target_Primary, current_image());
@@ -430,65 +439,64 @@ void HDRViewApp::draw_image() const
 
         // fs_params/vs_params are GLSL uniform blocks (see image-shader.sglsl); booleans are `int` there
         // since GLSL uniform blocks cannot contain `bool` members.
-        m_shader->set_uniform("fsp.time", (float)ImGui::GetTime());
-        m_shader->set_uniform("fsp.clip_warnings", int2{m_clip_warnings});
-        m_shader->set_uniform("fsp.clip_range", m_clip_range);
-        m_shader->set_uniform("fsp.randomness", randomness);
-        m_shader->set_uniform("fsp.gain", powf(2.0f, m_exposure_live));
-        m_shader->set_uniform("fsp.offset", m_offset_live);
-        m_shader->set_uniform("fsp.gamma", m_gamma_live);
-        m_shader->set_uniform("fsp.tonemap_mode", (int)m_tonemap);
-        m_shader->set_uniform("fsp.clamp_to_LDR", (int)m_clamp_to_LDR);
-        m_shader->set_uniform("fsp.rolloff", (int)m_rolloff.enabled);
-        m_shader->set_uniform("fsp.rolloff_preserve_hue", m_rolloff.preserve_hue);
-        m_shader->set_uniform("fsp.rolloff_ceiling", m_rolloff.ceiling);
-        m_shader->set_uniform("fsp.rolloff_has_peak", (int)m_rolloff.has_peak);
-        m_shader->set_uniform("fsp.rolloff_peak", m_rolloff.peak);
-        m_shader->set_uniform("fsp.dither_step",
-                              m_dither ? display_dither(m_display_cs, m_color_managed, m_float_buffer).image_shader
-                                       : 0.f);
-        m_shader->set_uniform("fsp.blend_mode", (int)m_blend_mode);
-        m_shader->set_uniform("fsp.channel", (int)m_channel);
-        m_shader->set_uniform("fsp.bg_mode", (int)m_bg_mode);
-        m_shader->set_uniform("fsp.bg_color", m_bg_color);
-        m_shader->set_uniform("fsp.reverse_colormap", (int)m_reverse_colormap);
-        m_shader->set_uniform("fsp.has_reference", (int)has_reference);
-        // an edit dialog's preview, applied to the current image's samples as stored; see edit_preview()
-        const EditPreview *preview = edit_preview();
-        const EditPreview  shown   = preview ? *preview : EditPreview{};
-        const ShaderEdit   edit    = shader_edit(shown);
-        m_shader->set_uniform("fsp.primary_levels", texture_levels(current_image()));
-        m_shader->set_uniform("fsp.edit_op", edit.op);
-        m_shader->set_uniform("fsp.edit_slots", shown.slots);
-        m_shader->set_uniform("fsp.edit_color", (int)shown.color);
-        m_shader->set_uniform("fsp.edit_rect", shown.rect);
-        m_shader->set_uniform("fsp.edit_p0", edit.p0);
-        m_shader->set_uniform("fsp.edit_p1", edit.p1);
-        m_shader->set_uniform("fsp.edit_m0", edit.m0);
-        m_shader->set_uniform("fsp.edit_m1", edit.m1);
-        m_shader->set_uniform("fsp.edit_i0", edit.i0);
+        shader.set_uniform("fsp.time", (float)ImGui::GetTime());
+        shader.set_uniform("fsp.clip_warnings", int2{m_clip_warnings});
+        shader.set_uniform("fsp.clip_range", m_clip_range);
+        shader.set_uniform("fsp.randomness", randomness);
+        shader.set_uniform("fsp.gain", powf(2.0f, m_exposure_live));
+        shader.set_uniform("fsp.offset", m_offset_live);
+        shader.set_uniform("fsp.gamma", m_gamma_live);
+        shader.set_uniform("fsp.tonemap_mode", (int)m_tonemap);
+        shader.set_uniform("fsp.clamp_to_LDR", (int)m_clamp_to_LDR);
+        shader.set_uniform("fsp.rolloff", (int)m_rolloff.enabled);
+        shader.set_uniform("fsp.rolloff_preserve_hue", m_rolloff.preserve_hue);
+        shader.set_uniform("fsp.rolloff_ceiling", m_rolloff.ceiling);
+        shader.set_uniform("fsp.rolloff_has_peak", (int)m_rolloff.has_peak);
+        shader.set_uniform("fsp.rolloff_peak", m_rolloff.peak);
+        shader.set_uniform("fsp.dither_step",
+                           m_dither ? display_dither(m_display_cs, m_color_managed, m_float_buffer).image_shader : 0.f);
+        shader.set_uniform("fsp.blend_mode", (int)m_blend_mode);
+        shader.set_uniform("fsp.channel", (int)m_channel);
+        shader.set_uniform("fsp.bg_mode", (int)m_bg_mode);
+        shader.set_uniform("fsp.bg_color", m_bg_color);
+        shader.set_uniform("fsp.reverse_colormap", (int)m_reverse_colormap);
+        shader.set_uniform("fsp.has_reference", (int)has_reference);
+        // only the preview's shader reads these, and GL's has no uniforms it does not read
+        if (editing)
+        {
+            shader.set_uniform("fsp.primary_levels", texture_levels(current_image()));
+            shader.set_uniform("fsp.edit_op", edit.op);
+            shader.set_uniform("fsp.edit_slots", shown.slots);
+            shader.set_uniform("fsp.edit_color", (int)shown.color);
+            shader.set_uniform("fsp.edit_rect", shown.rect);
+            shader.set_uniform("fsp.edit_p0", edit.p0);
+            shader.set_uniform("fsp.edit_p1", edit.p1);
+            shader.set_uniform("fsp.edit_m0", edit.m0);
+            shader.set_uniform("fsp.edit_m1", edit.m1);
+            shader.set_uniform("fsp.edit_i0", edit.i0);
+        }
 
         // a reshaping edit's preview lays the quad over the window the result will have, as the view will show it
         if (const Box2i *window = reshaped_window(preview))
         {
             const Box2f  w{*window};
             const float2 lo = vp_pos_at_pixel(w.min, w), hi = vp_pos_at_pixel(w.max, w);
-            m_shader->set_uniform("vsp.primary_pos", lo / viewport_size());
-            m_shader->set_uniform("vsp.primary_scale", (hi - lo) / viewport_size());
+            shader.set_uniform("vsp.primary_pos", lo / viewport_size());
+            shader.set_uniform("vsp.primary_scale", (hi - lo) / viewport_size());
         }
         else
         {
-            m_shader->set_uniform("vsp.primary_pos", image_position(current_image()));
-            m_shader->set_uniform("vsp.primary_scale", image_scale(current_image()));
+            shader.set_uniform("vsp.primary_pos", image_position(current_image()));
+            shader.set_uniform("vsp.primary_scale", image_scale(current_image()));
         }
-        m_shader->set_uniform("vsp.secondary_pos", secondary_pos);
-        m_shader->set_uniform("vsp.secondary_scale", secondary_scale);
+        shader.set_uniform("vsp.secondary_pos", secondary_pos);
+        shader.set_uniform("vsp.secondary_scale", secondary_scale);
 
-        m_shader->set_texture("colormap", Colormap::texture(m_colormaps[m_colormap_index]));
+        shader.set_texture("colormap", Colormap::texture(m_colormaps[m_colormap_index]));
 
-        m_shader->begin();
-        m_shader->draw_array(Shader::PrimitiveType::Triangle, 0, 6, false);
-        m_shader->end();
+        shader.begin();
+        shader.draw_array(Shader::PrimitiveType::Triangle, 0, 6, false);
+        shader.end();
     }
 
     // ImGui::Begin("Texture window");
@@ -611,16 +619,21 @@ void HDRViewApp::set_image_textures()
     try
     {
         // bind the primary and secondary images, or a placehold black texture when we have no current or
-        // reference image
-        if (auto img = current_image())
-            img->set_as_texture(Target_Primary);
-        else
-            Image::set_null_texture(Target_Primary);
+        // reference image, to both image shaders, the preview's once it is made
+        for (Shader *shader : {m_shader.get(), m_preview_shader.get()})
+        {
+            if (!shader)
+                continue;
+            if (auto img = current_image())
+                img->set_as_texture(Target_Primary, *shader);
+            else
+                Image::set_null_texture(Target_Primary, *shader);
 
-        if (auto ref = reference_image())
-            ref->set_as_texture(Target_Secondary);
-        else
-            Image::set_null_texture(Target_Secondary);
+            if (auto ref = reference_image())
+                ref->set_as_texture(Target_Secondary, *shader);
+            else
+                Image::set_null_texture(Target_Secondary, *shader);
+        }
     }
     catch (const exception &e)
     {

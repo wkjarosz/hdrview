@@ -14,10 +14,21 @@
 
 #include <spdlog/fmt/fmt.h>
 
+#if defined(HELLOIMGUI_USE_GLFW3) && !defined(__EMSCRIPTEN__)
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
+#endif
+
+// GL_KHR_parallel_shader_compile's, which glad's headers predate
+#if !defined(GL_COMPLETION_STATUS_KHR)
+#define GL_COMPLETION_STATUS_KHR 0x91B1
+#endif
+
 using std::string;
 using std::string_view;
 
-static GLuint compile_gl_shader(GLenum type, string_view name, string_view shader_string)
+/// A shader stage of \p type compiling \p shader_string, which a background build leaves the driver to finish.
+static GLuint start_gl_shader(GLenum type, string_view shader_string)
 {
     if (shader_string.empty())
         return (GLuint)0;
@@ -27,6 +38,14 @@ static GLuint compile_gl_shader(GLenum type, string_view name, string_view shade
     const GLchar *files[] = {shader_string.data()};
     CHK(glShaderSource(id, 1, files, nullptr));
     CHK(glCompileShader(id));
+    return id;
+}
+
+/// Throws if the stage \p id, of \p type and compiled from \p shader_string, failed to compile.
+static void check_gl_shader(GLuint id, GLenum type, string_view name, string_view shader_string)
+{
+    if (!id)
+        return;
 
     GLint status;
     CHK(glGetShaderiv(id, GL_COMPILE_STATUS, &status));
@@ -52,33 +71,86 @@ static GLuint compile_gl_shader(GLenum type, string_view name, string_view shade
             fmt::format("compile_gl_shader(): unable to compile {} \"{}\":\n\n{}\n\nshader source:\n\n{}", type_str,
                         name, error_shader, add_line_numbers(shader_string)));
     }
+}
 
-    return id;
+bool Shader::builds_in_background()
+{
+#if defined(HELLOIMGUI_USE_GLFW3) && !defined(__EMSCRIPTEN__)
+    // Off until asked for: NVIDIA's driver, for one, links on the calling thread until told how many threads it may
+    // use, which 0xFFFFFFFF leaves to it.
+    static const bool on = []
+    {
+        typedef void(APIENTRYP MaxThreads)(GLuint);
+        for (auto [extension, function] :
+             {std::pair{"GL_KHR_parallel_shader_compile", "glMaxShaderCompilerThreadsKHR"},
+              std::pair{"GL_ARB_parallel_shader_compile", "glMaxShaderCompilerThreadsARB"}})
+            if (glfwExtensionSupported(extension))
+                if (auto max_threads = (MaxThreads)glfwGetProcAddress(function))
+                {
+                    max_threads(0xFFFFFFFFu);
+                    return true;
+                }
+        return false;
+    }();
+    return on;
+#else
+    return false;
+#endif
 }
 
 Shader::Shader(RenderPass *render_pass, const std::string &name, const std::string &vs_source,
-               const std::string &fs_source, BlendMode blend_mode) :
+               const std::string &fs_source, BlendMode blend_mode, bool background) :
     m_render_pass(render_pass), m_name(name), m_blend_mode(blend_mode), m_shader_handle(0)
 {
-    GLuint vertex_shader_handle   = compile_gl_shader(GL_VERTEX_SHADER, name, vs_source),
-           fragment_shader_handle = compile_gl_shader(GL_FRAGMENT_SHADER, name, fs_source);
+    m_pending_shaders[0] = start_gl_shader(GL_VERTEX_SHADER, vs_source);
+    m_pending_shaders[1] = start_gl_shader(GL_FRAGMENT_SHADER, fs_source);
+    m_pending_sources[0] = vs_source;
+    m_pending_sources[1] = fs_source;
 
     m_shader_handle = glCreateProgram();
+    CHK(glAttachShader(m_shader_handle, m_pending_shaders[0]));
+    CHK(glAttachShader(m_shader_handle, m_pending_shaders[1]));
+    CHK(glLinkProgram(m_shader_handle));
+
+    // asking for any of the results waits for them, which a background build leaves to ready()
+    if (!(background && builds_in_background()))
+        finish_build();
+}
+
+bool Shader::ready()
+{
+    if (!m_pending_shaders[0])
+        return true;
+
+    GLint done = GL_FALSE;
+    CHK(glGetProgramiv(m_shader_handle, GL_COMPLETION_STATUS_KHR, &done));
+    if (done != GL_TRUE)
+        return false;
+
+    finish_build();
+    return true;
+}
+
+void Shader::finish_build()
+{
+    check_gl_shader(m_pending_shaders[0], GL_VERTEX_SHADER, m_name, m_pending_sources[0]);
+    check_gl_shader(m_pending_shaders[1], GL_FRAGMENT_SHADER, m_name, m_pending_sources[1]);
+    CHK(glDeleteShader(m_pending_shaders[0]));
+    CHK(glDeleteShader(m_pending_shaders[1]));
+    m_pending_shaders[0] = m_pending_shaders[1] = 0;
+#if defined(HELLOIMGUI_USE_GLAD)
+    m_uses_point_size = m_pending_sources[0].find("gl_PointSize") != std::string::npos;
+#endif
+    m_pending_sources[0].clear();
+    m_pending_sources[1].clear();
 
     GLint status;
-    CHK(glAttachShader(m_shader_handle, vertex_shader_handle));
-    CHK(glAttachShader(m_shader_handle, fragment_shader_handle));
-    CHK(glLinkProgram(m_shader_handle));
-    CHK(glDeleteShader(vertex_shader_handle));
-    CHK(glDeleteShader(fragment_shader_handle));
     CHK(glGetProgramiv(m_shader_handle, GL_LINK_STATUS, &status));
-
     if (status != GL_TRUE)
     {
         char error_shader[4096];
         CHK(glGetProgramInfoLog(m_shader_handle, sizeof(error_shader), nullptr, error_shader));
-        m_shader_handle = 0;
-        throw std::runtime_error("Shader::Shader(name=\"" + name + "\"): unable to link shader!\n\n" + error_shader);
+        throw std::runtime_error("Shader::Shader(name=\"" + m_name + "\"): unable to link shader!\n\n" + error_shader);
     }
 
     GLint attribute_count, uniform_count;
@@ -249,13 +321,14 @@ Shader::Shader(RenderPass *render_pass, const std::string &name, const std::stri
 
 #if defined(HELLOIMGUI_USE_GLAD)
     CHK(glGenVertexArrays(1, &m_vertex_array_handle));
-
-    m_uses_point_size = vs_source.find("gl_PointSize") != std::string::npos;
 #endif
 }
 
 Shader::~Shader()
 {
+    for (GLuint stage : m_pending_shaders)
+        if (stage)
+            CHK(glDeleteShader(stage));
     CHK(glDeleteProgram(m_shader_handle));
 #if defined(HELLOIMGUI_USE_GLAD)
     CHK(glDeleteVertexArrays(1, &m_vertex_array_handle));
