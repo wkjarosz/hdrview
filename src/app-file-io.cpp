@@ -27,12 +27,10 @@
 #include "imgui.h"
 #include "imgui_ext.h"
 
-#ifdef __EMSCRIPTEN__
 #include "platform_utils.h"
+#ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
 #include <emscripten_browser_file.h>
-#else
-#include "portable-file-dialogs.h"
 #endif
 
 using namespace std;
@@ -577,8 +575,18 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
 
         ImGui::SameLine();
 
+        // the native dialog this asks for the file name with is out of reach (see init_file_dialogs())
+        bool no_dialog = !file_dialog_problem().empty();
+#if defined(HDRVIEW_ENABLE_GUI_TEST_ENGINE)
+        no_dialog = no_dialog && m_test_save_path.empty();
+#endif
         string filename;
-        if (ImGui::Button(save_as_name.c_str(), ImVec2{save_w, 0.f}))
+        ImGui::BeginDisabled(no_dialog);
+        const bool save_clicked = ImGui::Button(save_as_name.c_str(), ImVec2{save_w, 0.f});
+        ImGui::EndDisabled();
+        if (no_dialog)
+            ImGui::Tooltip(fmt::format("File dialogs are unavailable: {}.", file_dialog_problem()).c_str());
+        if (save_clicked)
         {
             filename = current_image()->path.stem().u8string() + save_extension;
 #if defined(HDRVIEW_ENABLE_GUI_TEST_ENGINE)
@@ -587,9 +595,10 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
             else
 #endif
 #if !defined(__EMSCRIPTEN__)
-                filename = pfd::save_file(save_as_name.c_str(), filename,
-                                          {string(save_format_names[save_format]) + " images", save_extension})
-                               .result();
+                filename = save_file_path(save_as_name.c_str(), filename,
+                                          {{string(save_format_names[save_format]) + " images",
+                                            save_extension.substr(save_extension.rfind('.') + 1)}},
+                                          m_params.backendPointers.glfwWindow);
 #endif
         }
 
@@ -764,16 +773,22 @@ void HDRViewApp::open_image()
             }
         });
 #else
-    string extensions = fmt::format("*.{} *.zip", fmt::join(Image::loadable_formats(), " *."));
-
-    load_images(pfd::open_file("Open image(s)", "", {"Image files", extensions}, pfd::opt::multiselect).result());
+    // every format at once to begin with, then one at a time, since the Linux dialogs spell out each filter's
+    // extensions in its name, which across all of them is a long one
+    vector<FileFilter> filters{{"All images", fmt::format("{},zip", fmt::join(Image::loadable_formats(), ","))}};
+    for (const auto &[name, extensions] : Image::loadable_format_groups())
+        filters.push_back({name, fmt::format("{}", fmt::join(extensions, ","))});
+    filters.push_back({"Zip archives", "zip"});
+    load_images(open_file_paths("Open image(s)", filters, true, m_params.backendPointers.glfwWindow));
 #endif
 }
 
 void HDRViewApp::open_folder()
 {
 #if !defined(__EMSCRIPTEN__)
-    load_images({pfd::select_folder("Open images in folder", "").result()});
+    if (const string folder = folder_path("Open images in folder", m_params.backendPointers.glfwWindow);
+        !folder.empty())
+        load_images({folder});
 #endif
 }
 
@@ -1191,7 +1206,8 @@ void HDRViewApp::save_session()
         return;
 
 #if !defined(__EMSCRIPTEN__)
-    string filename = pfd::save_file("Save session...", "session.hsess", {"HDRView session", "*.hsess"}).result();
+    string filename = save_file_path("Save session", "session.hsess", {{"HDRView session", "hsess"}},
+                                     m_params.backendPointers.glfwWindow);
     if (filename.empty())
         return;
 
@@ -1226,8 +1242,8 @@ void HDRViewApp::export_session_bundle()
         return;
 
 #if !defined(__EMSCRIPTEN__)
-    string filename =
-        pfd::save_file("Export session bundle...", "session.hsess.zip", {"HDRView session bundle", "*.zip"}).result();
+    string filename = save_file_path("Export session bundle", "session.hsess.zip", {{"HDRView session bundle", "zip"}},
+                                     m_params.backendPointers.glfwWindow);
     if (filename.empty())
         return;
 
@@ -1334,10 +1350,10 @@ struct HDRViewApp::LoadingSession
 void HDRViewApp::load_session()
 {
 #if !defined(__EMSCRIPTEN__)
-    auto selected = pfd::open_file("Load session...", "", {"HDRView session", "*.hsess *.zip"}).result();
-    if (selected.empty())
-        return;
-    load_session(selected.front());
+    const auto selected =
+        open_file_paths("Load session", {{"HDRView session", "hsess,zip"}}, false, m_params.backendPointers.glfwWindow);
+    if (!selected.empty())
+        load_session(selected.front());
 #endif
 }
 
