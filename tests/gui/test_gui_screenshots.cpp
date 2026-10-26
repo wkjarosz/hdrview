@@ -115,6 +115,17 @@ std::string palette_subject()
     return v.empty() ? std::string{} : v.front();
 }
 
+/// The image the dithering shots zoom into, or empty to skip them.
+/**
+    It wants a smooth gradient that an 8-bit display bands, such as the falloff of light around a caustic.
+    HDRVIEW_SCREENSHOT_DITHER_VIEW frames it as "x,y,zoom": the pixel to center and the zoom to show it at.
+*/
+std::string dither_subject()
+{
+    auto v = path_list(getenv("HDRVIEW_SCREENSHOT_DITHER_IMAGE"));
+    return v.empty() ? std::string{} : v.front();
+}
+
 /// Saves the whole frame to `<HDRVIEW_SCREENSHOT_DIR>/<name>.png`.
 /**
     Names no capture windows: with none, the capture tool takes the main viewport's rect as-is.
@@ -168,7 +179,7 @@ void load_subjects(ImGuiTestContext *ctx)
     install_log_sink();
 
     auto paths = subjects();
-    for (const auto &extra : {diff_subject(), palette_subject()})
+    for (const auto &extra : {diff_subject(), palette_subject(), dither_subject()})
         if (!extra.empty())
             paths.push_back(extra);
 
@@ -516,6 +527,42 @@ void RegisterTests_Screenshots(ImGuiTestEngine *engine)
         hdrview()->tonemap()    = Tonemap_Gamma;
         hdrview()->blend_mode() = BlendMode_Normal;
         hdrview()->set_reference_image_index(-1, true);
+    };
+
+    // one smooth gradient on an 8-bit display with dithering off, where it bands, and on, where it does not.
+    // Only a window without color management shows this: its framebuffer is the 8-bit one the dither is
+    // sized for, where an HDR window's capture reads its float target, dithered at 10 bits, which the PNG's 8
+    // then band regardless. Under xvfb-run, as on any SDR display, there is none.
+    t           = IM_REGISTER_TEST(engine, "screenshots", "dither");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        const std::string subject = dither_subject();
+        if (subject.empty())
+        {
+            ctx->LogWarning("HDRVIEW_SCREENSHOT_DITHER_IMAGE names no image; skipping the dithering shots");
+            return;
+        }
+        IM_CHECK(hdrview()->capture_source() == nullptr);
+
+        load_subjects(ctx);
+        reset_view(ctx);
+        IM_CHECK(select_image_containing(fs::path(subject).stem().string()));
+
+        float       x = 0.f, y = 0.f, zoom = 0.f;
+        const char *view = getenv("HDRVIEW_SCREENSHOT_DITHER_VIEW");
+        if (view && sscanf(view, "%f,%f,%f", &x, &y, &zoom) == 3)
+            zoom_to_pixel(zoom, int2{int(x), int(y)});
+        else
+        {
+            ctx->SetRef("##MainMenuBar");
+            ctx->MenuClick("View/Fit display window");
+            ctx->SetRef("");
+        }
+
+        hdrview()->dithering_on() = false;
+        capture(ctx, "screenshot-dither-off");
+        hdrview()->dithering_on() = true;
+        capture(ctx, "screenshot-dither-on");
     };
 
     // an edit confined to a selection, and the History panel that says what was done and what redo would

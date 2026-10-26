@@ -17,6 +17,9 @@
 # want recognizable content, one being marked up with an arrow that points at something and the other
 # blurring part of the frame. The annotation and blur geometry is placed as fractions of the image, tuned
 # for the still life below, so pointing this elsewhere still draws them, just not around anything.
+# HDRVIEW_SCREENSHOT_DITHER_IMAGE is the smooth gradient the dithering pair shows, framed by
+# HDRVIEW_SCREENSHOT_DITHER_VIEW as "x,y,zoom". That pair needs an SDR window, so on an HDR desktop run this
+# under `xvfb-run -a -s "-screen 0 1920x1080x24"`.
 # HDRVIEW_SCREENSHOT_ZOOM_PIXEL is the "x,y" the zoomed-in shot centers on; without it the harness picks the
 # strongest edge it can find, which is serviceable but rarely the most telling spot in a photograph.
 # The screenshots committed to this repository were taken with:
@@ -65,10 +68,12 @@ mkdir -p "$HDRVIEW_SCREENSHOT_DIR"
 # single-pixel-wide glyph edges and one-pixel borders, and subsampling visibly softens them.
 for png in "$HDRVIEW_SCREENSHOT_DIR"/screenshot-*.png; do
     [[ -e "$png" ]] || continue
+    # the dithering pair stays PNG: its whole subject is one code value of noise or banding, which JPEG erases
+    [[ "$png" == *-dither-* ]] && continue
     "$magick" "$png" -sampling-factor 1x1 -quality 92 "${png%.png}.jpg"
     rm "$png"
 done
 
 echo
 echo "Screenshots written to $HDRVIEW_SCREENSHOT_DIR:"
-ls -lh "$HDRVIEW_SCREENSHOT_DIR"/screenshot-*.jpg
+ls -lh "$HDRVIEW_SCREENSHOT_DIR"/screenshot-*.jpg "$HDRVIEW_SCREENSHOT_DIR"/screenshot-dither-*.png 2>/dev/null || true
