@@ -15,9 +15,16 @@ Most image viewers are built to display and browse images. You can of course do 
 **Viewing and tonemapping**
 - Exposure, black-point offset, and gamma, all live.
 - False-color and positive/negative modes over 17 built-in colormaps (Viridis, Turbo, Inferno, Spectral, IceFire, …).
-- Blue-noise dithering when values are quantized for an SDR display or an 8-bit file format, which keeps smooth gradients from banding.
+- Blue-noise dithering matched to the bit depth of the display or of the file being written, which keeps smooth gradients from banding.
+- A highlight rolloff for content brighter than the display: BT.2390's, to SDR white or to the display's peak, following its headroom as it changes.
 - Shadow and highlight clip warnings via zebra striping, with adjustable thresholds.
 - Continuous zoom from 1:100 to 512:1, fit-to-display-window / data-window / selection, and mirroring the view horizontally and vertically.
+
+A smooth gradient on an SDR display, with dithering off and on:
+
+| Dithering off | Dithering on |
+|---|---|
+| ![A smooth gradient with dithering off, showing bands one 8-bit code apart](resources/screenshot-dither-off.png) | ![The same gradient with dithering on, without bands](resources/screenshot-dither-on.png) |
 
 **True HDR output** — HDRView asks the display what it can actually show and converts to it, rather than assuming sRGB:
 
@@ -54,7 +61,11 @@ Below, the two views of a stereo EXR are subtracted from one another and the sig
 
 ![The signed difference between the two views of a stereo EXR, through the IceFire colormap](resources/screenshot-compare.jpg)
 
-**Editing** — HDRView has limited image editing capabilities, including:
+**Saving and exporting**
+- **Save as** writes the image's data, whole or just the selection. **Export rendition** writes what the view shows, with exposure, tonemapping and highlight rolloff applied, for an SDR or HDR display you choose, and each format records the color space and HDR metadata it can hold.
+- A rendition can carry an ISO 21496-1 gain map, as an Ultra HDR JPEG or a JPEG XL file, so one file looks right on both SDR and HDR displays.
+
+**Editing** — HDRView has limited image editing capabilities, which preview live in the viewport as you adjust them, including:
 - Transforms: horizontal and vertical flips, 90° rotations, cropping to the selection, and resizing the image or the canvas.
 - Tonal and color adjustment: exposure/gamma, brightness/contrast, hue/saturation, a channel mixer, invert, clamp, fill, color-space conversion, and zapping non-finite gremlins.
 - Filters: Gaussian and box blur, unsharp mask, median, sub-pixel shift, and bump-to-normal-map.
@@ -127,7 +138,7 @@ Pre-built binaries for every release are on the [releases page](https://github.c
 | Windows (x86_64, ARM64) | `.zip` — the `.exe` plus its `assets` folder |
 | Anything with a browser | [wkjarosz.github.io/hdrview](https://wkjarosz.github.io/hdrview/) |
 
-**macOS.** Copy `HDRView.app` to `/Applications`. The app is unsigned, so macOS will refuse to open it the first time; either allow it under System Settings → Privacy & Security, or run `xattr -dr com.apple.quarantine /Applications/HDRView.app`.
+**macOS.** HDRView needs macOS 11 or later. Copy `HDRView.app` to `/Applications`. The app is unsigned, so macOS will refuse to open it the first time; either allow it under System Settings → Privacy & Security, or run `xattr -dr com.apple.quarantine /Applications/HDRView.app`.
 
 **Windows.** Keep `HDRView.exe` and its `assets` folder together. HDRView declares itself long-path aware in its application manifest, so it can open files at paths longer than 260 characters — but only if the system-wide policy is also on, which HDRView cannot enable for you. To turn it on, run as Administrator:
 
