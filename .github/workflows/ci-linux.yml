@@ -115,17 +115,20 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "VERSION_NO_V=$VERSION_NO_V" >> $GITHUB_ENV
 
-      # Buildtype is part of the key (ccache below already varies by buildtype) so Debug and Release don't race
-      # to overwrite one shared cache entry; restore-keys stays preset-only so either buildtype can seed the other.
+      # One copy of the sources serves every job here: they depend on neither the preset nor the build type, and
+      # a -local preset fetches a subset of a -cpm one. Only the job building the tests, which fetches all of
+      # them, saves it; a copy per job would fill the repository's 10 GB of caches and evict every ccache.
       #
       # path and hashFiles avoid a workspace-root "**", scoped the same way as ci-mac.yml. cpm_modules is
       # always at the workspace root (CPM_SOURCE_CACHE above).
-      - uses: actions/cache@v5
+      - name: Restore CPM sources
+        id: cpm-sources
+        uses: actions/cache/restore@v5
         with:
           path: "cpm_modules"
-          key: ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-${{ matrix.config.sanitizer || 'plain' }}-${{ matrix.buildtype }}-${{ hashFiles('CMakeLists.txt', 'cmake/**/*.cmake') }}
+          key: ${{ github.workflow }}-cpm-modules-${{ hashFiles('CMakeLists.txt', 'cmake/**/*.cmake') }}
           restore-keys: |
-            ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-
+            ${{ github.workflow }}-cpm-modules-
 
       # Setup caching of build artifacts to reduce total build time (only Linux and MacOS)
       - name: ccache
@@ -188,6 +191,14 @@ jobs:
             fi
           fi
 
+
+      # right after configuring, when the sources are complete, so they are saved even if the build fails
+      - name: Save CPM sources
+        if: matrix.config.run_tests == true && !matrix.config.sanitizer && matrix.buildtype == 'Release' && steps.cpm-sources.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: "cpm_modules"
+          key: ${{ steps.cpm-sources.outputs.cache-primary-key }}
       - name: Build
         run: |
           BUILDTYPE_LOWER=$(echo "${{ matrix.buildtype }}" | tr '[:upper:]' '[:lower:]')
