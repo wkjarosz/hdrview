@@ -1103,6 +1103,9 @@ if(HDRVIEW_ENABLE_LIBJXL)
             "JPEGXL_ENABLE_OPENEXR OFF"
             "JPEGXL_ENABLE_DOXYGEN OFF"
             "JPEGXL_ENABLE_MANPAGES OFF"
+            # jpegli needs the libjpeg-turbo submodule, which is not fetched; libjxl would otherwise keep a
+            # build tree's earlier choice to build it
+            "JPEGXL_ENABLE_JPEGLI OFF"
             "JPEGXL_ENABLE_JPEGLI_LIBJPEG OFF"
             "JPEGXL_ENABLE_SKCMS OFF"
             "JPEGXL_ENABLE_VIEWERS OFF"
