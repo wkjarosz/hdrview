@@ -119,6 +119,7 @@ std::string palette_subject()
 /**
     It wants a smooth gradient that an 8-bit display bands, such as the falloff of light around a caustic.
     HDRVIEW_SCREENSHOT_DITHER_VIEW frames it as "x,y,zoom": the pixel to center and the zoom to show it at.
+    HDRVIEW_SCREENSHOT_DITHER_EXPOSURE sets the exposure it is shown at, in stops.
 */
 std::string dither_subject()
 {
@@ -126,11 +127,12 @@ std::string dither_subject()
     return v.empty() ? std::string{} : v.front();
 }
 
-/// Saves the whole frame to `<HDRVIEW_SCREENSHOT_DIR>/<name>.png`.
+/// Saves the whole frame, or just `rect` of it, to `<HDRVIEW_SCREENSHOT_DIR>/<name>.png`.
 /**
-    Names no capture windows: with none, the capture tool takes the main viewport's rect as-is.
+    Names no capture windows: with none, the capture tool takes the main viewport's rect as-is, or `rect` if
+    one is given, in app positions.
 */
-void capture(ImGuiTestContext *ctx, const char *name)
+void capture(ImGuiTestContext *ctx, const char *name, ImRect rect = {})
 {
     // the statistics panel is in every one of these pictures, and its numbers are computed off the main
     // thread: photographed mid-recompute it shows the inf/-inf it holds before any pixel has been counted
@@ -150,6 +152,7 @@ void capture(ImGuiTestContext *ctx, const char *name)
     ctx->CaptureReset();
     // CaptureSetFilename() is compiled only for the Python bindings, so the path goes into the args
     ImStrncpy(ctx->CaptureArgs->InOutputFile, file.c_str(), IM_ARRAYSIZE(ctx->CaptureArgs->InOutputFile));
+    ctx->CaptureArgs->InCaptureRect = rect;
     IM_CHECK(ctx->CaptureScreenshot(ImGuiCaptureFlags_HideMouseCursor));
 }
 
@@ -559,10 +562,28 @@ void RegisterTests_Screenshots(ImGuiTestEngine *engine)
             ctx->SetRef("");
         }
 
+        if (const char *exposure = getenv("HDRVIEW_SCREENSHOT_DITHER_EXPOSURE"))
+            hdrview()->exposure() = hdrview()->exposure_live() = (float)atof(exposure);
+
+        // a square of the image alone, which the README shows at its own size: scaled down, banding and noise
+        // alike average away, and the pair would look the same
+        const float2 center = hdrview()->app_pos_at_vp_pos(hdrview()->viewport_size() / 2.f);
+        const float  half   = 210.f;
+        const ImRect square{center.x - half, center.y - half, center.x + half, center.y + half};
+
+        // without the outlines HDRView draws around the image, which a square framed at its corner would show
+        bool      &data_window    = *hdrview()->action("Draw data window").p_selected;
+        bool      &display_window = *hdrview()->action("Draw display window").p_selected;
+        const bool drew_data = data_window, drew_display = display_window;
+        data_window = display_window = false;
+
         hdrview()->dithering_on() = false;
-        capture(ctx, "screenshot-dither-off");
+        capture(ctx, "screenshot-dither-off", square);
         hdrview()->dithering_on() = true;
-        capture(ctx, "screenshot-dither-on");
+        capture(ctx, "screenshot-dither-on", square);
+
+        data_window    = drew_data;
+        display_window = drew_display;
     };
 
     // an edit confined to a selection, and the History panel that says what was done and what redo would

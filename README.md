@@ -61,20 +61,14 @@ Below, the two views of a stereo EXR are subtracted from one another and the sig
 
 ![The signed difference between the two views of a stereo EXR, through the IceFire colormap](resources/screenshot-compare.jpg)
 
-**Saving and exporting**
-- **Save as** writes the image's data, whole or just the selection. **Export rendition** writes what the view shows, with exposure, tonemapping and highlight rolloff applied, for an SDR or HDR display you choose, and each format records the color space and HDR metadata it can hold.
-- A rendition can carry an ISO 21496-1 gain map, as an Ultra HDR JPEG or a JPEG XL file, so one file looks right on both SDR and HDR displays.
-
-**Editing** — HDRView has limited image editing capabilities, which preview live in the viewport as you adjust them, including:
+**Editing** — HDRView can also perform simple image editing operations, which preview live in the viewport as you adjust them, including:
 - Transforms: horizontal and vertical flips, 90° rotations, cropping to the selection, and resizing the image or the canvas.
 - Tonal and color adjustment: exposure/gamma, brightness/contrast, hue/saturation, a channel mixer, invert, clamp, fill, color-space conversion, and zapping non-finite gremlins.
 - Filters: Gaussian and box blur, unsharp mask, median, sub-pixel shift, and bump-to-normal-map.
 - Operations for manipulating environment maps: converting between spherical parametrizations (angular, mirror ball, longitude-latitude, and cube maps as a cross or a column), and fast irradiance convolution.
 - Channel and layer surgery: flattening, grouping and ungrouping, and deleting a channel group.
 - Mipmap generation.
-- Any of these can be confined to the current selection, and all of them are undoable: the History panel lists the steps and steps back to any one of them.
-
-Below, a Gaussian blur has been applied to a rectangular selection while the rest of the frame stays sharp. The History panel on the right lists the steps taken; the faded ones are those an undo has taken back and a redo would reapply.
+- Any of these can be confined to the current selection (see image below where a Gaussian blur is applied to a rectangular selection), and all of them are undoable: the History panel (bottom right) lists the full undo/redo stack.
 
 ![A blur applied to a rectangular selection, beside the History panel listing the edit steps](resources/screenshot-editing.jpg)
 
@@ -87,8 +81,8 @@ Below, a Gaussian blur has been applied to a rectangular selection while the res
 **Metadata** — EXIF, XMP (as a structured tree and as raw XML), ICC, and format-specific header fields, all filterable.
 
 **Workflow**
-- Watched folders: point HDRView at a directory and it loads new files and reloads changed ones as they appear — useful when a renderer is writing into it.
-- A display server speaking [tev](https://github.com/Tom94/tev)'s protocol, so a renderer — [pbrt](https://pbrt.org) among them — can open images, stream tiles into them as they converge, and lay vector graphics over them: paths, shapes, and text drawn in the image's own coordinates.
+- Watched folders: point HDRView at a directory and it loads new (and reloads changed) files as they appear — useful when renderer into a specific directory.
+- HDRView is a display server speaking [tev](https://github.com/Tom94/tev)'s protocol, so renderers that support that protocol, like [pbrt](https://pbrt.org), can stream pixels for display while rendering.
 - Sessions (`.hsess`) save the image list, view state, and any annotations; an exported session *bundle* zips the images with it, so it can be handed to someone else or opened in the web build.
 - Step through the image list like a flipbook at an adjustable frame rate.
 - A Log window with controllable severity levels and filtering.
@@ -162,19 +156,19 @@ HDRView [OPTIONS] [IMAGES...]
 | `-e`, `--exposure FLOAT` | Power-of-2 exposure value; gain = 2<sup>exposure</sup> (default 0) |
 | `-g`, `--gamma FLOAT` | Gamma for exposure+gamma tonemapping |
 | `--dither` / `--no-dither` | Dithering when converting to LDR (default on) |
-| `--sdr` | Force standard dynamic range output, whatever the display can do |
+| `--sdr` | Force standard dynamic range output |
 | `-v`, `--verbosity INT` | Log threshold, 0 (trace) to 6 (off); default 2 (info) |
 | `--apple-keys` / `--non-apple-keys` | Whether shortcuts use Cmd or Ctrl |
 | `--version` | Print the version, build timestamp, and rendering backend |
 | `-h`, `--help` | Print the full help text |
 
-A positional argument beginning with a colon is a **channel selector** rather than a file, and applies to every image after it until the next one. It takes a comma-separated list of patterns matched against whatever substructure the format has — parts, layers, channels, animation frames — where a leading `-` excludes. So this loads only the depth channels of the first file and everything but the masks from the second:
+A positional argument beginning with a colon is a **channel selector** that applies to every loaded image until the next channel selector. It takes a comma-separated list of patterns matched against whatever contents the image may have — parts, layers, channels, animation frames — where a leading `-` excludes. So this loads only the depth channels of the first file and everything but the masks from the second:
 
 ```bash
 HDRView :Z render.exr :-mask comparison.exr
 ```
 
-On macOS the executable lives inside the bundle, at `HDRView.app/Contents/MacOS/HDRView`; symlink it onto your `PATH` if you want it there.
+On macOS the executable lives inside the bundle, at `HDRView.app/Contents/MacOS/HDRView`; symlink it onto your `PATH` if you want to run HDRView from the command line.
 
 ## Building from source
 
@@ -225,9 +219,7 @@ sudo apt-get install cmake ninja-build xorg-dev libglu1-mesa-dev libxrandr-dev l
   libheif-plugin-dav1d
 ```
 
-`libdav1d-dev` is optional but worth having: it decodes the AV1 in an AVIF several times faster than
-libaom does, and libheif prefers it whenever both are present. Without it AVIF still works, just more
-slowly. See `HDRVIEW_ENABLE_DAV1D`.
+`libdav1d-dev` is optional but worth having since it makes AV1 decoding in AVIF files several times faster. See `HDRVIEW_ENABLE_DAV1D`.
 
 See the workflows under [`.github/workflows/`](.github/workflows) for the other platforms.
 
@@ -252,14 +244,7 @@ cmake --build --preset linux-cpm-release
 ctest --test-dir build/linux-cpm -C Release --output-on-failure
 ```
 
-`HDRVIEW_BUILD_TESTS` builds `hdrview_tests`, a [doctest](https://github.com/doctest/doctest) suite covering color-space round-trips, the loaders, metadata parsing, and export. `HDRVIEW_BUILD_GUI_TESTS` builds `hdrview_gui_tests`, which drives a real HDRView instance through [Dear ImGui Test Engine](https://github.com/ocornut/imgui_test_engine); it needs a display server, so on a headless machine run it under `xvfb-run -a`.
-
-The screenshots in this README are generated by that same GUI harness:
-
-```bash
-./resources/regenerate-screenshots.sh                              # in-tree sample images
-HDRVIEW_SCREENSHOT_IMAGES=~/photos ./resources/regenerate-screenshots.sh   # your own
-```
+`HDRVIEW_BUILD_TESTS` builds `hdrview_tests`, a [doctest](https://github.com/doctest/doctest) suite covering color-space round-trips, the loaders, metadata parsing, and export. `HDRVIEW_BUILD_GUI_TESTS` builds `hdrview_gui_tests`, which drives a real HDRView instance through [Dear ImGui Test Engine](https://github.com/ocornut/imgui_test_engine); on a headless machine it can run under `xvfb-run -a`.
 
 ## License
 
