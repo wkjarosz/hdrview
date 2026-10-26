@@ -210,7 +210,10 @@ So `enable_gui_test_engine()` overrides `ScreenCaptureFunc` with `capture_colorp
 HDRView's extended sRGB, already sRGB-encoded with 1.0 at SDR white, so reading it as fixed-point clamps to
 [0, 1] and quantizes, which is the SDR rendition a PNG wants, with the app still rendering in HDR.
 `capture_source()` returns nullptr when no color management is in force, and then the window's framebuffer
-is already the sRGB one.
+is already the sRGB one. The one exception is the dithering pair (`screenshot-dither-off`/`-on`), which must
+come from such a window: the dither is sized to the output's depth, so an HDR window's float target is
+dithered at 10 bits, and its 8-bit readback bands either way. Shoot it under `xvfb-run`; the script keeps
+that pair as PNG, since JPEG would erase the single code value it shows.
 
 The imgui_test_engine license is non-standard (not MIT) but free for OSI-licensed open-source projects like
 HDRView (see `LICENSE.txt` in the fetched package). CI runs it headlessly only on Linux (`ci-linux.yml`'s

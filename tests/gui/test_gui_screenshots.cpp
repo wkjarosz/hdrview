@@ -115,11 +115,24 @@ std::string palette_subject()
     return v.empty() ? std::string{} : v.front();
 }
 
-/// Saves the whole frame to `<HDRVIEW_SCREENSHOT_DIR>/<name>.png`.
+/// The image the dithering shots zoom into, or empty to skip them.
 /**
-    Names no capture windows: with none, the capture tool takes the main viewport's rect as-is.
+    It wants a smooth gradient that an 8-bit display bands, such as the falloff of light around a caustic.
+    HDRVIEW_SCREENSHOT_DITHER_VIEW frames it as "x,y,zoom": the pixel to center and the zoom to show it at.
+    HDRVIEW_SCREENSHOT_DITHER_EXPOSURE sets the exposure it is shown at, in stops.
 */
-void capture(ImGuiTestContext *ctx, const char *name)
+std::string dither_subject()
+{
+    auto v = path_list(getenv("HDRVIEW_SCREENSHOT_DITHER_IMAGE"));
+    return v.empty() ? std::string{} : v.front();
+}
+
+/// Saves the whole frame, or just `rect` of it, to `<HDRVIEW_SCREENSHOT_DIR>/<name>.png`.
+/**
+    Names no capture windows: with none, the capture tool takes the main viewport's rect as-is, or `rect` if
+    one is given, in app positions.
+*/
+void capture(ImGuiTestContext *ctx, const char *name, ImRect rect = {})
 {
     // the statistics panel is in every one of these pictures, and its numbers are computed off the main
     // thread: photographed mid-recompute it shows the inf/-inf it holds before any pixel has been counted
@@ -139,6 +152,7 @@ void capture(ImGuiTestContext *ctx, const char *name)
     ctx->CaptureReset();
     // CaptureSetFilename() is compiled only for the Python bindings, so the path goes into the args
     ImStrncpy(ctx->CaptureArgs->InOutputFile, file.c_str(), IM_ARRAYSIZE(ctx->CaptureArgs->InOutputFile));
+    ctx->CaptureArgs->InCaptureRect = rect;
     IM_CHECK(ctx->CaptureScreenshot(ImGuiCaptureFlags_HideMouseCursor));
 }
 
@@ -168,7 +182,7 @@ void load_subjects(ImGuiTestContext *ctx)
     install_log_sink();
 
     auto paths = subjects();
-    for (const auto &extra : {diff_subject(), palette_subject()})
+    for (const auto &extra : {diff_subject(), palette_subject(), dither_subject()})
         if (!extra.empty())
             paths.push_back(extra);
 
@@ -516,6 +530,60 @@ void RegisterTests_Screenshots(ImGuiTestEngine *engine)
         hdrview()->tonemap()    = Tonemap_Gamma;
         hdrview()->blend_mode() = BlendMode_Normal;
         hdrview()->set_reference_image_index(-1, true);
+    };
+
+    // one smooth gradient on an 8-bit display with dithering off, where it bands, and on, where it does not.
+    // Only a window without color management shows this: its framebuffer is the 8-bit one the dither is
+    // sized for, where an HDR window's capture reads its float target, dithered at 10 bits, which the PNG's 8
+    // then band regardless. Under xvfb-run, as on any SDR display, there is none.
+    t           = IM_REGISTER_TEST(engine, "screenshots", "dither");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        const std::string subject = dither_subject();
+        if (subject.empty())
+        {
+            ctx->LogWarning("HDRVIEW_SCREENSHOT_DITHER_IMAGE names no image; skipping the dithering shots");
+            return;
+        }
+        IM_CHECK(hdrview()->capture_source() == nullptr);
+
+        load_subjects(ctx);
+        reset_view(ctx);
+        IM_CHECK(select_image_containing(fs::path(subject).stem().string()));
+
+        float       x = 0.f, y = 0.f, zoom = 0.f;
+        const char *view = getenv("HDRVIEW_SCREENSHOT_DITHER_VIEW");
+        if (view && sscanf(view, "%f,%f,%f", &x, &y, &zoom) == 3)
+            zoom_to_pixel(zoom, int2{int(x), int(y)});
+        else
+        {
+            ctx->SetRef("##MainMenuBar");
+            ctx->MenuClick("View/Fit display window");
+            ctx->SetRef("");
+        }
+
+        if (const char *exposure = getenv("HDRVIEW_SCREENSHOT_DITHER_EXPOSURE"))
+            hdrview()->exposure() = hdrview()->exposure_live() = (float)atof(exposure);
+
+        // a square of the image alone, which the README shows at its own size: scaled down, banding and noise
+        // alike average away, and the pair would look the same
+        const float2 center = hdrview()->app_pos_at_vp_pos(hdrview()->viewport_size() / 2.f);
+        const float  half   = 210.f;
+        const ImRect square{center.x - half, center.y - half, center.x + half, center.y + half};
+
+        // without the outlines HDRView draws around the image, which a square framed at its corner would show
+        bool      &data_window    = *hdrview()->action("Draw data window").p_selected;
+        bool      &display_window = *hdrview()->action("Draw display window").p_selected;
+        const bool drew_data = data_window, drew_display = display_window;
+        data_window = display_window = false;
+
+        hdrview()->dithering_on() = false;
+        capture(ctx, "screenshot-dither-off", square);
+        hdrview()->dithering_on() = true;
+        capture(ctx, "screenshot-dither-on", square);
+
+        data_window    = drew_data;
+        display_window = drew_display;
     };
 
     // an edit confined to a selection, and the History panel that says what was done and what redo would
