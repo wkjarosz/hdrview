@@ -1100,8 +1100,9 @@ if(HDRVIEW_ENABLE_LIBJXL)
   CPMAddPackage(
     NAME JXL
     GITHUB_REPOSITORY libjxl/libjxl
-    # VERSION 0.7.0 # version in ubuntu 24.04
-    VERSION 0.11.1
+    # an installed libjxl from 0.12 on, the first release with its security fixes; otherwise 0.13 is built
+    VERSION 0.12.0
+    GIT_TAG v0.13.0
     # only the submodules this configuration builds: the rest are test data, tools, and bundled copies of
     # libraries it takes from elsewhere, and with their history they would be most of the download
     GIT_SHALLOW TRUE
@@ -1117,10 +1118,6 @@ if(HDRVIEW_ENABLE_LIBJXL)
             "JPEGXL_ENABLE_OPENEXR OFF"
             "JPEGXL_ENABLE_DOXYGEN OFF"
             "JPEGXL_ENABLE_MANPAGES OFF"
-            # jpegli needs the libjpeg-turbo submodule, which is not fetched; libjxl would otherwise keep a
-            # build tree's earlier choice to build it
-            "JPEGXL_ENABLE_JPEGLI OFF"
-            "JPEGXL_ENABLE_JPEGLI_LIBJPEG OFF"
             "JPEGXL_ENABLE_SKCMS OFF"
             "JPEGXL_ENABLE_VIEWERS OFF"
             "JPEGXL_ENABLE_PLUGINS OFF"
