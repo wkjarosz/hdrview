@@ -2,7 +2,8 @@
     \author Wojciech Jarosz
 
     Opens and closes the File-menu dialogs, checks that the save and edit dialogs leave the viewport navigable,
-    runs every save format's options panel, and checks what each kind of save writes.
+    runs every save format's options panel, checks what each kind of save writes, and that every request to close
+    or quit asks before discarding unsaved edits.
 */
 
 #include "app.h"
@@ -13,7 +14,9 @@
 #include "imageio/jxl.h"
 #include "imageio/uhdr.h"
 #include "test_gui_registry.h"
+#include <GLFW/glfw3.h>
 #include <hello_imgui/dpi_aware.h>
+#include <hello_imgui/hello_imgui.h>
 
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
@@ -244,7 +247,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             ImGuiTestItemList items;
             ctx->GatherItems(&items, window.c_str(), -1);
             ImVector<ImGuiID> format_ids;
-            const std::string child = std::string(dialog) + "/";
+            const std::string child                = std::string(dialog) + "/";
             bool              lists_gainmap_format = false;
             for (auto &item : items)
                 if (item.Depth == 1 && strstr(item.Window->Name, child.c_str()) != nullptr)
@@ -534,4 +537,59 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             std::filesystem::remove(path);
         };
     }
+
+    // Every request that would discard unsaved edits asks first, and cancelling it leaves everything as it was:
+    // closing the image, closing them all, the Quit command, and the window's close button, which GLFW reports to
+    // Hello ImGui's ConfirmExit, as it does Cmd-Q and Alt-F4.
+    t           = IM_REGISTER_TEST(engine, "dialogs", "unsaved_edits_prompt_before_closing_or_quitting");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        // with nothing unsaved, a request to quit goes ahead without a prompt; asking the callback, rather than
+        // requesting a close, keeps the app running to report it
+        const char *const prompt = "//Discard unsaved changes?";
+        IM_CHECK(!hdrview()->any_image_modified());
+        IM_CHECK(HelloImGui::GetRunnerParams()->callbacks.ConfirmExit());
+        ctx->Yield(2);
+        IM_CHECK(ctx->WindowInfo(prompt, ImGuiTestOpFlags_NoError).Window == nullptr);
+
+        ctx->SetRef("##MainMenuBar");
+        ctx->MenuClick(edit_menu_item("Flip image horizontally").c_str());
+        ctx->SetRef("");
+        IM_CHECK(wait_until(ctx, [] { return hdrview()->any_image_modified(); }));
+
+        auto *const window  = (GLFWwindow *)HelloImGui::GetRunnerParams()->backendPointers.glfwWindow;
+        const auto  exiting = [] { return HelloImGui::GetRunnerParams()->appShallExit; };
+
+        const std::pair<const char *, std::function<void()>> requests[] = {
+            {"Close", [] { hdrview()->action("Close").callback(); }},
+            {"Close all", [] { hdrview()->action("Close all").callback(); }},
+            {"Quit", [] { hdrview()->action("Quit").callback(); }},
+            // glfwSetWindowShouldClose() may be called from any thread, which the window's own button reaches too
+            {"the window's close button", [window] { glfwSetWindowShouldClose(window, GLFW_TRUE); }},
+        };
+        for (const auto &[name, request] : requests)
+        {
+            ctx->LogInfo("Requesting %s", name);
+            request();
+            IM_CHECK(
+                wait_until(ctx, [&] { return ctx->WindowInfo(prompt, ImGuiTestOpFlags_NoError).Window != nullptr; }));
+            IM_CHECK(!exiting());
+            IM_CHECK_EQ(hdrview()->num_images(), 1);
+
+            ctx->SetRef(prompt);
+            ctx->ItemClick("Cancel");
+            ctx->SetRef("");
+            wait_for_window_closed(ctx, prompt);
+            ctx->Yield(2);
+            IM_CHECK(!exiting());
+            IM_CHECK(!glfwWindowShouldClose(window));
+            IM_CHECK_EQ(hdrview()->num_images(), 1);
+            IM_CHECK(hdrview()->any_image_modified());
+        }
+
+        reset_images(ctx);
+    };
 }
