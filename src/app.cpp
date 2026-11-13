@@ -543,6 +543,19 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
                      ImGui::GetIO().ConfigMacOSXBehaviors ? "Apple" : "Windows/Linux");
     };
 
+    // Every request to quit (the Quit command, and the window's close button, Cmd-Q or Alt-F4, which Hello ImGui
+    // passes here from its event polling) asks first when images have unsaved edits: it is refused, and the
+    // "Discard unsaved changes?" prompt quits once answered. No ImGui calls here, since polling precedes the frame.
+    m_params.callbacks.ConfirmExit = [this]
+    {
+        if (!any_image_modified())
+            return true;
+
+        m_pending_discard                       = PendingDiscard::Quit;
+        dialog("Discard unsaved changes?").open = true;
+        return false;
+    };
+
     m_params.callbacks.BeforeExit = [this]
     {
 #if !defined(__EMSCRIPTEN__)
@@ -1045,14 +1058,8 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    0,
                    [this]()
                    {
-                       if (!any_image_modified())
-                       {
+                       if (m_params.callbacks.ConfirmExit())
                            m_params.appShallExit = true;
-                           return;
-                       }
-
-                       m_pending_discard                       = PendingDiscard::Quit;
-                       dialog("Discard unsaved changes?").open = true;
                    }});
 
         add(Action{{"Command palette..."},
