@@ -87,7 +87,7 @@ void Image::make_default_textures()
             rgb        = linear_to_sRGB(rgb / la::maxelem(rgb));
             chromaticity_data[y * grid.size.x + x] =
                 byte4{quantize_full<uint8_t>(rgb.x), quantize_full<uint8_t>(rgb.y), quantize_full<uint8_t>(rgb.z),
-                      grid.inside[y * grid.size.x + x] ? (uint8_t)255 : (uint8_t)0};
+                      grid.in_locus(int2{x, y}) ? (uint8_t)255 : (uint8_t)0};
         }
     }
 
@@ -721,8 +721,7 @@ void ChromaticityBins::calculate(const Image &img, const Settings &desired, std:
     {
         *this    = ChromaticityBins();
         settings = desired;
-
-        const ChromaticityGrid &grid = chromaticity_grid();
+        grid     = chromaticity_grid(desired.M_RGB_to_XYZ);
 
         Box2i roi = img.data_window;
         if (desired.roi.has_volume())

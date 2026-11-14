@@ -12,6 +12,7 @@
 #include "array2d.h"
 #include "async_cache.h"
 #include "box.h"
+#include "chromaticity.h"
 #include "colorspace.h"
 #include "edit/undo.h"
 #include "imageio/exif.h"
@@ -420,7 +421,7 @@ inline float3 group_rgb(ChannelGroup::Type type, int num_channels, float4 raw, f
     return raw.xyz();
 }
 
-/// How many of an image's pixels fall in each texel of chromaticity_grid(), by their CIE 1931 xy.
+/// How many of an image's pixels fall in each texel of a chromaticity grid, by their CIE 1931 xy.
 /**
     A pixel's chromaticity is that of the color group_rgb() gives it, so a premultiplied pixel and its straight
     version count the same, as do any two differing only in exposure. Black and non-finite pixels have none.
@@ -446,7 +447,8 @@ struct ChromaticityBins
     Settings settings;
     bool     computed = false;
 
-    std::vector<uint32_t> counts;        ///< One per texel, row by row; empty until computed
+    ChromaticityGrid      grid;          ///< The grid counted on, chromaticity_grid() of the settings' matrix
+    std::vector<uint32_t> counts;        ///< One per texel of grid, row by row; empty until computed
     uint32_t              max_count = 0; ///< The largest of counts
     int64_t               outside   = 0; ///< Pixels whose chromaticity lies off the grid
     int64_t               skipped   = 0; ///< Pixels with no chromaticity: black, negative, or not finite
@@ -543,13 +545,14 @@ private:
     std::unique_ptr<Texture>     m_chromaticity_density;
     int                          m_chromaticity_density_generation = -1; ///< Of the bins it was built from
 
-    /// The selected group's chromaticity density as an overlay for the diagram's background, or null before any.
+    /// The chromaticity density of \p bins, the current chromaticity_bins(), as an overlay on the diagram, or null.
     /**
-        Black, opaque where the image has no pixels and clear where it has the most, laid out on
-        chromaticity_grid() like chromaticity_texture(). Drawn over it, at the opacity the diagram's layers
-        set, the background keeps its colors only at the chromaticities the image holds.
+        Laid out on the bins' grid. Within the spectral locus it is black, opaque where the image has no pixels and
+        clear where it has the most, so over chromaticity_texture() the background keeps its colors only at the
+        chromaticities the image holds. Outside, where there is no background, it is white where the image has
+        pixels, for drawing tinted in a color that shows against the plot.
     */
-    Texture *chromaticity_density_texture();
+    Texture *chromaticity_density_texture(const ChromaticityBins &bins);
 
 public:
     /// True for an image whose pixels arrive from a running process rather than from a file.

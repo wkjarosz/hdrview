@@ -10,7 +10,6 @@
 
 #include "app.h"
 #include "edit/undo.h"
-#include "fonts.h"
 #include "image.h"
 #include "imageio/icc.h"
 #include "imgui.h"
@@ -26,27 +25,33 @@
 using namespace std;
 using namespace HelloImGui;
 
-Texture *Image::chromaticity_density_texture()
+Texture *Image::chromaticity_density_texture(const ChromaticityBins &bins)
 {
-    const ChromaticityBins *bins = chromaticity_bins(hdrview()->roi());
-    if (!bins->computed)
+    if (!bins.computed)
         return nullptr;
     if (m_chromaticity_density && m_chromaticity_density_generation == m_chromaticity_bins.generation())
         return m_chromaticity_density.get();
 
-    const ChromaticityGrid &grid = chromaticity_grid();
-    if (!m_chromaticity_density)
+    const ChromaticityGrid &grid = bins.grid;
+    if (!m_chromaticity_density || m_chromaticity_density->size() != grid.size)
         m_chromaticity_density = std::make_unique<Texture>(
             Texture::PixelFormat::RGBA, Texture::ComponentFormat::UInt8, grid.size,
             Texture::InterpolationMode::Bilinear, Texture::InterpolationMode::Bilinear, Texture::WrapMode::ClampToEdge);
 
-    // Log density, so a few pixels of a color show beside the millions of a flat background. Nothing is drawn
-    // outside the locus, where there is no background to fade.
-    const float   scale = bins->max_count > 0 ? 1.f / std::log1p(float(bins->max_count)) : 0.f;
-    vector<byte4> data(bins->counts.size(), byte4{0, 0, 0, 0});
-    for (size_t i = 0; i < data.size(); ++i)
-        if (grid.inside[i])
-            data[i].w = quantize_full<uint8_t>(1.f - std::log1p(float(bins->counts[i])) * scale);
+    // Log density, so a few pixels of a color show beside the millions of a flat background. An empty texel
+    // outside the locus is transparent black, so bilinear filtering blends no white into the locus's edge.
+    const float   scale = bins.max_count > 0 ? 1.f / std::log1p(float(bins.max_count)) : 0.f;
+    vector<byte4> data(bins.counts.size(), byte4{0, 0, 0, 0});
+    for (int y = 0; y < grid.size.y; ++y)
+        for (int x = 0; x < grid.size.x; ++x)
+        {
+            const size_t  i       = size_t(y) * grid.size.x + x;
+            const uint8_t density = quantize_full<uint8_t>(std::log1p(float(bins.counts[i])) * scale);
+            if (grid.in_locus(int2{x, y}))
+                data[i].w = 255 - density;
+            else if (bins.counts[i])
+                data[i] = byte4{255, 255, 255, density};
+        }
     m_chromaticity_density->upload((const uint8_t *)data.data());
 
     m_chromaticity_density_generation = m_chromaticity_bins.generation();
@@ -117,16 +122,22 @@ static void draw_layer_toggles(ChromaticityDiagramLayers &layers, float2 plot_mi
     }
     else
     {
-        const float2 button = float2{ImGui::CalcTextSize(ICON_MY_LAYERS)} + 2.f * float2{style.FramePadding};
-        const float2 button_min{plot_max.x - button.x - pad.x, plot_min.y + pad.y};
+        // a down arrow, drawn as Dear ImGui draws a window's collapse button
+        const float  side = ImGui::GetFontSize();
+        const float2 button_min{plot_max.x - side - pad.x, plot_min.y + pad.y};
         ImGui::SetCursorScreenPos(button_min);
-        ImGui::PushStyleColor(ImGuiCol_Button, panel_bg);
-        if (ImGui::Button(ICON_MY_LAYERS))
+        if (ImGui::InvisibleButton("show layers", ImVec2{side, side}))
             ImGui::OpenPopup("layers");
-        ImGui::PopStyleColor();
         ImGui::SetItemTooltip("Layers");
 
-        ImGui::SetNextWindowPos(button_min + button, ImGuiCond_Appearing, ImVec2{1.f, 0.f});
+        auto *draw_list = ImGui::GetWindowDrawList();
+        if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+            draw_list->AddCircleFilled(
+                button_min + float2{0.5f * side, 0.5f * side - 0.5f}, 0.5f * side + 1.f,
+                ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered));
+        ImGui::RenderArrow(draw_list, button_min, ImGui::GetColorU32(ImGuiCol_Text), ImGuiDir_Down, 1.f);
+
+        ImGui::SetNextWindowPos(button_min + float2{side}, ImGuiCond_Appearing, ImVec2{1.f, 0.f});
         if (ImGui::BeginPopup("layers"))
         {
             draw_layer_checkboxes(layers);
@@ -193,10 +204,18 @@ void Image::draw_chromaticity_diagram(float width)
                           ImPlotPoint(grid.min.x, grid.min.y), ImPlotPoint(grid.max.x, grid.max.y), {0.f, 1.f},
                           {1.f, 0.f});
         if (layers.density)
-            if (Texture *density = chromaticity_density_texture())
+        {
+            // tinted, so what lies outside the locus takes the text's color, which shows against the plot
+            const ChromaticityBins &bins = *chromaticity_bins(hdrview()->roi());
+            if (Texture *density = chromaticity_density_texture(bins))
+            {
+                float4 tint = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+                tint.w      = layers.density_opacity;
                 ImPlot::PlotImage("##chromaticity_density", (ImTextureID)density->texture_handle(),
-                                  ImPlotPoint(grid.min.x, grid.min.y), ImPlotPoint(grid.max.x, grid.max.y), {0.f, 1.f},
-                                  {1.f, 0.f}, ImVec4{1.f, 1.f, 1.f, layers.density_opacity});
+                                  ImPlotPoint(bins.grid.min.x, bins.grid.min.y),
+                                  ImPlotPoint(bins.grid.max.x, bins.grid.max.y), {0.f, 1.f}, {1.f, 0.f}, tint);
+            }
+        }
 
         auto normal_to_plot_tangent = [](const float2 &tangent, float pixel_length) -> float2
         {

@@ -10,6 +10,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
+#include <utility>
 
 using namespace std;
 
@@ -44,31 +46,69 @@ bool inside_spectral_locus(float2 xy)
     return in;
 }
 
+/// The bounding box of spectral_locus().
+static std::pair<float2, float2> locus_bounds()
+{
+    float2 lo{numeric_limits<float>::infinity()}, hi{-numeric_limits<float>::infinity()};
+    for (auto p : spectral_locus())
+    {
+        lo = la::min(lo, p);
+        hi = la::max(hi, p);
+    }
+    return {lo, hi};
+}
+
+ChromaticityGrid ChromaticityGrid::covering(float2 lo, float2 hi)
+{
+    ChromaticityGrid g;
+    g.first         = int2(la::floor(lo / texel)) - 1;
+    const int2 last = int2(la::floor(hi / texel)) + 1;
+    g.size          = last - g.first + 1;
+    g.min           = float2(g.first) * texel;
+    g.max           = float2(last + 1) * texel;
+    return g;
+}
+
 const ChromaticityGrid &chromaticity_grid()
 {
     static const ChromaticityGrid grid = []
     {
-        float2 lo{numeric_limits<float>::infinity()}, hi{-numeric_limits<float>::infinity()};
-        for (auto p : spectral_locus())
-        {
-            lo = la::min(lo, p);
-            hi = la::max(hi, p);
-        }
-
-        // every texel the locus touches, and one more beyond it on each side
-        const int2 first = int2(la::floor(lo / ChromaticityGrid::texel)) - 1;
-        const int2 last  = int2(la::floor(hi / ChromaticityGrid::texel)) + 1;
-
-        ChromaticityGrid g;
-        g.size = last - first + 1;
-        g.min  = float2(first) * ChromaticityGrid::texel;
-        g.max  = float2(last + 1) * ChromaticityGrid::texel;
-
-        g.inside.resize(size_t(g.size.x) * g.size.y);
-        for (int y = 0; y < g.size.y; ++y)
-            for (int x = 0; x < g.size.x; ++x)
-                g.inside[size_t(y) * g.size.x + x] = inside_spectral_locus(g.center(int2{x, y}));
-        return g;
+        auto [lo, hi] = locus_bounds();
+        return ChromaticityGrid::covering(lo, hi);
     }();
     return grid;
+}
+
+bool ChromaticityGrid::in_locus(int2 t) const
+{
+    // the locus lies within chromaticity_grid(), so only its texels need testing, once
+    const ChromaticityGrid      &locus = chromaticity_grid();
+    static const vector<uint8_t> mask  = [&locus]
+    {
+        vector<uint8_t> m(size_t(locus.size.x) * locus.size.y);
+        for (int y = 0; y < locus.size.y; ++y)
+            for (int x = 0; x < locus.size.x; ++x)
+                m[size_t(y) * locus.size.x + x] = inside_spectral_locus(locus.center(int2{x, y}));
+        return m;
+    }();
+
+    const int2 q = t + first - locus.first;
+    return locus.contains(q) && mask[size_t(q.y) * locus.size.x + q.x];
+}
+
+ChromaticityGrid chromaticity_grid(const float3x3 &M_RGB_to_XYZ)
+{
+    static constexpr float k_reach_lo = -0.5f, k_reach_hi = 1.5f;
+
+    auto [lo, hi] = locus_bounds();
+    // the primaries, M's columns, and the white point, where RGB (1, 1, 1) lands
+    for (float3 XYZ : {M_RGB_to_XYZ[0], M_RGB_to_XYZ[1], M_RGB_to_XYZ[2], mul(M_RGB_to_XYZ, float3{1.f})})
+    {
+        const float2 xy = XYZ.xy() / (XYZ.x + XYZ.y + XYZ.z);
+        if (!std::isfinite(xy.x) || !std::isfinite(xy.y))
+            continue;
+        lo = la::min(lo, la::max(xy, float2{k_reach_lo}));
+        hi = la::max(hi, la::min(xy, float2{k_reach_hi}));
+    }
+    return ChromaticityGrid::covering(lo, hi);
 }
