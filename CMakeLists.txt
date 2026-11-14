@@ -1813,6 +1813,7 @@ set(HDRVIEW_SOURCES
     src/app-windows.cpp
     src/app-zoom.cpp
     src/app.cpp
+    src/chromaticity.cpp
     src/colormap.cpp
     src/colorspace.cpp
     src/common.cpp
@@ -1991,7 +1992,7 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   CPMAddPackage(NAME doctest VERSION 2.4.11 URL https://github.com/doctest/doctest/archive/refs/tags/v2.4.11.tar.gz)
 
   list(REMOVE_ITEM HDRVIEW_SOURCES src/hdrview.cpp)
-  add_executable(hdrview_tests ${HDRVIEW_SOURCES} tests/test_pixel_stats.cpp tests/test_colorspace.cpp
+  add_executable(hdrview_tests ${HDRVIEW_SOURCES} tests/test_pixel_stats.cpp tests/test_chromaticity.cpp tests/test_colorspace.cpp
                                 tests/test_exr_io.cpp tests/test_png_io.cpp tests/test_tiff_io.cpp tests/test_gainmap.cpp
                                 tests/test_alpha.cpp tests/test_image_groups.cpp tests/test_assets.cpp tests/test_long_paths.cpp tests/test_loader_limits.cpp tests/test_streams.cpp tests/test_library_versions.cpp tests/test_colour_reference.cpp tests/test_hdr_metadata.cpp tests/test_rolloff_settings.cpp
                                 tests/test_short_names.cpp tests/test_path_helpers.cpp tests/test_index_helpers.cpp tests/test_psd_metadata.cpp tests/test_endian_utils.cpp

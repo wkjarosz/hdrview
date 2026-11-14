@@ -4,6 +4,7 @@
 // be found in the LICENSE.txt file.
 //
 
+#include "chromaticity.h"
 #include "colorspace.h"
 #include "fwd.h"
 
@@ -65,8 +66,10 @@ void Image::draw_chromaticity_diagram(float width)
         //
         // plot background texture
         //
+        const ChromaticityGrid &grid = chromaticity_grid();
         ImPlot::PlotImage("##chromaticity_image", (ImTextureID)chromaticity_texture()->texture_handle(),
-                          ImPlotPoint(0.0, 0.0), ImPlotPoint(.73f, .83f), {0.f, .83f}, {.73f, 0.f});
+                          ImPlotPoint(grid.min.x, grid.min.y), ImPlotPoint(grid.max.x, grid.max.y), {0.f, 1.f},
+                          {1.f, 0.f});
 
         auto normal_to_plot_tangent = [](const float2 &tangent, float pixel_length) -> float2
         {
@@ -89,7 +92,7 @@ void Image::draw_chromaticity_diagram(float width)
             pixels_per_plot_unit = length(plot_size / float2((float)plot_rect.X.Max - (float)plot_rect.X.Min,
                                                              (float)plot_rect.Y.Max - (float)plot_rect.Y.Min));
             // compute width in pixels of a chromaticity texture texel
-            pixels_per_texel = 1.f / 256.f * pixels_per_plot_unit;
+            pixels_per_texel = ChromaticityGrid::texel * pixels_per_plot_unit;
             scale_factor     = std::clamp(pixels_per_texel * 1.2f, 1.f, 4.f);
 
             // ImPlot::PlotLine draws ugly, unrounded, line segments, so we use AddPolyline ourselves

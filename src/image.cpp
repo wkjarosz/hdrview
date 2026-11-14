@@ -7,6 +7,7 @@
 #include "fwd.h"
 
 #include "app.h"
+#include "chromaticity.h"
 #include "colorspace.h"
 #include "common.h"
 #include "dithermatrix256.h"
@@ -60,7 +61,6 @@ void Image::make_default_textures()
 {
     static constexpr float s_black{0.f};
     static constexpr float s_white{1.f};
-    static constexpr int   chr_w = 256;
     s_black_texture  = std::make_unique<Texture>(Texture::PixelFormat::R, Texture::ComponentFormat::Float32, int2{1, 1},
                                                  Texture::InterpolationMode::Nearest,
                                                  Texture::InterpolationMode::Nearest, Texture::WrapMode::Repeat);
@@ -70,86 +70,31 @@ void Image::make_default_textures()
     s_dither_texture = std::make_unique<Texture>(Texture::PixelFormat::R, Texture::ComponentFormat::UInt8,
                                                  int2{dither_texture_width()}, Texture::InterpolationMode::Nearest,
                                                  Texture::InterpolationMode::Nearest, Texture::WrapMode::Repeat);
-    s_chromaticity_texture = std::make_unique<Texture>(
-        Texture::PixelFormat::RGBA, Texture::ComponentFormat::UInt8, int2{chr_w}, Texture::InterpolationMode::Bilinear,
+    // every chromaticity on the grid at full brightness in sRGB, transparent outside the spectral locus
+    const ChromaticityGrid &grid = chromaticity_grid();
+    s_chromaticity_texture       = std::make_unique<Texture>(
+        Texture::PixelFormat::RGBA, Texture::ComponentFormat::UInt8, grid.size, Texture::InterpolationMode::Bilinear,
         Texture::InterpolationMode::Bilinear, Texture::WrapMode::ClampToEdge);
 
-    auto create_locus = []()
+    auto          xyz_to_rgb = XYZ_to_RGB(Chromaticities{}, 1.f);
+    vector<byte4> chromaticity_data(grid.size.x * grid.size.y);
+    for (int y = 0; y < grid.size.y; ++y)
     {
-        constexpr int    sample_count = 200;
-        ImVector<ImVec2> poly;
-        poly.resize(sample_count);
-
-        constexpr float wavelength_min = 380.f;
-        constexpr float wavelength_max = 700.f;
-
-        auto &illum = white_point_spectrum(WhitePoint_D65);
-        auto &XYZ   = CIE_XYZ_spectra();
-
-        // Compute chromaticity line
-        for (int i = 0; i < sample_count; ++i)
+        for (int x = 0; x < grid.size.x; ++x)
         {
-            float wavelength = lerp(wavelength_min, wavelength_max, ((float)i) / ((float)(sample_count - 1)));
-            auto  xyz        = illum.eval(wavelength) * XYZ.eval(wavelength);
-            poly[i]          = xyz.xy() / la::sum(xyz); // normalize
-        }
-
-        return poly;
-    };
-
-    static const ImVector<ImVec2> locus = create_locus();
-
-    // lambda to check if a point is inside a polygon using the ray-casting algorithm
-    auto is_inside = [](float2 point) -> bool
-    {
-        int n     = locus.size(); // Number of vertices in the polygon
-        int count = 0;            // Count of intersections
-
-        // Iterate through each edge of the polygon
-        for (int i = 0; i < n; i++)
-        {
-            ImVec2 p1 = locus[i];
-            ImVec2 p2 = locus[(i + 1) % n]; // Ensure the last point connects to the first point
-
-            // Check if the point's y-coordinate is within the edge's y-range and if the point is to the left of the
-            // edge
-            if ((point.y > min(p1.y, p2.y)) && (point.y <= max(p1.y, p2.y)) && (point.x <= max(p1.x, p2.x)))
-            {
-                // Calculate the x-coordinate of the intersection of the edge with a horizontal line through the point
-                auto xIntersect = (point.y - p1.y) * (p2.x - p1.x) / (p2.y - p1.y) + p1.x;
-                // If the edge is vertical or the point's x-coordinate is less than or equal to the intersection
-                // x-coordinate, increment count
-                if (p1.x == p2.x || point.x <= xIntersect)
-                    count++;
-            }
-        }
-
-        return count % 2 == 1;
-    };
-
-    auto rgb2xyz = XYZ_to_RGB(Chromaticities{}, 1.f);
-
-    vector<byte4> g_chromaticity_data(chr_w * chr_w);
-    for (int y = 0; y < chr_w; ++y)
-    {
-        for (int x = 0; x < chr_w; ++x)
-        {
-            float  xn = (x + 0.5f) / chr_w;
-            float  yn = (y + 0.5f) / chr_w;
-            float3 xyz{xn, yn, 1.f - xn - yn};
-            float3 rgb = mul(rgb2xyz, xyz);
+            float2 xy  = grid.center(int2{x, y});
+            float3 rgb = mul(xyz_to_rgb, float3{xy, 1.f - xy.x - xy.y});
             rgb        = linear_to_sRGB(rgb / la::maxelem(rgb));
-            byte4 rgba8{quantize_full<uint8_t>(rgb.x), quantize_full<uint8_t>(rgb.y), quantize_full<uint8_t>(rgb.z),
-                        is_inside(xyz.xy()) ? (uint8_t)255 : (uint8_t)0};
-
-            g_chromaticity_data[y * chr_w + x] = rgba8;
+            chromaticity_data[y * grid.size.x + x] =
+                byte4{quantize_full<uint8_t>(rgb.x), quantize_full<uint8_t>(rgb.y), quantize_full<uint8_t>(rgb.z),
+                      inside_spectral_locus(xy) ? (uint8_t)255 : (uint8_t)0};
         }
     }
 
     s_black_texture->upload((const uint8_t *)&s_black);
     s_white_texture->upload((const uint8_t *)&s_white);
     s_dither_texture->upload((const uint8_t *)dither_texture_data());
-    s_chromaticity_texture->upload((const uint8_t *)g_chromaticity_data.data());
+    s_chromaticity_texture->upload((const uint8_t *)chromaticity_data.data());
 }
 
 void Image::cleanup_default_textures()
