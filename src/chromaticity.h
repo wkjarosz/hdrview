@@ -50,6 +50,17 @@ struct ChromaticityGrid
     bool contains(int2 t) const { return t.x >= 0 && t.y >= 0 && t.x < size.x && t.y < size.y; }
 };
 
+/// Which layers the chromaticity diagram draws, and how; saved with the app's settings.
+struct ChromaticityDiagramLayers
+{
+    bool  density         = true; ///< The image's chromaticity density, fading the colors it holds little of
+    bool  gamut           = true; ///< The image's primaries and white point, which can be dragged
+    bool  wavelengths     = true; ///< Wavelength ticks along the spectral locus
+    bool  daylight        = true; ///< The daylight locus, with ticks at correlated color temperatures
+    bool  hovered         = true; ///< The chromaticity of the pixel under the cursor
+    float density_opacity = 0.7f; ///< How dark the density makes chromaticities the image holds none of
+};
+
 /// The grid, fitted once to spectral_locus().
 const ChromaticityGrid &chromaticity_grid();
 

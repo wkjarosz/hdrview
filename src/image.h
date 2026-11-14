@@ -546,8 +546,8 @@ private:
     /// The selected group's chromaticity density as an overlay for the diagram's background, or null before any.
     /**
         Black, opaque where the image has no pixels and clear where it has the most, laid out on
-        chromaticity_grid() like chromaticity_texture(). Drawn over it, the background keeps its colors only
-        at the chromaticities the image holds.
+        chromaticity_grid() like chromaticity_texture(). Drawn over it, at the opacity the diagram's layers
+        set, the background keeps its colors only at the chromaticities the image holds.
     */
     Texture *chromaticity_density_texture();
 

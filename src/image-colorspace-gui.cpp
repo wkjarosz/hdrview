@@ -10,6 +10,7 @@
 
 #include "app.h"
 #include "edit/undo.h"
+#include "fonts.h"
 #include "image.h"
 #include "imageio/icc.h"
 #include "imgui.h"
@@ -19,6 +20,7 @@
 #include "texture.h"
 #include <hello_imgui/dpi_aware.h>
 
+#include <array>
 #include <string>
 
 using namespace std;
@@ -26,10 +28,6 @@ using namespace HelloImGui;
 
 Texture *Image::chromaticity_density_texture()
 {
-    // Opacity where the image has no pixels. Below 1, so the locus stays faintly visible past what the image
-    // reaches.
-    static constexpr float k_max_opacity = 0.7f;
-
     const ChromaticityBins *bins = chromaticity_bins(hdrview()->roi());
     if (!bins->computed)
         return nullptr;
@@ -48,15 +46,107 @@ Texture *Image::chromaticity_density_texture()
     vector<byte4> data(bins->counts.size(), byte4{0, 0, 0, 0});
     for (size_t i = 0; i < data.size(); ++i)
         if (grid.inside[i])
-            data[i].w = quantize_full<uint8_t>(k_max_opacity * (1.f - std::log1p(float(bins->counts[i])) * scale));
+            data[i].w = quantize_full<uint8_t>(1.f - std::log1p(float(bins->counts[i])) * scale);
     m_chromaticity_density->upload((const uint8_t *)data.data());
 
     m_chromaticity_density_generation = m_chromaticity_bins.generation();
     return m_chromaticity_density.get();
 }
 
+/// Each chromaticity diagram layer's checkbox label and the flag it toggles.
+static std::array<std::pair<const char *, bool *>, 5> layer_toggles(ChromaticityDiagramLayers &layers)
+{
+    return {{{"Pixel density", &layers.density},
+             {"Gamut", &layers.gamut},
+             {"Wavelengths", &layers.wavelengths},
+             {"Daylight locus", &layers.daylight},
+             {"Hovered pixel", &layers.hovered}}};
+}
+
+/// A checkbox per chromaticity diagram layer; right-clicking "Pixel density" sets the overlay's opacity.
+static void draw_layer_checkboxes(ChromaticityDiagramLayers &layers)
+{
+    ImGui::BeginGroup();
+    for (auto &[label, shown] : layer_toggles(layers))
+    {
+        ImGui::Checkbox(label, shown);
+        if (shown == &layers.density && ImGui::BeginPopupContextItem("density options"))
+        {
+            ImGui::SliderFloat("Opacity", &layers.density_opacity, 0.f, 1.f, "%.2f");
+            ImGui::EndPopup();
+        }
+    }
+    ImGui::EndGroup();
+}
+
+/// The chromaticity diagram's layer checkboxes, on a translucent panel in the plot's top-right corner.
+/**
+    Submitted after the plot, so they take the mouse from it: ImPlot lets later items overlap its plots. When the
+    panel would cover much of the plot, a button in the corner opens the checkboxes in a popup instead.
+*/
+static void draw_layer_toggles(ChromaticityDiagramLayers &layers, float2 plot_min, float2 plot_max)
+{
+    // the most of the plot's width and height the open panel may cover, which at the default view keeps it clear of
+    // the spectral locus
+    static constexpr float k_max_cover = 0.4f;
+
+    ImGui::PushID("chromaticity layers");
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{1.f, 1.f});
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{ImGui::GetStyle().ItemSpacing.x, 1.f});
+
+    const ImGuiStyle &style    = ImGui::GetStyle();
+    const ImU32       panel_bg = ImGui::GetColorU32(ImGuiCol_PopupBg, 0.85f);
+    const float2      pad{EmSize(0.3f), EmSize(0.3f)};
+    const float2      cursor = ImGui::GetCursorScreenPos();
+
+    // the checkboxes' extent, sized as draw_layer_checkboxes() lays them out
+    const auto toggles  = layer_toggles(layers);
+    const int  n_layers = int(toggles.size());
+    float      width    = 0.f;
+    for (auto &[label, shown] : toggles) width = std::max(width, ImGui::CalcTextSize(label).x);
+    const float2 inner{width + ImGui::GetFrameHeight() + style.ItemInnerSpacing.x,
+                       n_layers * ImGui::GetFrameHeight() + (n_layers - 1) * style.ItemSpacing.y};
+    const float2 panel = inner + 2.f * pad;
+
+    if (la::all(la::lequal(panel, k_max_cover * (plot_max - plot_min))))
+    {
+        const float2 panel_min{plot_max.x - panel.x - pad.x, plot_min.y + pad.y};
+        ImGui::GetWindowDrawList()->AddRectFilled(panel_min, panel_min + panel, panel_bg, style.FrameRounding);
+        ImGui::SetCursorScreenPos(panel_min + pad);
+        draw_layer_checkboxes(layers);
+    }
+    else
+    {
+        const float2 button = float2{ImGui::CalcTextSize(ICON_MY_LAYERS)} + 2.f * float2{style.FramePadding};
+        const float2 button_min{plot_max.x - button.x - pad.x, plot_min.y + pad.y};
+        ImGui::SetCursorScreenPos(button_min);
+        ImGui::PushStyleColor(ImGuiCol_Button, panel_bg);
+        if (ImGui::Button(ICON_MY_LAYERS))
+            ImGui::OpenPopup("layers");
+        ImGui::PopStyleColor();
+        ImGui::SetItemTooltip("Layers");
+
+        ImGui::SetNextWindowPos(button_min + button, ImGuiCond_Appearing, ImVec2{1.f, 0.f});
+        if (ImGui::BeginPopup("layers"))
+        {
+            draw_layer_checkboxes(layers);
+            ImGui::EndPopup();
+        }
+    }
+
+    ImGui::PopStyleVar(2);
+    ImGui::PopID();
+
+    // Back to where the plot left the cursor. A zero-size item a line above lands exactly there, and tells ImGui
+    // the cursor was moved within what the window already holds rather than to extend it.
+    ImGui::SetCursorScreenPos(ImVec2{cursor.x, cursor.y - ImGui::GetStyle().ItemSpacing.y});
+    ImGui::Dummy(ImVec2{0.f, 0.f});
+}
+
 void Image::draw_chromaticity_diagram(float width)
 {
+    auto &layers = hdrview()->chromaticity_layers();
+
     static float2 vMin{-0.05f, -0.05f};
     static float2 vMax{0.75f, 0.9f};
     static float2 vSize  = vMax - vMin;
@@ -86,7 +176,8 @@ void Image::draw_chromaticity_diagram(float width)
         ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Linear);
         ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Linear);
         ImPlot::SetupAxesLimits(vMin.x, vMax.x, vMin.y, vMax.y);
-        ImPlot::SetupMouseText(ImPlotLocation_NorthEast, ImPlotMouseTextFlags_NoFormat);
+        // the layer toggles take the top-right corner; both are corners the locus leaves empty
+        ImPlot::SetupMouseText(ImPlotLocation_SouthEast, ImPlotMouseTextFlags_NoFormat);
 
         ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
         ImPlot::SetupFinish();
@@ -101,10 +192,11 @@ void Image::draw_chromaticity_diagram(float width)
         ImPlot::PlotImage("##chromaticity_image", (ImTextureID)chromaticity_texture()->texture_handle(),
                           ImPlotPoint(grid.min.x, grid.min.y), ImPlotPoint(grid.max.x, grid.max.y), {0.f, 1.f},
                           {1.f, 0.f});
-        if (Texture *density = chromaticity_density_texture())
-            ImPlot::PlotImage("##chromaticity_density", (ImTextureID)density->texture_handle(),
-                              ImPlotPoint(grid.min.x, grid.min.y), ImPlotPoint(grid.max.x, grid.max.y), {0.f, 1.f},
-                              {1.f, 0.f});
+        if (layers.density)
+            if (Texture *density = chromaticity_density_texture())
+                ImPlot::PlotImage("##chromaticity_density", (ImTextureID)density->texture_handle(),
+                                  ImPlotPoint(grid.min.x, grid.min.y), ImPlotPoint(grid.max.x, grid.max.y), {0.f, 1.f},
+                                  {1.f, 0.f}, ImVec4{1.f, 1.f, 1.f, layers.density_opacity});
 
         auto normal_to_plot_tangent = [](const float2 &tangent, float pixel_length) -> float2
         {
@@ -148,6 +240,7 @@ void Image::draw_chromaticity_diagram(float width)
         //
         // draw wavelength tick marks
         //
+        if (layers.wavelengths)
         {
             ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
             // Draw tick marks stored in tick_marks
@@ -199,6 +292,7 @@ void Image::draw_chromaticity_diagram(float width)
         //
         // draw the locus of D (daylight) CCTs
         //
+        if (layers.daylight)
         {
             auto create_CCT_locus = []()
             {
@@ -274,6 +368,7 @@ void Image::draw_chromaticity_diagram(float width)
         //
         // draw the primaries, gamut triangle, whitepoint, and text labels
         //
+        if (layers.gamut)
         {
             Chromaticities gamut_chr{chromaticities.value_or(Chromaticities{})};
             ImVec4         colors[] = {
@@ -347,7 +442,7 @@ void Image::draw_chromaticity_diagram(float width)
         {
             auto &io      = ImGui::GetIO();
             auto  rgb2xyz = mul(M_RGB_to_XYZ, inverse(M_to_sRGB));
-            if (hdrview()->mouse_over_viewport())
+            if (layers.hovered && hdrview()->mouse_over_viewport())
             {
                 auto   hovered_pixel = int2{hdrview()->pixel_at_app_pos(io.MousePos)};
                 float4 color32       = hdrview()->pixel_value(hovered_pixel, false, 0);
@@ -365,8 +460,12 @@ void Image::draw_chromaticity_diagram(float width)
 
         ImPlot::PopStyleColor();
 
+        const float2 plot_min = ImPlot::GetPlotPos();
+        const float2 plot_max = plot_min + float2{ImPlot::GetPlotSize()};
+
         ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
         ImPlot::EndPlot();
+        draw_layer_toggles(layers, plot_min, plot_max);
         ImGui::PopFont();
     }
     ImGui::PopStyleColor();
