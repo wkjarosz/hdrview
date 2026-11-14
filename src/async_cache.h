@@ -45,6 +45,9 @@ public:
         return m_cached.get();
     }
 
+    /// Bumped each time a finished computation becomes the cache.
+    int generation() const { return m_generation; }
+
     /// Make sure a result for \p desired is cached or being computed.
     /**
         Pixels streaming in from a renderer change the content version faster than a full pass can finish,
@@ -101,6 +104,7 @@ private:
     {
         m_cached   = std::exchange(m_async, std::make_shared<Result>());
         m_ready_at = std::chrono::steady_clock::now();
+        ++m_generation;
     }
 
     std::shared_ptr<Result>               m_cached;
@@ -109,4 +113,5 @@ private:
     stp::ThreadPool::TaskTracker          m_tracker;
     std::shared_ptr<std::atomic<bool>>    m_canceled; ///< Shared with the task; a bare atomic cannot be moved
     std::chrono::steady_clock::time_point m_ready_at{};
+    int                                   m_generation = 0;
 };

@@ -24,6 +24,37 @@
 using namespace std;
 using namespace HelloImGui;
 
+Texture *Image::chromaticity_density_texture()
+{
+    // Opacity where the image has no pixels. Below 1, so the locus stays faintly visible past what the image
+    // reaches.
+    static constexpr float k_max_opacity = 0.7f;
+
+    const ChromaticityBins *bins = chromaticity_bins(hdrview()->roi());
+    if (!bins->computed)
+        return nullptr;
+    if (m_chromaticity_density && m_chromaticity_density_generation == m_chromaticity_bins.generation())
+        return m_chromaticity_density.get();
+
+    const ChromaticityGrid &grid = chromaticity_grid();
+    if (!m_chromaticity_density)
+        m_chromaticity_density = std::make_unique<Texture>(
+            Texture::PixelFormat::RGBA, Texture::ComponentFormat::UInt8, grid.size,
+            Texture::InterpolationMode::Bilinear, Texture::InterpolationMode::Bilinear, Texture::WrapMode::ClampToEdge);
+
+    // Log density, so a few pixels of a color show beside the millions of a flat background. Nothing is drawn
+    // outside the locus, where there is no background to fade.
+    const float   scale = bins->max_count > 0 ? 1.f / std::log1p(float(bins->max_count)) : 0.f;
+    vector<byte4> data(bins->counts.size(), byte4{0, 0, 0, 0});
+    for (size_t i = 0; i < data.size(); ++i)
+        if (grid.inside[i])
+            data[i].w = quantize_full<uint8_t>(k_max_opacity * (1.f - std::log1p(float(bins->counts[i])) * scale));
+    m_chromaticity_density->upload((const uint8_t *)data.data());
+
+    m_chromaticity_density_generation = m_chromaticity_bins.generation();
+    return m_chromaticity_density.get();
+}
+
 void Image::draw_chromaticity_diagram(float width)
 {
     static float2 vMin{-0.05f, -0.05f};
@@ -70,6 +101,10 @@ void Image::draw_chromaticity_diagram(float width)
         ImPlot::PlotImage("##chromaticity_image", (ImTextureID)chromaticity_texture()->texture_handle(),
                           ImPlotPoint(grid.min.x, grid.min.y), ImPlotPoint(grid.max.x, grid.max.y), {0.f, 1.f},
                           {1.f, 0.f});
+        if (Texture *density = chromaticity_density_texture())
+            ImPlot::PlotImage("##chromaticity_density", (ImTextureID)density->texture_handle(),
+                              ImPlotPoint(grid.min.x, grid.min.y), ImPlotPoint(grid.max.x, grid.max.y), {0.f, 1.f},
+                              {1.f, 0.f});
 
         auto normal_to_plot_tangent = [](const float2 &tangent, float pixel_length) -> float2
         {

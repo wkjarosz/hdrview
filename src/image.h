@@ -403,6 +403,58 @@ inline bool group_has_alpha(ChannelGroup::Type type)
            type == ChannelGroup::YCA_Channels || type == ChannelGroup::XYZA_Channels;
 }
 
+/// The color a group's samples stand for, in the image's own primaries.
+/**
+    \p raw holds the group's channels in order. A single channel is gray, as is Y with its alpha, the YC types
+    convert through \p luminance_weights, and any other pair fills red and green.
+*/
+inline float3 group_rgb(ChannelGroup::Type type, int num_channels, float4 raw, float3 luminance_weights)
+{
+    if (num_channels == 1)
+        return float3{raw[0]};
+    if (num_channels == 2)
+        return type == ChannelGroup::YA_Channels ? YC_to_RGB(float3{0.f, raw[0], 0.f}, luminance_weights)
+                                                 : float3{raw[0], raw[1], 0.f};
+    if (type == ChannelGroup::YCA_Channels || type == ChannelGroup::YC_Channels)
+        return YC_to_RGB(raw.xyz(), luminance_weights);
+    return raw.xyz();
+}
+
+/// How many of an image's pixels fall in each texel of chromaticity_grid(), by their CIE 1931 xy.
+/**
+    A pixel's chromaticity is that of the color group_rgb() gives it, so a premultiplied pixel and its straight
+    version count the same, as do any two differing only in exposure. Black and non-finite pixels have none.
+*/
+struct ChromaticityBins
+{
+    struct Settings
+    {
+        Box2i              roi = Box2i{int2{0}}; ///< Restricts the count to this region, when it has volume
+        int4               channels{-1};         ///< The group's channels, as indices into Image::channels
+        int                num_channels = 0;
+        ChannelGroup::Type type         = ChannelGroup::Single_Channel;
+        float3x3           M_RGB_to_XYZ = la::identity;
+        float3             luminance_weights{0.f};
+        int                content_version = 0; ///< Image::content_version of the counted image
+
+        bool match(const Settings &other) const;
+
+        /// Copy \p other's content version, for AsyncCache's streaming throttle.
+        void take_content_versions(const Settings &other) { content_version = other.content_version; }
+    };
+
+    Settings settings;
+    bool     computed = false;
+
+    std::vector<uint32_t> counts;        ///< One per texel, row by row; empty until computed
+    uint32_t              max_count = 0; ///< The largest of counts
+    int64_t               outside   = 0; ///< Pixels whose chromaticity lies off the grid
+    int64_t               skipped   = 0; ///< Pixels with no chromaticity: black, negative, or not finite
+
+    /// Count \p img's pixels for \p desired; leaves `computed` false if \p canceled is raised first.
+    void calculate(const Image &img, const Settings &desired, std::atomic<bool> &canceled);
+};
+
 struct Layer
 {
 public:
@@ -469,7 +521,7 @@ struct ImageMetadata
 struct Image : ImageMetadata
 {
 public:
-    static bool                         loadable(const std::string &extension);
+    static bool loadable(const std::string &extension);
     /// The formats HDRView can load, each a name and the extensions of its files, without their dots.
     static const std::vector<std::pair<std::string, std::vector<std::string>>> &loadable_format_groups();
     /// Every extension in loadable_format_groups().
@@ -485,6 +537,21 @@ public:
 
     std::vector<Channel> channels;
 
+private:
+    /// Declared after `channels`, so it is destroyed, and its task stopped, before they are.
+    AsyncCache<ChromaticityBins> m_chromaticity_bins;
+    std::unique_ptr<Texture>     m_chromaticity_density;
+    int                          m_chromaticity_density_generation = -1; ///< Of the bins it was built from
+
+    /// The selected group's chromaticity density as an overlay for the diagram's background, or null before any.
+    /**
+        Black, opaque where the image has no pixels and clear where it has the most, laid out on
+        chromaticity_grid() like chromaticity_texture(). Drawn over it, the background keeps its colors only
+        at the chromaticities the image holds.
+    */
+    Texture *chromaticity_density_texture();
+
+public:
     /// True for an image whose pixels arrive from a running process rather than from a file.
     /**
         Nothing on disk backs it, so it cannot be reloaded and is left out of a saved session. Otherwise an
@@ -590,8 +657,16 @@ public:
     */
     void cancel_stats()
     {
+        m_chromaticity_bins.cancel();
         for (auto &c : channels) c.cancel_stats();
     }
+
+    /// The selected group's chromaticity density within \p roi, starting a computation when it is stale.
+    /**
+        Returns the newest finished one meanwhile, which may describe other settings or none at all, so check
+        `computed` and `settings`. Never null.
+    */
+    const ChromaticityBins *chromaticity_bins(const Box2i &roi);
 
     std::string file_and_partname() const { return partname.empty() ? filename : filename + ":" + partname; }
     std::string delimiter() const { return partname.empty() ? ":" : "."; }

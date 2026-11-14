@@ -8,6 +8,7 @@
 
 #include "fwd.h"
 
+#include <cstdint>
 #include <vector>
 
 /// A grid of square texels over CIE 1931 xy, fitted to the spectral locus.
@@ -22,14 +23,26 @@
 struct ChromaticityGrid
 {
     /// Width and height of a texel in xy.
+    /**
+        Finer shows the density in more detail, at the cost of more texels and fewer pixels counted in each.
+    */
     static constexpr float texel = 1.f / 256.f;
 
     int2   size{0};  ///< Texels across and down
     float2 min{0.f}; ///< xy at the outer corner of texel (0, 0)
     float2 max{0.f}; ///< xy at the outer corner of texel (size - 1)
 
+    std::vector<uint8_t> inside; ///< Per texel, row by row, whether its center lies inside spectral_locus()
+
     /// The texel holding \p xy, which lies outside the grid when \p xy does.
-    int2 texel_of(float2 xy) const { return int2(la::floor((xy - min) / texel)); }
+    /**
+        Clamped to one texel past each edge before converting, since a pixel with a tiny luminance can have a
+        chromaticity too far out for an int.
+    */
+    int2 texel_of(float2 xy) const
+    {
+        return int2(la::clamp(la::floor((xy - min) / texel), float2{-1.f}, float2(size)));
+    }
 
     /// The xy at the center of texel \p t.
     float2 center(int2 t) const { return min + (float2(t) + 0.5f) * texel; }

@@ -63,6 +63,11 @@ const ChromaticityGrid &chromaticity_grid()
         g.size = last - first + 1;
         g.min  = float2(first) * ChromaticityGrid::texel;
         g.max  = float2(last + 1) * ChromaticityGrid::texel;
+
+        g.inside.resize(size_t(g.size.x) * g.size.y);
+        for (int y = 0; y < g.size.y; ++y)
+            for (int x = 0; x < g.size.x; ++x)
+                g.inside[size_t(y) * g.size.x + x] = inside_spectral_locus(g.center(int2{x, y}));
         return g;
     }();
     return grid;

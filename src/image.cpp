@@ -87,7 +87,7 @@ void Image::make_default_textures()
             rgb        = linear_to_sRGB(rgb / la::maxelem(rgb));
             chromaticity_data[y * grid.size.x + x] =
                 byte4{quantize_full<uint8_t>(rgb.x), quantize_full<uint8_t>(rgb.y), quantize_full<uint8_t>(rgb.z),
-                      inside_spectral_locus(xy) ? (uint8_t)255 : (uint8_t)0};
+                      grid.inside[y * grid.size.x + x] ? (uint8_t)255 : (uint8_t)0};
         }
     }
 
@@ -706,6 +706,109 @@ void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
                        stats.calculate(*this, alpha, img_data_origin, ref, ref_alpha, ref_data_origin, settings,
                                        canceled);
                    });
+}
+
+bool ChromaticityBins::Settings::match(const Settings &other) const
+{
+    return roi == other.roi && la::all(la::equal(channels, other.channels)) && num_channels == other.num_channels &&
+           type == other.type && M_RGB_to_XYZ == other.M_RGB_to_XYZ &&
+           la::all(la::equal(luminance_weights, other.luminance_weights)) && content_version == other.content_version;
+}
+
+void ChromaticityBins::calculate(const Image &img, const Settings &desired, std::atomic<bool> &canceled)
+{
+    try
+    {
+        *this    = ChromaticityBins();
+        settings = desired;
+
+        const ChromaticityGrid &grid = chromaticity_grid();
+
+        Box2i roi = img.data_window;
+        if (desired.roi.has_volume())
+            roi = roi.intersect(desired.roi);
+        // intersect() can leave an inverted box when the two miss each other
+        const int2 extent = roi.has_volume() ? roi.size() : int2{0};
+
+        std::array<const Channel *, 4> ch{};
+        for (int c = 0; c < desired.num_channels; ++c) ch[c] = &img.channels[desired.channels[c]];
+
+        struct Partial
+        {
+            std::vector<uint32_t> counts;
+            int64_t               outside = 0, skipped = 0;
+        };
+
+        const int            rows_per_unit = std::max(1, 1024 * 1024 / std::max(1, extent.x));
+        const size_t         num_threads   = estimate_threads(extent.y, rows_per_unit, *ThreadPool::singleton());
+        std::vector<Partial> partials(max<size_t>(1, num_threads));
+
+        parallel_for(
+            blocked_range<int>(0, extent.y, rows_per_unit),
+            [&](int begin_y, int end_y, int unit_index, int)
+            {
+                Partial &part = partials[unit_index];
+                if (part.counts.empty())
+                    part.counts.assign(size_t(grid.size.x) * grid.size.y, 0u);
+
+                for (int y = begin_y; y < end_y; ++y)
+                {
+                    if (canceled)
+                        throw std::runtime_error("Canceling chromaticity binning");
+
+                    for (int x = 0; x < extent.x; ++x)
+                    {
+                        const int2 p = roi.min - img.data_window.min + int2{x, y};
+                        float4     raw{float3{0.f}, 1.f};
+                        for (int c = 0; c < desired.num_channels; ++c) raw[c] = (*ch[c])(p);
+
+                        const float3 XYZ = mul(desired.M_RGB_to_XYZ, group_rgb(desired.type, desired.num_channels, raw,
+                                                                               desired.luminance_weights));
+                        const float  sum = XYZ.x + XYZ.y + XYZ.z;
+                        if (!(sum > 0.f) || !std::isfinite(sum))
+                        {
+                            ++part.skipped;
+                            continue;
+                        }
+
+                        const int2 t = grid.texel_of(XYZ.xy() / sum);
+                        if (!grid.contains(t))
+                            ++part.outside;
+                        else
+                            ++part.counts[size_t(t.y) * grid.size.x + t.x];
+                    }
+                }
+            },
+            (int)num_threads);
+
+        counts.assign(size_t(grid.size.x) * grid.size.y, 0u);
+        for (const auto &part : partials)
+        {
+            outside += part.outside;
+            skipped += part.skipped;
+            for (size_t i = 0; i < part.counts.size(); ++i) counts[i] += part.counts[i];
+        }
+        max_count = counts.empty() ? 0u : *std::max_element(counts.begin(), counts.end());
+        computed  = true;
+    }
+    catch (...)
+    {
+        *this = ChromaticityBins();
+    }
+}
+
+const ChromaticityBins *Image::chromaticity_bins(const Box2i &roi)
+{
+    if (!is_valid_group(selected_group))
+        return m_chromaticity_bins.get();
+
+    const ChannelGroup        &group = groups[selected_group];
+    ChromaticityBins::Settings desired{roi,          group.channels,    group.num_channels, group.type,
+                                       M_RGB_to_XYZ, luminance_weights, content_version};
+    m_chromaticity_bins.update(
+        desired, [this](ChromaticityBins &bins, const ChromaticityBins::Settings &settings, std::atomic<bool> &canceled)
+        { bins.calculate(*this, settings, canceled); });
+    return m_chromaticity_bins.get();
 }
 
 void Image::set_null_texture(Target_ target, Shader &shader)
@@ -1623,30 +1726,13 @@ float4 Image::rgba_pixel(int2 p, Target_ target) const
     if (!contains(p))
         return float4{0.f};
 
-    int                 group_idx = active_group_index(target);
-    const ChannelGroup &group     = groups[group_idx];
+    const ChannelGroup &group = groups[active_group_index(target)];
 
-    float4 value{float3{0.f}, 1.f};
-    {
-        for (int c = 0; c < group.num_channels; ++c) value[c] = channels[group.channels[c]](p - data_window.min);
-        if (group.num_channels == 1) // if group has 1 channel, replicate it across RGB
-            value[1] = value[2] = value[0];
-        else if (group.num_channels == 2)
-        {
-            if (group.type == ChannelGroup::YA_Channels)
-            {
-                value[3]    = value[1];
-                value.xyz() = YC_to_RGB(float3{0.f, value[0], 0.f}, luminance_weights);
-            }
-            else
-                value[2] = 0.f;
-        }
-        if (group.type == ChannelGroup::YCA_Channels || group.type == ChannelGroup::YC_Channels)
-            value.xyz() = YC_to_RGB(value.xyz(), luminance_weights);
-    }
+    float4 raw{float3{0.f}, 1.f};
+    for (int c = 0; c < group.num_channels; ++c) raw[c] = channels[group.channels[c]](p - data_window.min);
 
-    value.xyz() = mul(M_to_sRGB, value.xyz());
-    return value;
+    const float alpha = group.num_channels == 4 ? raw[3] : group.type == ChannelGroup::YA_Channels ? raw[1] : 1.f;
+    return float4{mul(M_to_sRGB, group_rgb(group.type, group.num_channels, raw, luminance_weights)), alpha};
 }
 
 static void calculate_tree_visibility(LayerTreeNode &node, const Image *image)
