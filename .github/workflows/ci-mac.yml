@@ -96,6 +96,21 @@ jobs:
         if: contains(matrix.config.preset, 'local')
         run: brew install --quiet jpeg-xl libultrahdr libheif libpng imath openexr cli11 spdlog fmt libexif libraw
 
+      # TEMPORARY: what puts Homebrew's headers ahead of a bundled copy's -isystem path on the Intel runners
+      - name: Show the compiler's header search (Intel)
+        if: contains(matrix.config.os, 'intel')
+        run: |
+          env | grep -E '^(CPATH|C_INCLUDE_PATH|CPLUS_INCLUDE_PATH|OBJC_INCLUDE_PATH|SDKROOT)=' || echo "no include-path variables set"
+          /usr/bin/cc -x c -v -E /dev/null 2>&1 | sed -n '/search starts here/,/End of search list/p'
+          ls -d /usr/local/include/brotli 2>/dev/null || true
+
+      # The image comes with Homebrew's brotli, whose headers an Intel runner's compiles find ahead of the newer copy
+      # libjxl bundles and builds; release.yml removes it the same way.
+      - name: Remove the runner's brotli (Intel, non-local presets)
+        if: contains(matrix.config.os, 'intel') && !contains(matrix.config.preset, 'local')
+        run: |
+          if brew list --formula -1 | grep -qx brotli; then brew uninstall --ignore-dependencies brotli; fi
+
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
