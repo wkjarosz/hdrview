@@ -50,10 +50,13 @@ jobs:
         run: |
           installed=$(brew list --formula -1)
           for lib in aom dav1d libvmaf freetype libpng jpeg-turbo webp libtiff little-cms2 openexr imath libraw \
-                     jpeg-xl highway brotli libheif libde265 x265 openjpeg openjph libultrahdr libexif glfw giflib \
+                     jpeg-xl highway libheif libde265 x265 openjpeg openjph libultrahdr libexif glfw giflib \
                      libdeflate; do
             if grep -qx "$lib" <<<"$installed"; then brew uninstall --ignore-dependencies "$lib"; fi
           done
+          # brotli is only unlinked: Homebrew's git loads it through Homebrew's curl, and unlinking leaves the copy
+          # they load while taking its headers and libraries out of the prefix a build searches
+          if grep -qx brotli <<<"$installed"; then brew unlink brotli; fi
 
       - uses: actions/checkout@v5
         with:
