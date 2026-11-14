@@ -17,9 +17,27 @@ set -euo pipefail
 target=${1:?usage: check-macos-dmg.sh <path-to-.dmg-or-.app>}
 [[ -e $target ]] || { echo "error: no such file: $target" >&2; exit 1; }
 
-workdir=$(mktemp -d)
+# the real path, which is how mount lists the volume: mktemp's /var/folders is a symlink into /private
+workdir=$(cd "$(mktemp -d)" && pwd -P)
 mnt=$workdir/mnt
-trap 'hdiutil detach -quiet "$mnt" 2>/dev/null || true; rm -rf "$workdir"' EXIT
+
+# The app just killed can hold the volume for a moment, so detaching is retried and then forced. The work directory
+# goes only once nothing is mounted in it, or rm would descend into the read-only volume. Either way the check's
+# own result stands.
+cleanup() {
+    local status=$?
+    set +e
+    if mount | grep -q " on $mnt "; then
+        for _ in 1 2 3 4 5; do
+            hdiutil detach -quiet "$mnt" 2>/dev/null && break
+            sleep 2
+        done
+        mount | grep -q " on $mnt " && hdiutil detach -quiet -force "$mnt" 2>/dev/null
+    fi
+    mount | grep -q " on $mnt " || rm -rf "$workdir"
+    exit "$status"
+}
+trap cleanup EXIT
 
 if [[ -d $target ]]; then
     app=$target

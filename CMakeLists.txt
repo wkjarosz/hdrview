@@ -1100,8 +1100,9 @@ if(HDRVIEW_ENABLE_LIBJXL)
   CPMAddPackage(
     NAME JXL
     GITHUB_REPOSITORY libjxl/libjxl
-    # VERSION 0.7.0 # version in ubuntu 24.04
-    VERSION 0.11.1
+    # an installed libjxl from 0.12 on, the first release with its security fixes; otherwise 0.13 is built
+    VERSION 0.12.0
+    GIT_TAG v0.13.0
     # only the submodules this configuration builds: the rest are test data, tools, and bundled copies of
     # libraries it takes from elsewhere, and with their history they would be most of the download
     GIT_SHALLOW TRUE
@@ -1117,10 +1118,6 @@ if(HDRVIEW_ENABLE_LIBJXL)
             "JPEGXL_ENABLE_OPENEXR OFF"
             "JPEGXL_ENABLE_DOXYGEN OFF"
             "JPEGXL_ENABLE_MANPAGES OFF"
-            # jpegli needs the libjpeg-turbo submodule, which is not fetched; libjxl would otherwise keep a
-            # build tree's earlier choice to build it
-            "JPEGXL_ENABLE_JPEGLI OFF"
-            "JPEGXL_ENABLE_JPEGLI_LIBJPEG OFF"
             "JPEGXL_ENABLE_SKCMS OFF"
             "JPEGXL_ENABLE_VIEWERS OFF"
             "JPEGXL_ENABLE_PLUGINS OFF"
@@ -1146,19 +1143,9 @@ if(HDRVIEW_ENABLE_LIBJXL)
     disable_target_warnings(jxl_cms)
     disable_target_warnings(enc_fast_lossless)
     disable_target_warnings(hwy)
-    # After CPM adds JXL, use the source directory variable
-    if(JXL_SOURCE_DIR)
-      message(STATUS "Adding include directory for bundled Highway: ${JXL_SOURCE_DIR}/third_party/highway")
-      # Prioritize the bundled Highway over system installation
-      include_directories(BEFORE SYSTEM 
-        ${JXL_SOURCE_DIR}/third_party/highway
-      )
-    else()
-      message(STATUS "Adding include directory for bundled Highway: ${CMAKE_BINARY_DIR}/cpm_modules/jxl/39d3/third_party/highway")
-      include_directories(BEFORE SYSTEM 
-        ${CMAKE_BINARY_DIR}/cpm_modules/jxl/39d3/third_party/highway
-        )
-    endif()
+    # the bundled Highway's headers ahead of any installed copy's
+    message(STATUS "Adding include directory for bundled Highway: ${JXL_SOURCE_DIR}/third_party/highway")
+    include_directories(BEFORE SYSTEM ${JXL_SOURCE_DIR}/third_party/highway)
   elseif(TARGET jxl)
     message(STATUS "Using system-installed JPEG-XL library")
   else()

@@ -96,6 +96,14 @@ jobs:
         if: contains(matrix.config.preset, 'local')
         run: brew install --quiet jpeg-xl libultrahdr libheif libpng imath openexr cli11 spdlog fmt libexif libraw
 
+      # The image comes with Homebrew's brotli, whose headers in /usr/local/include, the first directory an Intel
+      # runner's compiler searches by default, reach the build of the newer copy libjxl bundles. Unlinking takes them
+      # out of the prefix and leaves the copy Homebrew's git loads through its curl, as release.yml does.
+      - name: Unlink the runner's brotli (Intel, non-local presets)
+        if: contains(matrix.config.os, 'intel') && !contains(matrix.config.preset, 'local')
+        run: |
+          if brew list --formula -1 | grep -qx brotli; then brew unlink brotli; fi
+
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
