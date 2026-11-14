@@ -306,7 +306,7 @@ bool HDRViewApp::step_selected_histories(bool forward)
         if (!can_edit(img) || (forward ? !img->history.has_redo() : !img->history.has_undo()))
             return false;
 
-        for (auto &c : img->channels) c.cancel_stats();
+        img->cancel_stats();
 
         if (!(forward ? img->history.redo(*img) : img->history.undo(*img)))
             return false;
@@ -520,7 +520,7 @@ void HDRViewApp::resample_image_async(const ImagePtr &img, const string &name, i
 void HDRViewApp::start_filter(std::shared_ptr<RunningFilter> running)
 {
     // the statistics tasks read the very pixels the filter is about to
-    for (auto &c : running->image->channels) c.cancel_stats();
+    running->image->cancel_stats();
 
     running->results.resize(running->channels.size());
 

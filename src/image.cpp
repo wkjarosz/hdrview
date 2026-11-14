@@ -636,10 +636,7 @@ float4x4 ChannelGroup::colors() const
     }
 }
 
-Channel::Channel(const std::string &name, int2 size) :
-    Array2Df(size), cached_stats(make_shared<PixelStats>()), async_stats(make_shared<PixelStats>()), name(name)
-{
-}
+Channel::Channel(const std::string &name, int2 size) : Array2Df(size), name(name) {}
 
 Texture *Channel::get_texture()
 {
@@ -723,24 +720,10 @@ bool PixelStats::Settings::match(const Settings &other) const
            ref_content_version == other.ref_content_version;
 }
 
-PixelStats *Channel::get_stats()
-{
-    MY_ASSERT(cached_stats, "PixelStats::cached_stats should never be null");
-
-    // We always return the cached stats, but before we do we might update the cache from the async stats
-    if (async_tracker.ready() && async_stats->computed)
-    {
-        spdlog::trace("Replacing cached channel stats with async computation");
-        adopt_async_stats();
-    }
-
-    return cached_stats.get();
-}
+PixelStats *Channel::get_stats() { return m_stats.get(); }
 
 void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
 {
-    MY_ASSERT(cached_stats, "PixelStats::cached_stats should never be null");
-
     PixelStats::Settings desired_settings{hdrview()->exposure(),
                                           hdrview()->histogram_x_scale(),
                                           hdrview()->histogram_y_scale(),
@@ -750,16 +733,6 @@ void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
                                           img2 ? img2->reference_group : -1,
                                           img1->content_version,
                                           img2 ? img2->content_version : 0};
-
-    // Pixels streaming in from a renderer change the content version faster than a full pass over the image
-    // can finish, and chasing every version would cancel each computation partway. So a newer version is
-    // only picked up once the cache has stood as a finished result for a moment.
-    static constexpr auto k_min_stats_age = std::chrono::milliseconds{200};
-    if (cached_stats->computed && std::chrono::steady_clock::now() - stats_ready_at < k_min_stats_age)
-    {
-        desired_settings.content_version     = cached_stats->settings.content_version;
-        desired_settings.ref_content_version = cached_stats->settings.ref_content_version;
-    }
 
     // The group's alpha channel, when this channel needs dividing by it to report the file's values; null
     // for the alpha channel itself, which is stored as the file had it.
@@ -773,62 +746,21 @@ void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
     };
 
     // img2 is captured so the reference image outlives the task: the raw Channel pointers below point into
-    // it, and closing it drops the app's last reference. img1 owns this Channel, whose destructor cancels
-    // and waits for the task.
-    auto recompute_async_stats = [this, desired_settings, img1, img2, img_data_origin = img1->data_window.min,
-                                  alpha           = alpha_of(img1, img1->selected_group),
-                                  ref             = (img2 && img2->is_valid_group(img2->reference_group))
-                                                        ? &img2->channels[img2->groups[img2->reference_group].channels[c]]
-                                                        : nullptr,
-                                  ref_alpha       = alpha_of(img2, img2 ? img2->reference_group : -1),
-                                  ref_data_origin = img2 ? img2->data_window.min : int2{}]()
-    {
-        spdlog::debug("id: {}", img1->id);
-        // First cancel the potential previous async task
-        if (async_canceled)
-        {
-            spdlog::trace("Canceling outdated stats computation.");
-            *async_canceled = true;
-            async_tracker.wait();
-        }
-
-        // create the new task
-        async_canceled = make_shared<atomic<bool>>(false);
-        async_tracker  = do_async(
-            [this, desired_settings, canceled = async_canceled, img2, img_data_origin, alpha, ref, ref_alpha,
-             ref_data_origin]()
-            {
-                spdlog::debug("Starting a new stats computation");
-                async_stats->calculate(*this, alpha, img_data_origin, ref, ref_alpha, ref_data_origin, desired_settings,
-                                        *canceled);
-            });
-        async_settings = desired_settings;
-    };
-
-    // if the cached stats match and are valid, no need to recompute
-    if (cached_stats->settings.match(desired_settings) && cached_stats->computed)
-        return;
-
-    // cached stats are outdated, need to recompute
-
-    // if the async computation settings are outdated, or it was never computed -> recompute
-    if (!async_settings.match(desired_settings) || (async_tracker.ready() && !async_stats->computed))
-    {
-        recompute_async_stats();
-        return;
-    }
-
-    // if the async computation is ready, grab it and possibly schedule again
-    if (async_tracker.ready() && async_stats->computed)
-    {
-        spdlog::trace("Replacing cached channel stats with async computation");
-        // replace cache with newer async stats
-        adopt_async_stats();
-
-        // if these newer stats are still outdated, schedule a new async computation
-        if (!cached_stats->settings.match(desired_settings))
-            recompute_async_stats();
-    }
+    // it, and closing it drops the app's last reference. img1 owns this Channel, whose cache cancels and
+    // waits for the task before either goes.
+    m_stats.update(desired_settings,
+                   [this, img2, img_data_origin = img1->data_window.min, alpha = alpha_of(img1, img1->selected_group),
+                    ref             = (img2 && img2->is_valid_group(img2->reference_group))
+                                          ? &img2->channels[img2->groups[img2->reference_group].channels[c]]
+                                          : nullptr,
+                    ref_alpha       = alpha_of(img2, img2 ? img2->reference_group : -1),
+                    ref_data_origin = img2 ? img2->data_window.min : int2{}](
+                       PixelStats &stats, const PixelStats::Settings &settings, std::atomic<bool> &canceled)
+                   {
+                       spdlog::debug("Starting a new stats computation");
+                       stats.calculate(*this, alpha, img_data_origin, ref, ref_alpha, ref_data_origin, settings,
+                                       canceled);
+                   });
 }
 
 void Image::set_null_texture(Target_ target, Shader &shader)
