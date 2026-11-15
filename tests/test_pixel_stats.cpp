@@ -7,12 +7,15 @@
 #define DOCTEST_CONFIG_IMPLEMENT
 #include <doctest/doctest.h>
 
+#include "async_cache.h"
 #include "colorspace.h"
 #include "common.h"
 #include "image.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <thread>
 #include <vector>
 
 // PixelStats::calculate() lazily spins up stp::ThreadPool::singleton()'s workers. Their static destructor's
@@ -716,4 +719,77 @@ TEST_CASE("Statistics over an arbitrary selection count exactly the pixels it ov
             CHECK(stats.summary.maximum == doctest::Approx(float(last_x + 10 * last_y)));
             CHECK(stats.summary.average == doctest::Approx(0.5 * (first_x + last_x) + 5.0 * (first_y + last_y)));
         }
+}
+
+TEST_CASE("An AsyncCache follows settings that change on every update, and restarts a canceled computation")
+{
+    using namespace std::chrono_literals;
+    using clock = std::chrono::steady_clock;
+
+    /// Twice its setting, taking a few milliseconds to compute.
+    struct Doubled
+    {
+        struct Settings
+        {
+            int  value = -1;
+            bool match(const Settings &other) const { return value == other.value; }
+            void take_content_versions(const Settings &) {}
+        };
+        Settings settings;
+        bool     computed = false;
+        int      result   = 0;
+    };
+    auto compute = [](Doubled &r, const Doubled::Settings &s, std::atomic<bool> &canceled)
+    {
+        std::this_thread::sleep_for(5ms);
+        if (canceled)
+            return;
+        r          = Doubled{};
+        r.settings = s;
+        r.result   = 2 * s.value;
+        r.computed = true;
+    };
+    /// Update with \p s, as a frame would, until the cache holds its result or a generous deadline passes.
+    auto settle = [&](AsyncCache<Doubled> &cache, Doubled::Settings s)
+    {
+        for (auto deadline = clock::now() + 5s; clock::now() < deadline; std::this_thread::sleep_for(1ms))
+        {
+            cache.update(s, compute);
+            if (cache.get()->computed && cache.get()->settings.match(s))
+                return;
+        }
+    };
+
+    AsyncCache<Doubled> cache;
+
+    // a new setting every millisecond, as dragging a slider gives each frame, faster than results arrive: the
+    // cache still takes them in, each true to its settings and none older than the last
+    int  value = 0, newest_seen = -1;
+    bool in_order = true, true_to_settings = true;
+    for (auto deadline = clock::now() + 5s; cache.generation() < 5 && clock::now() < deadline;
+         std::this_thread::sleep_for(1ms))
+    {
+        cache.update({value++}, compute);
+        const Doubled *r = cache.get();
+        if (!r->computed)
+            continue;
+        in_order         = in_order && r->settings.value >= newest_seen;
+        true_to_settings = true_to_settings && r->result == 2 * r->settings.value;
+        newest_seen      = r->settings.value;
+    }
+    CHECK(cache.generation() >= 5);
+    CHECK(in_order);
+    CHECK(true_to_settings);
+
+    // once the settings hold still, the cache catches up to them
+    settle(cache, {value});
+    CHECK(cache.get()->settings.value == value);
+    CHECK(cache.get()->result == 2 * value);
+
+    // a canceled computation, as before pixels are overwritten, leaves the cache as it was and starts again
+    cache.update({value + 1}, compute);
+    cache.cancel();
+    CHECK(cache.get()->settings.value == value);
+    settle(cache, {value + 1});
+    CHECK(cache.get()->result == 2 * (value + 1));
 }

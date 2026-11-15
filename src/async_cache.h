@@ -14,9 +14,9 @@
 
 /// A result computed on a worker thread and cached against the settings it was computed for.
 /**
-    The main thread asks for a result with update(), which starts a computation when neither the cache nor
-    the one under way matches, and reads it with get(), which takes a finished computation as the new cache.
-    The cache keeps serving the previous result until then, so a reader never waits.
+    The main thread asks for a result with update(), which starts a computation when the cache does not match
+    and none is under way, and reads it with get(). A finished computation becomes the cache, and until then
+    the cache keeps serving the previous result, so a reader never waits.
 
     `Result` provides:
     - `Settings settings` and `bool computed`, the settings it was computed for and whether it finished;
@@ -48,11 +48,15 @@ public:
     /// Bumped each time a finished computation becomes the cache.
     int generation() const { return m_generation; }
 
-    /// Make sure a result for \p desired is cached or being computed.
+    /// Make sure a result for \p desired is cached or on its way.
     /**
-        Pixels streaming in from a renderer change the content version faster than a full pass can finish,
-        and chasing every version would cancel each computation partway. So a newer version is only picked
-        up once the cache has stood as a finished result for a moment.
+        A computation under way runs to the end even when the settings have moved on, after which the newest
+        settings start. Settings that change every frame, as while dragging a slider, would otherwise cancel each
+        computation before it finished and show nothing until they settled; this way the cache follows them as
+        fast as results can be computed, at worst one computation behind.
+
+        Pixels streaming in from a renderer change the content version faster than a full pass can finish, so
+        a newer version is only picked up once the cache has stood as a finished result for a moment.
 
         \param compute  Called on a worker thread as `compute(Result &, const Settings &, std::atomic<bool>
                         &canceled)`; it fills in the result and sets `computed` unless canceled
@@ -60,23 +64,17 @@ public:
     template <typename Compute>
     void update(Settings desired, Compute &&compute)
     {
+        if (!m_tracker.ready())
+            return;
+        if (m_async->computed)
+            adopt();
+
         static constexpr auto k_min_age = std::chrono::milliseconds{200};
         if (m_cached->computed && std::chrono::steady_clock::now() - m_ready_at < k_min_age)
             desired.take_content_versions(m_cached->settings);
 
-        if (m_cached->computed && m_cached->settings.match(desired))
-            return;
-
-        // nothing under way for these settings, or it was canceled
-        if (!m_async_settings.match(desired) || (m_tracker.ready() && !m_async->computed))
-            return start(desired, std::forward<Compute>(compute));
-
-        if (m_tracker.ready() && m_async->computed)
-        {
-            adopt();
-            if (!m_cached->settings.match(desired))
-                start(desired, std::forward<Compute>(compute));
-        }
+        if (!m_cached->computed || !m_cached->settings.match(desired))
+            start(desired, std::forward<Compute>(compute));
     }
 
     /// Stop any computation under way and wait for it to unwind.
@@ -96,7 +94,6 @@ private:
         m_tracker  = stp::do_async(
             [result = m_async, desired, canceled = m_canceled, compute = std::forward<Compute>(compute)]() mutable
             { compute(*result, desired, *canceled); });
-        m_async_settings = desired;
     }
 
     /// Take the finished computation as the cache and start a fresh slot for the next one.
@@ -109,7 +106,6 @@ private:
 
     std::shared_ptr<Result>               m_cached;
     std::shared_ptr<Result>               m_async;
-    Settings                              m_async_settings{};
     stp::ThreadPool::TaskTracker          m_tracker;
     std::shared_ptr<std::atomic<bool>>    m_canceled; ///< Shared with the task; a bare atomic cannot be moved
     std::chrono::steady_clock::time_point m_ready_at{};
