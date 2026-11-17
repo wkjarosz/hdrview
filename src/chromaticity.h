@@ -71,6 +71,7 @@ struct ChromaticityDiagramLayers
     bool  daylight        = true;               ///< The daylight locus, with ticks at correlated color temperatures
     bool  hovered         = true;               ///< The chromaticity of the pixel under the cursor
     float density_opacity = 0.7f;               ///< How strongly the density shows, within the locus and beyond it
+    bool  collapsed       = false;              ///< Whether the layers' checkboxes are folded away behind an arrow
 };
 
 /// The grid over spectral_locus(), on which the chromaticity diagram's background is drawn.

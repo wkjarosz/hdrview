@@ -86,8 +86,10 @@ static void draw_layer_checkboxes(ChromaticityDiagramLayers &layers)
 
 /// The chromaticity diagram's layer checkboxes, on a translucent panel in the plot's top-right corner.
 /**
-    Submitted after the plot, so they take the mouse from it: ImPlot lets later items overlap its plots. When the
-    panel would cover much of the plot, a button in the corner opens the checkboxes in a popup instead.
+    An arrow in the panel's corner folds it down to just the arrow and opens it again, staying put either way.
+    When the open panel would cover much of the plot, the arrow opens the checkboxes in a popup instead, leaving
+    the panel folded until there is room. Submitted after the plot, so they take the mouse from it: ImPlot lets
+    later items overlap its plots.
 */
 static void draw_layer_toggles(ChromaticityDiagramLayers &layers, float2 plot_min, float2 plot_max)
 {
@@ -103,46 +105,57 @@ static void draw_layer_toggles(ChromaticityDiagramLayers &layers, float2 plot_mi
     const ImU32       panel_bg = ImGui::GetColorU32(ImGuiCol_PopupBg, 0.85f);
     const float2      pad{EmSize(0.3f), EmSize(0.3f)};
     const float2      cursor = ImGui::GetCursorScreenPos();
+    const float       arrow  = ImGui::GetFontSize();
+    const float       row    = ImGui::GetFrameHeight();
 
     // the checkboxes' extent, sized as draw_layer_checkboxes() lays them out
     const auto toggles  = layer_toggles(layers);
     const int  n_layers = int(toggles.size());
     float      width    = 0.f;
     for (auto &[label, shown] : toggles) width = std::max(width, ImGui::CalcTextSize(label).x);
-    const float2 inner{width + ImGui::GetFrameHeight() + style.ItemInnerSpacing.x,
-                       n_layers * ImGui::GetFrameHeight() + (n_layers - 1) * style.ItemSpacing.y};
-    const float2 panel = inner + 2.f * pad;
+    const float2 checkboxes{width + row + style.ItemInnerSpacing.x,
+                            n_layers * row + (n_layers - 1) * style.ItemSpacing.y};
 
-    if (la::all(la::lequal(panel, k_max_cover * (plot_max - plot_min))))
+    // open, the panel holds the checkboxes with the arrow beside the first; folded, just the arrow
+    const float2 open_panel = float2{checkboxes.x + style.ItemInnerSpacing.x + arrow, checkboxes.y} + 2.f * pad;
+    const bool   fits       = la::all(la::lequal(open_panel, k_max_cover * (plot_max - plot_min)));
+    const bool   open       = fits && !layers.collapsed;
+    const float2 panel      = open ? open_panel : float2{arrow, row} + 2.f * pad;
+    const float2 panel_min{plot_max.x - pad.x - panel.x, plot_min.y + pad.y};
+    // in the same place open or folded: the top-right corner, centered on the first row
+    const float2 arrow_min{plot_max.x - 2.f * pad.x - arrow, panel_min.y + pad.y + 0.5f * (row - arrow)};
+
+    auto *draw_list = ImGui::GetWindowDrawList();
+    draw_list->AddRectFilled(panel_min, panel_min + panel, panel_bg, style.FrameRounding);
+
+    // drawn as Dear ImGui draws a window's collapse button
+    ImGui::SetCursorScreenPos(arrow_min);
+    if (ImGui::InvisibleButton("fold", ImVec2{arrow, arrow}))
     {
-        const float2 panel_min{plot_max.x - panel.x - pad.x, plot_min.y + pad.y};
-        ImGui::GetWindowDrawList()->AddRectFilled(panel_min, panel_min + panel, panel_bg, style.FrameRounding);
+        if (fits)
+            layers.collapsed = !layers.collapsed;
+        else
+            ImGui::OpenPopup("layers");
+    }
+    ImGui::SetItemTooltip(open ? "Hide layers" : "Show layers");
+    if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+        draw_list->AddCircleFilled(
+            arrow_min + float2{0.5f * arrow, 0.5f * arrow - 0.5f}, 0.5f * arrow + 1.f,
+            ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered));
+    ImGui::RenderArrow(draw_list, arrow_min, ImGui::GetColorU32(ImGuiCol_Text), open ? ImGuiDir_Up : ImGuiDir_Down,
+                       1.f);
+
+    if (open)
+    {
         ImGui::SetCursorScreenPos(panel_min + pad);
         draw_layer_checkboxes(layers);
     }
-    else
+
+    ImGui::SetNextWindowPos(panel_min + panel, ImGuiCond_Appearing, ImVec2{1.f, 0.f});
+    if (ImGui::BeginPopup("layers"))
     {
-        // a down arrow, drawn as Dear ImGui draws a window's collapse button
-        const float  side = ImGui::GetFontSize();
-        const float2 button_min{plot_max.x - side - pad.x, plot_min.y + pad.y};
-        ImGui::SetCursorScreenPos(button_min);
-        if (ImGui::InvisibleButton("show layers", ImVec2{side, side}))
-            ImGui::OpenPopup("layers");
-        ImGui::SetItemTooltip("Layers");
-
-        auto *draw_list = ImGui::GetWindowDrawList();
-        if (ImGui::IsItemHovered() || ImGui::IsItemActive())
-            draw_list->AddCircleFilled(
-                button_min + float2{0.5f * side, 0.5f * side - 0.5f}, 0.5f * side + 1.f,
-                ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered));
-        ImGui::RenderArrow(draw_list, button_min, ImGui::GetColorU32(ImGuiCol_Text), ImGuiDir_Down, 1.f);
-
-        ImGui::SetNextWindowPos(button_min + float2{side}, ImGuiCond_Appearing, ImVec2{1.f, 0.f});
-        if (ImGui::BeginPopup("layers"))
-        {
-            draw_layer_checkboxes(layers);
-            ImGui::EndPopup();
-        }
+        draw_layer_checkboxes(layers);
+        ImGui::EndPopup();
     }
 
     ImGui::PopStyleVar(2);

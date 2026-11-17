@@ -525,6 +525,7 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
                     l.daylight        = d->value("daylight locus", l.daylight);
                     l.hovered         = d->value("hovered pixel", l.hovered);
                     l.density_opacity = std::clamp(d->value("pixel density opacity", l.density_opacity), 0.f, 1.f);
+                    l.collapsed       = d->value("collapsed", l.collapsed);
                 }
 
                 // Clamped: it indexes pixel_color_widget()'s current/reference/composite choices, and the
@@ -645,7 +646,8 @@ void HDRViewApp::save_user_settings()
                                         {"wavelengths", m_chromaticity_layers.wavelengths},
                                         {"daylight locus", m_chromaticity_layers.daylight},
                                         {"hovered pixel", m_chromaticity_layers.hovered},
-                                        {"pixel density opacity", m_chromaticity_layers.density_opacity}};
+                                        {"pixel density opacity", m_chromaticity_layers.density_opacity},
+                                        {"collapsed", m_chromaticity_layers.collapsed}};
     j["status pixel target"]     = m_status_pixel_target;
     j["histogram x scale"]       = m_x_scale;
     j["histogram y scale"]       = m_y_scale;
