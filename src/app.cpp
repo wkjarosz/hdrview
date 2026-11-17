@@ -520,7 +520,7 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
                 {
                     auto &l           = m_chromaticity_legend;
                     l.density         = d->value("pixel density", l.density);
-                    l.gamut           = d->value("gamut", l.gamut);
+                    l.image_gamut     = d->value("image gamut", l.image_gamut);
                     l.display_gamut   = d->value("display gamut", l.display_gamut);
                     l.wavelengths     = d->value("wavelengths", l.wavelengths);
                     l.daylight        = d->value("daylight locus", l.daylight);
@@ -643,7 +643,7 @@ void HDRViewApp::save_user_settings()
     j["clip range"]              = m_clip_range;
     j["histogram height"]        = m_histogram_height;
     j["chromaticity diagram"]    = json{{"pixel density", m_chromaticity_legend.density},
-                                        {"gamut", m_chromaticity_legend.gamut},
+                                        {"image gamut", m_chromaticity_legend.image_gamut},
                                         {"display gamut", m_chromaticity_legend.display_gamut},
                                         {"wavelengths", m_chromaticity_legend.wavelengths},
                                         {"daylight locus", m_chromaticity_legend.daylight},

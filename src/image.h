@@ -424,7 +424,8 @@ inline float3 group_rgb(ChannelGroup::Type type, int num_channels, float4 raw, f
 /// How many of an image's pixels fall in each texel of a chromaticity grid, by their CIE 1931 xy.
 /**
     A pixel's chromaticity is that of the color group_rgb() gives it, so a premultiplied pixel and its straight
-    version count the same, as do any two differing only in exposure. Black and non-finite pixels have none.
+    version count the same, as do any two differing only in exposure. A pixel whose X + Y + Z is not positive and
+    finite, black included, has none.
 */
 struct ChromaticityBins
 {
@@ -451,7 +452,7 @@ struct ChromaticityBins
     std::vector<uint32_t> counts;        ///< One per texel of grid, row by row; empty until computed
     uint32_t              max_count = 0; ///< The largest of counts
     int64_t               outside   = 0; ///< Pixels whose chromaticity lies off the grid
-    int64_t               skipped   = 0; ///< Pixels with no chromaticity: black, negative, or not finite
+    int64_t               skipped   = 0; ///< Pixels with no chromaticity, as above
 
     /// Count \p img's pixels for \p desired; leaves `computed` false if \p canceled is raised first.
     void calculate(const Image &img, const Settings &desired, std::atomic<bool> &canceled);
@@ -523,7 +524,7 @@ struct ImageMetadata
 struct Image : ImageMetadata
 {
 public:
-    static bool loadable(const std::string &extension);
+    static bool                         loadable(const std::string &extension);
     /// The formats HDRView can load, each a name and the extensions of its files, without their dots.
     static const std::vector<std::pair<std::string, std::vector<std::string>>> &loadable_format_groups();
     /// Every extension in loadable_format_groups().
@@ -649,8 +650,8 @@ public:
     /**
         A task computing one channel's statistics also reads its group's alpha channel, and the channel
         vector destroys its elements back to front -- so the alpha channel, being last, would be freed while
-        an earlier channel's task was still reading it. Each Channel destructor only cancels its own task,
-        which is too late by then.
+        an earlier channel's task was still reading it. Each channel's own cache stops only its own task as it
+        goes, which is too late by then.
     */
     ~Image() { cancel_stats(); }
 

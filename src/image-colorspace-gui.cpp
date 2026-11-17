@@ -62,14 +62,14 @@ Texture *Image::chromaticity_density_texture(const ChromaticityBins &bins)
 static std::array<std::pair<const char *, bool *>, 6> legend_entries(ChromaticityLegend &legend)
 {
     return {{{"Pixel density", &legend.density},
-             {"Image gamut", &legend.gamut},
+             {"Image gamut", &legend.image_gamut},
              {"Display gamut", &legend.display_gamut},
              {"Wavelengths", &legend.wavelengths},
              {"Daylight locus", &legend.daylight},
              {"Hovered pixel", &legend.hovered}}};
 }
 
-/// A checkbox per legend entry; right-clicking "Pixel density" sets the overlay's opacity.
+/// A checkbox per legend entry; right-clicking "Pixel density" sets its opacity, and "Display gamut" tells its source.
 static void draw_legend_checkboxes(ChromaticityLegend &legend)
 {
     ImGui::BeginGroup();
@@ -121,7 +121,7 @@ static void draw_legend(ChromaticityLegend &legend, float2 plot_min, float2 plot
     const ImU32       panel_bg = ImGui::GetColorU32(ImGuiCol_PopupBg, 0.85f);
     const float2      pad{EmSize(0.3f), EmSize(0.3f)};
     const float2      cursor = ImGui::GetCursorScreenPos();
-    const float       row    = ImGui::GetFrameHeight(); //< a checkbox's height, and the arrow button's size
+    const float       row    = ImGui::GetFrameHeight(); // a checkbox's height, and the arrow button's size
 
     // the checkboxes' extent, sized as draw_legend_checkboxes() lays them out
     const auto entries   = legend_entries(legend);
@@ -432,13 +432,13 @@ void Image::draw_chromaticity_diagram(float width)
             ImGui::AddDashedPolyline(ImPlot::GetPlotDrawList(), corners, 3, ImGui::GetColorU32(text_color_f), true,
                                      scale_factor, 3.f * scale_factor);
         };
-        if (!legend.gamut)
+        if (!legend.image_gamut)
             draw_display_gamut();
 
         //
         // draw the primaries, gamut triangle, whitepoint, and text labels
         //
-        if (legend.gamut)
+        if (legend.image_gamut)
         {
             Chromaticities gamut_chr{chromaticities.value_or(Chromaticities{})};
             ImVec4         colors[] = {

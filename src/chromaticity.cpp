@@ -72,8 +72,8 @@ static bool segment_meets_box(float2 a, float2 b, float2 lo, float2 hi)
 
 bool box_meets_spectral_locus(float2 lo, float2 hi)
 {
-    // Either the locus's outline crosses into the box, which covers the locus lying wholly inside it, or the box
-    // lies wholly inside the locus, so any one corner is.
+    // They meet when the box lies wholly inside the locus, and then so does any corner, or when the locus's outline
+    // enters the box, which includes the locus lying wholly inside it.
     if (inside_spectral_locus(lo))
         return true;
     const auto  &locus = spectral_locus();

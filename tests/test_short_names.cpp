@@ -212,8 +212,8 @@ TEST_CASE("DashedPolyline ends on any geometry, and dashes half of what lies wit
         const float period = 2.f * dash;
 
         // An equilateral triangle whose perimeter is a whole number of periods, though no side is: half of it
-        // is dashed only if the pattern carries on around the corners, and the pattern's phase lands on each
-        // period's end, where rounding once kept a loop from advancing.
+        // is dashed only if the pattern carries on around the corners. The pattern's phase also lands on each
+        // period's end, where roundoff leaves a step too small for a loop advancing by steps to move on.
         for (int periods : {3, 4, 5, 6, 9, 10, 15})
         {
             CAPTURE(periods);
