@@ -9,6 +9,8 @@
 #include "colorspace.h"
 #include "fwd.h"
 
+#include <optional>
+
 /**
     The color space the display expects HDRView's final frame to be encoded in.
 
@@ -23,8 +25,12 @@ struct DisplayColorSpace
 {
     /// How the display wants the final frame encoded.
     TransferFunction tf{TransferFunction::Gamma, 2.2f};
-    /// The display's primaries. Rendering is done in Rec.709, so a conversion is needed when these differ.
+    /// The primaries the frame is encoded in; HDRView renders in Rec.709 and converts when these differ.
     Chromaticities chroma = gamut_chromaticities(ColorGamut_sRGB_BT709);
+    /// The panel's own primaries, where the platform reports them.
+    /** Unlike `chroma`, these are what the screen can show once the OS has converted the frame to it: from the
+        screen's color profile on macOS, and its EDID on Windows. */
+    std::optional<Chromaticities> panel;
     /// The display's configured SDR reference white, in nits.
     /** scRGB fixes this at 80, but Windows' "SDR content brightness" slider and Wayland compositors'
         reference luminance routinely raise it. */
@@ -59,6 +65,21 @@ struct DisplayColorSpace
 */
 DisplayColorSpace query_display_colorspace(void *window);
 
+/// The primaries of the colors a frame drawn for a display can show, and whether they are the panel's own.
+struct DisplayGamut
+{
+    Chromaticities chroma;
+    bool           panel = false; ///< true for the panel's own primaries, false for the frame's encoding's
+};
+
+/// The gamut a frame drawn for \p display reaches.
+/**
+    The panel's own primaries when the platform reports a plausible triangle for them and the frame can reach past
+    its encoding's [0, 1] (\p float_buffer: macOS EDR, or scRGB), so the OS converts its colors outside the encoding
+    to the panel. Otherwise the encoding clips to its own primaries, whatever the panel could show.
+*/
+DisplayGamut display_gamut(const DisplayColorSpace &display, bool float_buffer);
+
 /// The steps the frame is dithered by in the image shader and in the colorpass, either 0 for none there.
 struct DisplayDither
 { float image_shader = 0.f, colorpass = 0.f; };
@@ -84,19 +105,33 @@ DisplayDither display_dither(const DisplayColorSpace &display, bool color_manage
     `window` is a GLFWwindow*, kept as void* for the same reason as above.
 */
 float cocoa_display_headroom(void *window);
+
+/// The primaries of the screen the window is on, read from its color profile; nullopt if they can't be read.
+/**
+    Reads the profile only when the screen's color space changes, so it is cheap to call every frame.
+    `window` is a GLFWwindow*, kept as void* for the same reason as above.
+*/
+std::optional<Chromaticities> cocoa_display_primaries(void *window);
 #endif
 
 #if defined(_WIN32)
+/// What DXGI reports about the display the window is on.
+struct Win32Display
+{
+    float                         max_nits = 0.f; ///< peak luminance, in nits; 0 when unknown
+    std::optional<Chromaticities> primaries;      ///< the panel's primaries, from its EDID
+};
+
 /**
-    Ask DXGI for the peak luminance, in nits, of the display the window is on.
+    Ask DXGI for the peak luminance and primaries of the display the window is on.
 
     The GLFW fork's Win32 max-luminance getter is a flag: 80 nits for "not HDR", 0 for "HDR, ceiling
     unknown". `IDXGIOutput6::GetDesc1` has the real number, so query_display_colorspace() fills it in here.
 
-    Returns 0 when the ceiling is unknown (no matching DXGI output, or a Windows too old for IDXGIOutput6).
+    Leaves both unknown when there is no matching DXGI output, or the Windows is too old for IDXGIOutput6.
     Enumerating adapters is too slow to do every frame, so the caller throttles it.
 
     `window` is a GLFWwindow*, kept as void* for the same reason as above.
 */
-float win32_display_max_nits(void *window);
+Win32Display win32_display(void *window);
 #endif

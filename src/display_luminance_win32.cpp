@@ -34,22 +34,22 @@ void release(T *&p)
 
 } // namespace
 
-float win32_display_max_nits(void *window)
+Win32Display win32_display(void *window)
 {
     HWND hwnd = window ? glfwGetWin32Window((GLFWwindow *)window) : nullptr;
     if (!hwnd)
-        return 0.f;
+        return {};
 
     // which monitor the window is mostly on; DXGI identifies its outputs by the same HMONITOR
     HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
     if (!monitor)
-        return 0.f;
+        return {};
 
     // A bare factory is enough to walk adapters and outputs, and DXGI needs no CoInitialize. It is created
     // per call because a cached one goes stale (IDXGIFactory1::IsCurrent) on any display configuration change.
     IDXGIFactory1 *factory = nullptr;
     if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void **)&factory)))
-        return 0.f;
+        return {};
 
     bool              matched = false;
     DXGI_OUTPUT_DESC1 found{};
@@ -87,7 +87,7 @@ float win32_display_max_nits(void *window)
     release(factory);
 
     if (!matched)
-        return 0.f;
+        return {};
 
     // logged only when the numbers change, since this is polled several times a second
     static DXGI_OUTPUT_DESC1 last{};
@@ -102,5 +102,12 @@ float win32_display_max_nits(void *window)
     // MaxLuminance is the small-area peak, MaxFullFrameLuminance what the panel sustains across the whole
     // screen; on OLED the two differ severalfold. The peak is what Wayland compositors and macOS's EDR
     // headroom describe. Both come from EDID, which displays routinely overstate.
-    return (float)found.MaxLuminance;
+    Win32Display display;
+    display.max_nits = (float)found.MaxLuminance;
+    // also from EDID, and left at zero by some displays; display_gamut() ignores primaries that span no triangle
+    display.primaries = Chromaticities{{found.RedPrimary[0], found.RedPrimary[1]},
+                                       {found.GreenPrimary[0], found.GreenPrimary[1]},
+                                       {found.BluePrimary[0], found.BluePrimary[1]},
+                                       {found.WhitePoint[0], found.WhitePoint[1]}};
+    return display;
 }

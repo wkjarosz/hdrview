@@ -531,6 +531,8 @@ public:
         value arrives a moment after startup. 0 means the display has not told us, not "no headroom".
     */
     float display_headroom() const;
+    /// The gamut the display shows HDRView's frame in; see display_gamut().
+    DisplayGamut display_gamut() const { return ::display_gamut(m_display_cs, m_float_buffer); }
 
     /// Where the highlight rolloff takes the content's peak from.
     enum PeakSource : int

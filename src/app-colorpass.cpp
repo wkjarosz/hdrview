@@ -113,10 +113,7 @@ float HDRViewApp::display_headroom() const
 
 void HDRViewApp::update_colorpass()
 {
-#if defined(HELLOIMGUI_HAS_OPENGL)
-    if (m_colorpass_failed)
-        return;
-
+    // queried on every backend, since the chromaticity diagram shows the display's gamut
     auto cs = query_display_colorspace(m_params.backendPointers.glfwWindow);
     if (cs != m_display_cs)
     {
@@ -125,6 +122,10 @@ void HDRViewApp::update_colorpass()
         spdlog::info("Display color space is now {} ({}).", cs.name(),
                      cs.needs_color_management() ? "colorpass active" : "no color management needed");
     }
+
+#if defined(HELLOIMGUI_HAS_OPENGL)
+    if (m_colorpass_failed)
+        return;
 
     m_color_managed = cs.needs_color_management();
     if (!m_color_managed)

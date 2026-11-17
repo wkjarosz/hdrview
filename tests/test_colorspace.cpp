@@ -174,6 +174,46 @@ TEST_CASE("a display is dithered once, by a step of the depth it shows")
         }
 }
 
+TEST_CASE("a display shows its panel's gamut only through a frame that reaches past its encoding's")
+{
+    // every named gamut a panel could report, as the encoding and as the panel, which a frame reaches only when
+    // it is floating point
+    for (int e = ColorGamut_FirstNamed; e <= ColorGamut_LastNamed; ++e)
+        for (int p = ColorGamut_FirstNamed; p <= ColorGamut_LastNamed; ++p)
+        {
+            DisplayColorSpace display;
+            display.chroma = gamut_chromaticities(ColorGamut_(e));
+            display.panel  = gamut_chromaticities(ColorGamut_(p));
+            CAPTURE(color_gamut_name(ColorGamut_(e)));
+            CAPTURE(color_gamut_name(ColorGamut_(p)));
+
+            CHECK(display_gamut(display, true).panel);
+            CHECK(display_gamut(display, true).chroma == *display.panel);
+            CHECK_FALSE(display_gamut(display, false).panel);
+            CHECK(display_gamut(display, false).chroma == display.chroma);
+
+            display.panel.reset();
+            CHECK_FALSE(display_gamut(display, true).panel);
+            CHECK(display_gamut(display, true).chroma == display.chroma);
+        }
+
+    // what a display's EDID can hold instead of a panel's primaries
+    const Chromaticities p3 = gamut_chromaticities(ColorGamut_Display_P3_SMPTE432);
+    Chromaticities       zeros{{0, 0}, {0, 0}, {0, 0}, {0, 0}}, collinear = p3, white_outside = p3, unknown = p3,
+                   reversed = p3;
+    collinear.green     = (p3.red + p3.blue) / 2.f;
+    white_outside.white = float2{0.7f, 0.25f};
+    unknown.blue.x      = std::numeric_limits<float>::quiet_NaN();
+    std::swap(reversed.red, reversed.blue);
+    for (const Chromaticities &panel : {zeros, collinear, white_outside, unknown, reversed})
+    {
+        DisplayColorSpace display;
+        display.panel = panel;
+        CHECK_FALSE(display_gamut(display, true).panel);
+        CHECK(display_gamut(display, true).chroma == display.chroma);
+    }
+}
+
 TEST_CASE("color_u32_to_f128/color_f128_to_u32 round-trip exactly")
 {
     for (uint32_t packed : {0x00000000u, 0xFFFFFFFFu, 0xFF0000FFu, 0x00FF00FFu, 0x0000FFFFu, 0x7F3C9AFFu})

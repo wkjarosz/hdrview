@@ -58,11 +58,37 @@ Texture *Image::chromaticity_density_texture(const ChromaticityBins &bins)
     return m_chromaticity_density.get();
 }
 
+/// Strokes the closed polygon through \p points with dashes \p dash pixels long, and gaps as long.
+/** The pattern carries on around the corners rather than restarting at each. */
+static void add_dashed_polygon(ImDrawList *draw_list, const float2 *points, int count, ImU32 color, float thickness,
+                               float dash)
+{
+    float traveled = 0.f; // along the polygon, up to the start of the current edge
+    for (int i = 0; i < count; ++i)
+    {
+        const float2 a = points[i], b = points[(i + 1) % count];
+        const float  edge = length(b - a);
+        if (!(edge > 0.f))
+            continue;
+        const float2 dir = (b - a) / edge;
+        for (float t = 0.f; t < edge;)
+        {
+            const float phase = std::fmod(traveled + t, 2.f * dash);
+            const float next  = std::min(edge, t + (phase < dash ? dash : 2.f * dash) - phase);
+            if (phase < dash)
+                draw_list->AddLine(a + t * dir, a + next * dir, color, thickness);
+            t = next;
+        }
+        traveled += edge;
+    }
+}
+
 /// Each entry of the chromaticity diagram's legend: its label and the flag it toggles.
-static std::array<std::pair<const char *, bool *>, 5> legend_entries(ChromaticityLegend &legend)
+static std::array<std::pair<const char *, bool *>, 6> legend_entries(ChromaticityLegend &legend)
 {
     return {{{"Pixel density", &legend.density},
-             {"Gamut", &legend.gamut},
+             {"Image gamut", &legend.gamut},
+             {"Display gamut", &legend.display_gamut},
              {"Wavelengths", &legend.wavelengths},
              {"Daylight locus", &legend.daylight},
              {"Hovered pixel", &legend.hovered}}};
@@ -79,6 +105,20 @@ static void draw_legend_checkboxes(ChromaticityLegend &legend)
         {
             ImGui::SliderFloat("Opacity", &legend.density_opacity, 0.f, 1.f, "%.2f");
             ImGui::EndPopup();
+        }
+        if (shown == &legend.display_gamut && ImGui::BeginItemTooltip())
+        {
+            const DisplayGamut display = hdrview()->display_gamut();
+            const ColorGamut_  named   = named_color_gamut(display.chroma);
+            ImGui::PushTextWrapPos(ImGui::GetFontSize() * 25.f);
+            ImGui::TextUnformatted(display.panel ? "The primaries of the colors the screen can show, as the system "
+                                                   "reports them."
+                                                 : "The primaries the frame is encoded in for the screen; colors "
+                                                   "beyond them clip, whatever the screen could show.");
+            if (named != ColorGamut_Custom)
+                ImGui::TextDisabled("%s", color_gamut_name(named));
+            ImGui::PopTextWrapPos();
+            ImGui::EndTooltip();
         }
     }
     ImGui::EndGroup();
@@ -404,6 +444,23 @@ void Image::draw_chromaticity_diagram(float width)
         }
 
         //
+        // the display's gamut, dashed and in the locus' color to tell it from the image's
+        //
+        auto draw_display_gamut = [&]
+        {
+            if (!legend.display_gamut)
+                return;
+            const Chromaticities chr       = hdrview()->display_gamut().chroma;
+            const float2         corners[] = {ImPlot::PlotToPixels(chr.red.x, chr.red.y),
+                                              ImPlot::PlotToPixels(chr.green.x, chr.green.y),
+                                              ImPlot::PlotToPixels(chr.blue.x, chr.blue.y)};
+            add_dashed_polygon(ImPlot::GetPlotDrawList(), corners, 3, ImGui::GetColorU32(text_color_f), scale_factor,
+                               3.f * scale_factor);
+        };
+        if (!legend.gamut)
+            draw_display_gamut();
+
+        //
         // draw the primaries, gamut triangle, whitepoint, and text labels
         //
         if (legend.gamut)
@@ -425,6 +482,8 @@ void Image::draw_chromaticity_diagram(float width)
             triangle_spec.LineWeight = scale_factor;
             triangle_spec.Stride     = sizeof(double2);
             ImPlot::PlotLine("##gamut_triangle", &primaries[0].x, &primaries[0].y, 4, triangle_spec);
+            // over the image's triangle, so both show where they coincide, but under its handles
+            draw_display_gamut();
 
             primaries[3] = double2(gamut_chr.white);
 

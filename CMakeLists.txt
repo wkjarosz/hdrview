@@ -393,7 +393,7 @@ if(APPLE AND NOT EMSCRIPTEN)
   set(HELLOIMGUI_HAS_METAL ON)
   set(HELLOIMGUI_USE_GLFW3 ON)
 
-  # display_headroom_cocoa.mm queries the one display property GLFW's Cocoa backend leaves unreported
+  # display_headroom_cocoa.mm queries the display properties GLFW's Cocoa backend leaves unreported
   list(APPEND EXTRA_SOURCES src/renderpass_metal.mm src/shader_metal.mm src/texture_metal.mm
        src/display_headroom_cocoa.mm
   )
@@ -415,8 +415,8 @@ if((APPLE OR ((WIN32 OR (CMAKE_SYSTEM_NAME MATCHES "Linux")) AND HDRVIEW_ENABLE_
     set(HELLOIMGUI_HAS_OPENGL3 ON)
   endif()
   if(WIN32)
-    # the fork's Win32 backend reports peak luminance only as a flag, so display_luminance_win32.cpp asks
-    # DXGI for the real number
+    # the fork's Win32 backend reports peak luminance only as a flag, and no primaries, so
+    # display_luminance_win32.cpp asks DXGI for both
     list(APPEND EXTRA_SOURCES src/display_luminance_win32.cpp)
     list(APPEND HDRVIEW_DEPENDENCIES dxgi)
   endif()

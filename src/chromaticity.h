@@ -67,6 +67,7 @@ struct ChromaticityLegend
 
     bool  density         = density_by_default; ///< The image's chromaticity density, fading colors it holds little of
     bool  gamut           = true;               ///< The image's primaries and white point, which can be dragged
+    bool  display_gamut   = true;               ///< The primaries of the colors the display shows
     bool  wavelengths     = true;               ///< Wavelength ticks along the spectral locus
     bool  daylight        = true;               ///< The daylight locus, with ticks at correlated color temperatures
     bool  hovered         = true;               ///< The chromaticity of the pixel under the cursor
