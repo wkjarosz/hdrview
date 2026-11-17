@@ -47,84 +47,86 @@ std::array<float2, 4> corners(const Chromaticities &chr) { return {chr.red, chr.
 
 } // namespace
 
-TEST_CASE("The chromaticity grid holds the spectral locus with one texel to spare on every side")
-{
-    const ChromaticityGrid &g = chromaticity_grid();
-    const float             t = ChromaticityGrid::texel;
-
-    REQUIRE(g.size.x > 0);
-    REQUIRE(g.size.y > 0);
-    CHECK(la::maxelem(la::abs(g.max - g.min - float2(g.size) * t)) < 1e-5f);
-
-    float2 lo{std::numeric_limits<float>::infinity()}, hi{-std::numeric_limits<float>::infinity()};
-    for (auto p : spectral_locus())
-    {
-        lo = la::min(lo, p);
-        hi = la::max(hi, p);
-    }
-
-    // a full texel between the locus and each edge, so bilinear filtering fades it out inside the texture...
-    CHECK(la::all(la::gequal(lo, g.min + t)));
-    CHECK(la::all(la::lequal(hi, g.max - t)));
-    // ...and no more than two, so the texels go to the locus
-    CHECK(la::all(la::less(lo, g.min + 2.f * t)));
-    CHECK(la::all(la::greater(hi, g.max - 2.f * t)));
-
-    // the outermost ring of texels lies wholly outside the locus
-    int inside = 0;
-    for (int x = 0; x < g.size.x; ++x)
-        for (int y : {0, g.size.y - 1}) inside += inside_spectral_locus(g.center(int2{x, y}));
-    for (int y = 0; y < g.size.y; ++y)
-        for (int x : {0, g.size.x - 1}) inside += inside_spectral_locus(g.center(int2{x, y}));
-    CHECK(inside == 0);
-
-    // texel_of() and center() are inverses, and anything far off the grid stays off it
-    for (int2 p : {int2{0, 0}, int2{g.size.x - 1, g.size.y - 1}, g.size / 2}) CHECK(g.texel_of(g.center(p)) == p);
-    for (float2 xy : {float2{1e30f, 0.3f}, float2{-1e30f, 0.3f}, float2{0.3f, 1e30f}, float2{0.3f, -1e30f}})
-        CHECK_FALSE(g.contains(g.texel_of(xy)));
-}
-
-TEST_CASE("A gamut's chromaticity grid holds the locus, the primaries and white, on the locus grid's texels")
+TEST_CASE("Every chromaticity grid holds what it covers with one texel to spare, on one lattice")
 {
     const ChromaticityGrid &locus = chromaticity_grid();
     const float             t     = ChromaticityGrid::texel;
 
+    float2 locus_lo{std::numeric_limits<float>::infinity()}, locus_hi{-std::numeric_limits<float>::infinity()};
+    for (auto p : spectral_locus())
+    {
+        locus_lo = la::min(locus_lo, p);
+        locus_hi = la::max(locus_hi, p);
+    }
+
+    // The locus's own grid, then each gamut's: every named one, sRGB with blue dragged across the opposite edge
+    // past white, and sRGB with each primary and the white in turn dragged off the locus, beyond the grid's reach
+    // on every side or just past the locus.
     std::vector<Chromaticities> gamuts;
     for (int i = ColorGamut_FirstNamed; i <= ColorGamut_LastNamed; ++i)
         gamuts.push_back(gamut_chromaticities(ColorGamut_(i)));
-    // sRGB with blue dragged across the opposite edge, past white; with green dragged far off; and with an
-    // imaginary white, beyond the locus
-    Chromaticities flipped = gamut_chromaticities(ColorGamut_sRGB_BT709), far = flipped, stray = flipped;
-    flipped.blue = float2{0.5f, 0.6f};
-    far.green    = float2{6.f, -4.f};
-    stray.white  = float2{1.2f, 0.1f};
-    gamuts.insert(gamuts.end(), {flipped, far, stray});
+    const Chromaticities srgb    = gamut_chromaticities(ColorGamut_sRGB_BT709);
+    Chromaticities       flipped = srgb;
+    flipped.blue                 = float2{0.5f, 0.6f};
+    gamuts.push_back(flipped);
+    for (int corner = 0; corner < 4; ++corner)
+        for (float2 xy : {float2{-3.f, 0.3f}, float2{3.f, 0.3f}, float2{0.3f, -3.f}, float2{0.3f, 3.f},
+                          float2{1.2f, 0.1f}, float2{0.1f, -0.2f}})
+        {
+            Chromaticities chr  = srgb;
+            float2        *ps[] = {&chr.red, &chr.green, &chr.blue, &chr.white};
+            *ps[corner]         = xy;
+            gamuts.push_back(chr);
+        }
 
+    std::vector<std::pair<ChromaticityGrid, std::vector<float2>>> grids{{locus, {}}};
     for (const Chromaticities &chr : gamuts)
     {
-        CAPTURE(chr.red);
-        CAPTURE(chr.green);
-        CAPTURE(chr.blue);
-        const ChromaticityGrid g = chromaticity_grid(RGB_to_XYZ(chr, 1.f));
+        // the corners the grid reaches, which stops at xy in [-0.5, 1.5]
+        std::vector<float2> reached;
+        for (float2 xy : corners(chr)) reached.push_back(la::clamp(xy, float2{-0.5f}, float2{1.5f}));
+        grids.push_back({chromaticity_grid(RGB_to_XYZ(chr, 1.f)), reached});
+    }
 
-        // a superset of the locus's grid, whose every texel covers exactly one of its own
-        CHECK(la::all(la::lequal(g.first, locus.first)));
-        CHECK(la::all(la::gequal(g.first + g.size, locus.first + locus.size)));
+    for (const auto &[g, reached] : grids)
+    {
+        CAPTURE(g.first);
+        CAPTURE(g.size);
+        REQUIRE(la::all(la::greater(g.size, int2{0})));
+        CHECK(la::maxelem(la::abs(g.max - g.min - float2(g.size) * t)) < 1e-5f);
+
+        // a full texel beyond the locus and each corner, so bilinear filtering fades it out inside the texture,
+        // and at most two beyond the farthest of them, so the texels go to the content
+        float2 lo = locus_lo, hi = locus_hi;
+        for (float2 xy : reached)
+        {
+            lo = la::min(lo, xy);
+            hi = la::max(hi, xy);
+        }
+        CHECK(la::all(la::gequal(lo, g.min + t)));
+        CHECK(la::all(la::lequal(hi, g.max - t)));
+        CHECK(la::all(la::lequal(lo, g.min + 2.f * t)));
+        CHECK(la::all(la::gequal(hi, g.max - 2.f * t)));
+
+        // on the locus grid's lattice, so a texel of one covers exactly a texel of the other
         for (int2 p : {int2{0, 0}, locus.size - 1, locus.size / 2})
             CHECK(g.texel_of(locus.center(p)) == p + locus.first - g.first);
 
-        // each corner of the gamut within reach has a texel to spare beyond it, and the grid reaches no further
-        for (float2 xy : corners(chr))
-        {
-            CAPTURE(xy);
-            const int2 p = g.texel_of(la::clamp(xy, float2{-0.5f}, float2{1.5f}));
-            CHECK(la::all(la::gequal(p, int2{1})));
-            CHECK(la::all(la::less(p, g.size - 1)));
-        }
-        CHECK(la::all(la::lequal(g.size, int2(2.f / t) + 3)));
+        // the outermost ring of texels lies wholly outside the locus
+        int inside = 0;
+        for (int x = 0; x < g.size.x; ++x)
+            for (int y : {0, g.size.y - 1}) inside += inside_spectral_locus(g.center(int2{x, y}));
+        for (int y = 0; y < g.size.y; ++y)
+            for (int x : {0, g.size.x - 1}) inside += inside_spectral_locus(g.center(int2{x, y}));
+        CHECK(inside == 0);
+
+        // texel_of() and center() are inverses, and anything far off the grid stays off it
+        for (int2 p : {int2{0, 0}, g.size - 1, g.size / 2}) CHECK(g.texel_of(g.center(p)) == p);
+        for (float2 xy : {float2{1e30f, 0.3f}, float2{-1e30f, 0.3f}, float2{0.3f, 1e30f}, float2{0.3f, -1e30f}})
+            CHECK_FALSE(g.contains(g.texel_of(xy)));
     }
 
-    // texels that lie outside the locus's grid are outside the locus too
+    // a grid reaching past the locus's knows which of its texels lie inside it
     const ChromaticityGrid g = chromaticity_grid(RGB_to_XYZ(gamut_chromaticities(ColorGamut_ACES_AP0), 1.f));
     REQUIRE(g.size.y > locus.size.y);
     int disagree = 0, in_locus = 0;
