@@ -58,12 +58,19 @@ struct ChromaticityGrid
 /// Which layers the chromaticity diagram draws, and how; saved with the app's settings.
 struct ChromaticityDiagramLayers
 {
-    bool  density         = true; ///< The image's chromaticity density, fading the colors it holds little of
-    bool  gamut           = true; ///< The image's primaries and white point, which can be dragged
-    bool  wavelengths     = true; ///< Wavelength ticks along the spectral locus
-    bool  daylight        = true; ///< The daylight locus, with ticks at correlated color temperatures
-    bool  hovered         = true; ///< The chromaticity of the pixel under the cursor
-    float density_opacity = 0.7f; ///< How strongly the density shows, within the locus and beyond it
+    /// Whether the density starts out shown: not in the web build, where each count holds up a frame.
+#ifdef __EMSCRIPTEN__
+    static constexpr bool density_by_default = false;
+#else
+    static constexpr bool density_by_default = true;
+#endif
+
+    bool  density         = density_by_default; ///< The image's chromaticity density, fading colors it holds little of
+    bool  gamut           = true;               ///< The image's primaries and white point, which can be dragged
+    bool  wavelengths     = true;               ///< Wavelength ticks along the spectral locus
+    bool  daylight        = true;               ///< The daylight locus, with ticks at correlated color temperatures
+    bool  hovered         = true;               ///< The chromaticity of the pixel under the cursor
+    float density_opacity = 0.7f;               ///< How strongly the density shows, within the locus and beyond it
 };
 
 /// The grid over spectral_locus(), on which the chromaticity diagram's background is drawn.
