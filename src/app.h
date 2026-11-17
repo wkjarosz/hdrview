@@ -6,7 +6,6 @@
 
 #include "annotations.h"
 #include "box.h"
-#include "chromaticity.h"
 #include "colormap.h"
 #include "display_colorspace.h"
 #include "edit/commands.h"
@@ -507,9 +506,6 @@ public:
     /// The color the viewport draws behind the image, for the edits that composite against it.
     float4 background_color() const { return m_bg_color; }
 
-    /// What the chromaticity diagram's legend shows.
-    ChromaticityLegend &chromaticity_legend() { return m_chromaticity_legend; }
-
     /// What cut or copy last took; null until one of them has run. Paste writes it back.
     ConstImagePtr clipboard() const { return m_clipboard; }
     void          set_clipboard(ImagePtr img) { m_clipboard = std::move(img); }
@@ -928,8 +924,6 @@ private:
           m_gamma_live  = 1.0f;
     AxisScale m_x_scale = AxisScale_Asinh, m_y_scale = AxisScale_Linear;
     float     m_histogram_height = default_histogram_height;
-
-    ChromaticityLegend m_chromaticity_legend;
 
     bool m_clamp_to_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true,
          m_draw_watched_pixels = true, m_draw_data_window = true, m_draw_display_window = true, m_show_FPS = false,

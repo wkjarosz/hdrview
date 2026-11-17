@@ -190,7 +190,7 @@ static void draw_legend(ChromaticityLegend &legend, float2 plot_min, float2 plot
 
 void Image::draw_chromaticity_diagram(float width)
 {
-    auto &legend = hdrview()->chromaticity_legend();
+    auto &legend = chromaticity_legend();
 
     static float2 vMin{-0.05f, -0.05f};
     static float2 vMax{0.75f, 0.9f};

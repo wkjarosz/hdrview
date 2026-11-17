@@ -84,6 +84,38 @@ bool box_meets_spectral_locus(float2 lo, float2 hi)
     return false;
 }
 
+/// Each of the legend's flags and the key the app's settings store it under.
+static const pair<const char *, bool ChromaticityLegend::*> k_legend_flags[] = {
+    {"pixel density", &ChromaticityLegend::density},     {"image gamut", &ChromaticityLegend::image_gamut},
+    {"display gamut", &ChromaticityLegend::display_gamut}, {"wavelengths", &ChromaticityLegend::wavelengths},
+    {"daylight locus", &ChromaticityLegend::daylight},   {"hovered pixel", &ChromaticityLegend::hovered},
+    {"legend collapsed", &ChromaticityLegend::collapsed}};
+
+json ChromaticityLegend::to_json() const
+{
+    json j = json::object();
+    for (auto [key, flag] : k_legend_flags) j[key] = this->*flag;
+    j["pixel density opacity"] = density_opacity;
+    return j;
+}
+
+void ChromaticityLegend::from_json(const json &j)
+{
+    if (!j.is_object())
+        return;
+    for (auto [key, flag] : k_legend_flags)
+        if (j.contains(key) && j[key].is_boolean())
+            this->*flag = j[key].get<bool>();
+    if (j.contains("pixel density opacity") && j["pixel density opacity"].is_number())
+        density_opacity = std::clamp(j["pixel density opacity"].get<float>(), 0.f, 1.f);
+}
+
+ChromaticityLegend &chromaticity_legend()
+{
+    static ChromaticityLegend legend;
+    return legend;
+}
+
 /// The bounding box of spectral_locus().
 static std::pair<float2, float2> locus_bounds()
 {

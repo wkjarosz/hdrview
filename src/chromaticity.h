@@ -7,6 +7,7 @@
 #pragma once
 
 #include "fwd.h"
+#include "json.h"
 
 #include <cstdint>
 #include <vector>
@@ -73,7 +74,15 @@ struct ChromaticityLegend
     bool  hovered         = true;               ///< The chromaticity of the pixel under the cursor
     float density_opacity = 0.7f;               ///< How strongly the density shows, within the locus and beyond it
     bool  collapsed       = false;              ///< Whether the legend is folded down to its button
+
+    /// The legend as the app's settings store it.
+    json to_json() const;
+    /// Take the settings \p j holds; a missing key, or a value of the wrong type, leaves that setting as it is.
+    void from_json(const json &j);
 };
+
+/// The chromaticity diagram's legend, shared by every image's diagram and saved with the app's settings.
+ChromaticityLegend &chromaticity_legend();
 
 /// The grid over spectral_locus(), on which the chromaticity diagram's background is drawn.
 const ChromaticityGrid &chromaticity_grid();
