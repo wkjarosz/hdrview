@@ -11,6 +11,7 @@
 #include "image.h"
 #include "test_support.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <limits>
@@ -204,4 +205,47 @@ TEST_CASE("Chromaticity bins ignore alpha and count only the selected region")
     const ChromaticityBins none = bin(*rgb, Box2i{int2{-50, -50}, int2{-40, -40}});
     CHECK(none.computed);
     CHECK(total(none) + none.skipped + none.outside == 0);
+}
+
+TEST_CASE("A box meets the spectral locus wherever it overlaps the region the locus encloses")
+{
+    const auto &locus     = spectral_locus();
+    auto        vertex_in = [&](float2 lo, float2 hi)
+    {
+        return std::any_of(locus.begin(), locus.end(),
+                           [&](float2 p) { return la::all(la::gequal(p, lo)) && la::all(la::lequal(p, hi)); });
+    };
+
+    // wholly inside, holding no vertex, and wholly around it
+    const float2 white{0.3127f, 0.329f};
+    REQUIRE_FALSE(vertex_in(white - 0.01f, white + 0.01f));
+    CHECK(box_meets_spectral_locus(white - 0.01f, white + 0.01f));
+    CHECK(box_meets_spectral_locus(float2{-1.f}, float2{2.f}));
+
+    // across the line of purples, which only its two ends sample, so that only the edge itself crosses the box
+    const float2 purple = 0.5f * (locus.front() + locus.back());
+    REQUIRE_FALSE(vertex_in(purple - 0.005f, purple + 0.005f));
+    CHECK(box_meets_spectral_locus(purple - 0.005f, purple + 0.005f));
+
+    // clear of it: the corner the diagram's legend sits in, above the green tip, and beside the red end
+    CHECK_FALSE(box_meets_spectral_locus(float2{0.55f, 0.6f}, float2{0.75f, 0.9f}));
+    CHECK_FALSE(box_meets_spectral_locus(float2{0.0f, 0.86f}, float2{0.2f, 0.95f}));
+    CHECK_FALSE(box_meets_spectral_locus(float2{0.74f, 0.2f}, float2{0.8f, 0.3f}));
+
+    // across a sweep of boxes, every one holding a vertex of the locus or a point inside it meets it
+    int disagree = 0, met = 0;
+    for (float y = -0.1f; y < 0.95f; y += 0.04f)
+        for (float x = -0.1f; x < 0.8f; x += 0.04f)
+        {
+            const float2 lo{x, y}, hi{x + 0.05f, y + 0.03f};
+            bool         sampled = vertex_in(lo, hi);
+            for (int j = 0; j <= 10 && !sampled; ++j)
+                for (int i = 0; i <= 10 && !sampled; ++i)
+                    sampled = inside_spectral_locus(lo + (hi - lo) * float2{i / 10.f, j / 10.f});
+            const bool meets = box_meets_spectral_locus(lo, hi);
+            met += meets;
+            disagree += sampled && !meets;
+        }
+    CHECK(met > 50);
+    CHECK(disagree == 0);
 }

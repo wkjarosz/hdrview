@@ -90,3 +90,6 @@ const std::vector<float2> &spectral_locus();
 
 /// Whether \p xy lies inside spectral_locus(), the region of physically realizable chromaticities.
 bool inside_spectral_locus(float2 xy);
+
+/// Whether the box from \p lo to \p hi in xy touches the region spectral_locus() encloses.
+bool box_meets_spectral_locus(float2 lo, float2 hi);

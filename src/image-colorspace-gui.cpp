@@ -87,18 +87,17 @@ static void draw_legend_checkboxes(ChromaticityLegend &legend)
 /// The chromaticity diagram's legend: a translucent panel of checkboxes in the plot's top-right corner.
 /**
     An arrow button in the panel's corner folds it down to just the button and opens it again. While the open
-    legend would cover much of the plot, it starts folded and opens only until folded again, without changing what
-    `legend.collapsed` keeps for larger plots; open, it is clipped to the plot.
+    legend would cover part of the spectral locus, or not fit in the plot, it starts folded and opens only until
+    folded again, without changing what `legend.collapsed` keeps for when there is room; open, it is clipped to
+    the plot.
 
     Submitted after the plot, so it takes the mouse from it, ImPlot letting later items overlap its plots; its
     background is a button too, so a drag across it does not pan the plot.
-*/
-static void draw_legend(ChromaticityLegend &legend, float2 plot_min, float2 plot_max)
-{
-    // the most of the plot's width and height the open legend may cover, which at the default view keeps it clear
-    // of the spectral locus
-    static constexpr float k_max_cover = 0.4f;
 
+    The plot area spans \p plot_min to \p plot_max on screen, and \p xy_min to \p xy_max in chromaticity.
+*/
+static void draw_legend(ChromaticityLegend &legend, float2 plot_min, float2 plot_max, float2 xy_min, float2 xy_max)
+{
     ImGui::PushID("chromaticity legend");
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{1.f, 1.f});
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{ImGui::GetStyle().ItemSpacing.x, 1.f});
@@ -117,12 +116,23 @@ static void draw_legend(ChromaticityLegend &legend, float2 plot_min, float2 plot
     const float2 checkboxes{width + row + style.ItemInnerSpacing.x,
                             n_entries * row + (n_entries - 1) * style.ItemSpacing.y};
 
-    // Open, the panel holds the checkboxes with the button beside the first; folded, just the button. While the
-    // open panel would not fit, whether it is open lives in ImGui's storage for this ID and is reset once it fits.
-    const float2  open_panel = float2{checkboxes.x + style.ItemInnerSpacing.x + row, checkboxes.y} + 2.f * pad;
-    const bool    fits       = la::all(la::lequal(open_panel, k_max_cover * (plot_max - plot_min)));
-    ImGuiStorage *storage    = ImGui::GetStateStorage();
-    const ImGuiID small_id   = ImGui::GetID("open while small");
+    // open, the panel holds the checkboxes with the button beside the first; folded, just the button
+    const float2 open_panel = float2{checkboxes.x + style.ItemInnerSpacing.x + row, checkboxes.y} + 2.f * pad;
+
+    // the open panel fits where it, with a margin, stays within the plot and clear of the spectral locus
+    const float2 open_min{plot_max.x - pad.x - open_panel.x, plot_min.y + pad.y};
+    auto         to_xy = [&](float2 p)
+    {
+        const float2 t = (p - plot_min) / (plot_max - plot_min); // screen y runs down, xy's y up
+        return float2{xy_min.x + t.x * (xy_max.x - xy_min.x), xy_max.y - t.y * (xy_max.y - xy_min.y)};
+    };
+    const float2 corner_a = to_xy(open_min - pad), corner_b = to_xy(open_min + open_panel + pad);
+    const bool   fits = la::all(la::lequal(open_panel + 2.f * pad, plot_max - plot_min)) &&
+                      !box_meets_spectral_locus(la::min(corner_a, corner_b), la::max(corner_a, corner_b));
+
+    // while it does not fit, whether it is open lives in ImGui's storage for this ID, reset once it fits
+    ImGuiStorage *storage  = ImGui::GetStateStorage();
+    const ImGuiID small_id = ImGui::GetID("open while small");
     if (fits)
         storage->SetBool(small_id, false);
     const bool   open  = fits ? !legend.collapsed : storage->GetBool(small_id, false);
@@ -488,13 +498,16 @@ void Image::draw_chromaticity_diagram(float width)
 
         ImPlot::PopStyleColor();
 
-        const float2 plot_min = ImPlot::GetPlotPos();
-        const float2 plot_max = plot_min + float2{ImPlot::GetPlotSize()};
+        const float2     plot_min = ImPlot::GetPlotPos();
+        const float2     plot_max = plot_min + float2{ImPlot::GetPlotSize()};
+        const ImPlotRect limits   = ImPlot::GetPlotLimits();
 
         ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
         ImPlot::EndPlot();
-        draw_legend(legend, plot_min, plot_max);
         ImGui::PopFont();
+        // in the UI's own font, unlike the plot's labels: it is controls, like the rest of the UI's
+        draw_legend(legend, plot_min, plot_max, float2{float(limits.X.Min), float(limits.Y.Min)},
+                    float2{float(limits.X.Max), float(limits.Y.Max)});
     }
     ImGui::PopStyleColor();
     ImGui::PopFont();
