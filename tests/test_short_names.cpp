@@ -195,3 +195,60 @@ TEST_CASE("TruncatedText fits a name beside its icon, cutting only the end it wa
                 }
     }
 }
+
+TEST_CASE("DashedPolyline ends on any geometry, and dashes half of what lies within its box")
+{
+    const float2 lo{0.f, 0.f}, hi{400.f, 300.f};
+    auto         total_length = [](const std::vector<std::pair<float2, float2>> &dashes)
+    {
+        double total = 0.0;
+        for (auto &[a, b] : dashes) total += la::length(b - a);
+        return total;
+    };
+
+    for (float dash : {0.7f, 1.f, 3.f, 6.91086388f, 10.f})
+    {
+        CAPTURE(dash);
+        const float period = 2.f * dash;
+
+        // An equilateral triangle whose perimeter is a whole number of periods, though no side is: half of it
+        // is dashed only if the pattern carries on around the corners, and the pattern's phase lands on each
+        // period's end, where rounding once kept a loop from advancing.
+        for (int periods : {3, 4, 5, 6, 9, 10, 15})
+        {
+            CAPTURE(periods);
+            const float  side = periods * period / 3.f;
+            const float2 tri[] = {{20.f, 20.f}, {20.f + side, 20.f}, {20.f + side / 2.f, 20.f + side * 0.8660254f}};
+            if (tri[1].x > hi.x || tri[2].y > hi.y)
+                continue;
+            const auto dashes = ImGui::DashedPolyline(tri, 3, true, dash, lo, hi);
+            CHECK(total_length(dashes) == doctest::Approx(periods * dash).epsilon(1e-4));
+        }
+
+        // anywhere, inside the box or out, and with points no screen holds: every dash is at most a dash long and
+        // inside the box, and there are no more of them than the box has room for
+        const float huge = 1e30f, inf = std::numeric_limits<float>::infinity(),
+                    nan = std::numeric_limits<float>::quiet_NaN();
+        const float coords[] = {-150.f, 0.f, 37.25f, 299.5f, 400.f, 1000.f, 1e8f, -huge, huge, inf, nan};
+        size_t      checked  = 0;
+        for (float x0 : coords)
+            for (float y1 : coords)
+                for (float x2 : {13.f, 250.f, 5000.f})
+                {
+                    const float2 tri[] = {{x0, 150.f}, {200.f, y1}, {x2, 280.f}};
+                    for (bool closed : {false, true})
+                    {
+                        const auto dashes = ImGui::DashedPolyline(tri, 3, closed, dash, lo, hi);
+                        CHECK(dashes.size() <= 3 * size_t(la::length(hi - lo) / period + 2));
+                        for (auto &[a, b] : dashes)
+                        {
+                            CHECK(la::length(b - a) <= dash * (1.f + 1e-4f));
+                            CHECK(la::all(la::gequal(la::min(a, b), lo - 1e-3f)));
+                            CHECK(la::all(la::lequal(la::max(a, b), hi + 1e-3f)));
+                        }
+                        ++checked;
+                    }
+                }
+        CHECK(checked == 11 * 11 * 3 * 2);
+    }
+}

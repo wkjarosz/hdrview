@@ -58,31 +58,6 @@ Texture *Image::chromaticity_density_texture(const ChromaticityBins &bins)
     return m_chromaticity_density.get();
 }
 
-/// Strokes the closed polygon through \p points with dashes \p dash pixels long, and gaps as long.
-/** The pattern carries on around the corners rather than restarting at each. */
-static void add_dashed_polygon(ImDrawList *draw_list, const float2 *points, int count, ImU32 color, float thickness,
-                               float dash)
-{
-    float traveled = 0.f; // along the polygon, up to the start of the current edge
-    for (int i = 0; i < count; ++i)
-    {
-        const float2 a = points[i], b = points[(i + 1) % count];
-        const float  edge = length(b - a);
-        if (!(edge > 0.f))
-            continue;
-        const float2 dir = (b - a) / edge;
-        for (float t = 0.f; t < edge;)
-        {
-            const float phase = std::fmod(traveled + t, 2.f * dash);
-            const float next  = std::min(edge, t + (phase < dash ? dash : 2.f * dash) - phase);
-            if (phase < dash)
-                draw_list->AddLine(a + t * dir, a + next * dir, color, thickness);
-            t = next;
-        }
-        traveled += edge;
-    }
-}
-
 /// Each entry of the chromaticity diagram's legend: its label and the flag it toggles.
 static std::array<std::pair<const char *, bool *>, 6> legend_entries(ChromaticityLegend &legend)
 {
@@ -454,8 +429,8 @@ void Image::draw_chromaticity_diagram(float width)
             const float2         corners[] = {ImPlot::PlotToPixels(chr.red.x, chr.red.y),
                                               ImPlot::PlotToPixels(chr.green.x, chr.green.y),
                                               ImPlot::PlotToPixels(chr.blue.x, chr.blue.y)};
-            add_dashed_polygon(ImPlot::GetPlotDrawList(), corners, 3, ImGui::GetColorU32(text_color_f), scale_factor,
-                               3.f * scale_factor);
+            ImGui::AddDashedPolyline(ImPlot::GetPlotDrawList(), corners, 3, ImGui::GetColorU32(text_color_f), true,
+                                     scale_factor, 3.f * scale_factor);
         };
         if (!legend.gamut)
             draw_display_gamut();

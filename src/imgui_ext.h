@@ -15,6 +15,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace ImGui
 {
@@ -278,6 +279,19 @@ bool MenuItemEx(const std::string &label, const std::string &icon, const std::st
 
 void AddTextAligned(ImDrawList *draw_list, float2 pos, ImU32 color, const std::string &text,
                     float2 align = float2{0.f});
+
+/// The dashes along the polyline through \p points that lie within the box from \p clip_min to \p clip_max.
+/**
+    Dashes and the gaps between them are \p dash long, and the pattern carries on around the corners. The loop
+    over each edge counts whole dashes across its clipped part, so the work is bounded by the box's size over
+    \p dash whatever the coordinates, and points that are not finite drop the edges they end.
+*/
+std::vector<std::pair<float2, float2>> DashedPolyline(const float2 *points, int count, bool closed, float dash,
+                                                      float2 clip_min, float2 clip_max);
+
+/// Strokes DashedPolyline()'s dashes, clipped to the draw list's current clip rectangle.
+void AddDashedPolyline(ImDrawList *draw_list, const float2 *points, int count, ImU32 color, bool closed,
+                       float thickness, float dash);
 
 void ScrollWhenDraggingOnVoid(const ImVec2 &delta, ImGuiMouseButton mouse_button);
 
