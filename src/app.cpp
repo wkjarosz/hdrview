@@ -518,14 +518,14 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
 
                 if (auto d = j.find("chromaticity diagram"); d != j.end() && d->is_object())
                 {
-                    auto &l           = m_chromaticity_layers;
+                    auto &l           = m_chromaticity_legend;
                     l.density         = d->value("pixel density", l.density);
                     l.gamut           = d->value("gamut", l.gamut);
                     l.wavelengths     = d->value("wavelengths", l.wavelengths);
                     l.daylight        = d->value("daylight locus", l.daylight);
                     l.hovered         = d->value("hovered pixel", l.hovered);
                     l.density_opacity = std::clamp(d->value("pixel density opacity", l.density_opacity), 0.f, 1.f);
-                    l.collapsed       = d->value("collapsed", l.collapsed);
+                    l.collapsed       = d->value("legend collapsed", l.collapsed);
                 }
 
                 // Clamped: it indexes pixel_color_widget()'s current/reference/composite choices, and the
@@ -641,13 +641,13 @@ void HDRViewApp::save_user_settings()
     j["show FPS"]                = m_show_FPS;
     j["clip range"]              = m_clip_range;
     j["histogram height"]        = m_histogram_height;
-    j["chromaticity diagram"]    = json{{"pixel density", m_chromaticity_layers.density},
-                                        {"gamut", m_chromaticity_layers.gamut},
-                                        {"wavelengths", m_chromaticity_layers.wavelengths},
-                                        {"daylight locus", m_chromaticity_layers.daylight},
-                                        {"hovered pixel", m_chromaticity_layers.hovered},
-                                        {"pixel density opacity", m_chromaticity_layers.density_opacity},
-                                        {"collapsed", m_chromaticity_layers.collapsed}};
+    j["chromaticity diagram"]    = json{{"pixel density", m_chromaticity_legend.density},
+                                        {"gamut", m_chromaticity_legend.gamut},
+                                        {"wavelengths", m_chromaticity_legend.wavelengths},
+                                        {"daylight locus", m_chromaticity_legend.daylight},
+                                        {"hovered pixel", m_chromaticity_legend.hovered},
+                                        {"pixel density opacity", m_chromaticity_legend.density_opacity},
+                                        {"legend collapsed", m_chromaticity_legend.collapsed}};
     j["status pixel target"]     = m_status_pixel_target;
     j["histogram x scale"]       = m_x_scale;
     j["histogram y scale"]       = m_y_scale;

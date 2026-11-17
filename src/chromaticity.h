@@ -55,8 +55,8 @@ struct ChromaticityGrid
     bool in_locus(int2 t) const;
 };
 
-/// Which layers the chromaticity diagram draws, and how; saved with the app's settings.
-struct ChromaticityDiagramLayers
+/// What the chromaticity diagram's legend shows, and how; saved with the app's settings.
+struct ChromaticityLegend
 {
     /// Whether the density starts out shown: not in the web build, where each count holds up a frame.
 #ifdef __EMSCRIPTEN__
@@ -71,7 +71,7 @@ struct ChromaticityDiagramLayers
     bool  daylight        = true;               ///< The daylight locus, with ticks at correlated color temperatures
     bool  hovered         = true;               ///< The chromaticity of the pixel under the cursor
     float density_opacity = 0.7f;               ///< How strongly the density shows, within the locus and beyond it
-    bool  collapsed       = false;              ///< Whether the layers' checkboxes are folded away behind an arrow
+    bool  collapsed       = false;              ///< Whether the legend is folded down to its button
 };
 
 /// The grid over spectral_locus(), on which the chromaticity diagram's background is drawn.
