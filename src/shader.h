@@ -105,6 +105,16 @@ public:
     /// Return the blending mode of this shader
     BlendMode blend_mode() const { return m_blend_mode; }
 
+    /// Whether the compiled shader has an argument named \p name, which a compiler may drop when nothing reads it.
+    bool has_argument(const std::string &name) const
+    {
+#if defined(HELLOIMGUI_HAS_METAL)
+        if (m_metal_struct_members.count(name) != 0)
+            return true;
+#endif
+        return m_buffers.count(name) != 0;
+    }
+
     /**
         Upload a buffer (e.g. vertex positions) that will be associated with a named shader parameter.
 

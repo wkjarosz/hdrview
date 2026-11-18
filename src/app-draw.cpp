@@ -461,20 +461,23 @@ void HDRViewApp::draw_image() const
         shader.set_uniform("fsp.bg_color", m_bg_color);
         shader.set_uniform("fsp.reverse_colormap", (int)m_reverse_colormap);
         shader.set_uniform("fsp.has_reference", (int)has_reference);
-        // only the preview's shader reads these, and GL's has no uniforms it does not read
-        if (editing)
+        // Only the preview's shader reads the edit's uniforms, but a compiler may keep unread ones (WebGL's does),
+        // which the shader then reports unset on every draw; so each one it has gets the edit's value, or the idle one.
+        auto set_if_present = [&shader](const char *name, const auto &value)
         {
-            shader.set_uniform("fsp.primary_levels", texture_levels(current_image()));
-            shader.set_uniform("fsp.edit_op", edit.op);
-            shader.set_uniform("fsp.edit_slots", shown.slots);
-            shader.set_uniform("fsp.edit_color", (int)shown.color);
-            shader.set_uniform("fsp.edit_rect", shown.rect);
-            shader.set_uniform("fsp.edit_p0", edit.p0);
-            shader.set_uniform("fsp.edit_p1", edit.p1);
-            shader.set_uniform("fsp.edit_m0", edit.m0);
-            shader.set_uniform("fsp.edit_m1", edit.m1);
-            shader.set_uniform("fsp.edit_i0", edit.i0);
-        }
+            if (shader.has_argument(name))
+                shader.set_uniform(name, value);
+        };
+        set_if_present("fsp.primary_levels", texture_levels(current_image()));
+        set_if_present("fsp.edit_op", edit.op);
+        set_if_present("fsp.edit_slots", shown.slots);
+        set_if_present("fsp.edit_color", (int)shown.color);
+        set_if_present("fsp.edit_rect", shown.rect);
+        set_if_present("fsp.edit_p0", edit.p0);
+        set_if_present("fsp.edit_p1", edit.p1);
+        set_if_present("fsp.edit_m0", edit.m0);
+        set_if_present("fsp.edit_m1", edit.m1);
+        set_if_present("fsp.edit_i0", edit.i0);
 
         // a reshaping edit's preview lays the quad over the window the result will have, as the view will show it
         if (const Box2i *window = reshaped_window(preview))
@@ -491,6 +494,7 @@ void HDRViewApp::draw_image() const
         }
         shader.set_uniform("vsp.secondary_pos", secondary_pos);
         shader.set_uniform("vsp.secondary_scale", secondary_scale);
+        set_if_present("vsp._pad", 0); // keeps the block's member names in GLSL ES; see image-shader.sglsl
 
         shader.set_texture("colormap", Colormap::texture(m_colormaps[m_colormap_index]));
 
