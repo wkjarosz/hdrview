@@ -53,6 +53,16 @@ std::string folder_path(const char *title, void *glfw_window);
 /// Register the browser touch listeners that supply pinch-to-zoom, which no backend provides.
 void install_touch_handlers();
 
+/// Recreate the file at \p path from the copy save_to_web_storage() left in the browser, creating its folder.
+/**
+    A web page's files live in memory and are gone when it is closed, so whatever must outlive the page is copied
+    into the browser's storage (localStorage, which is synchronous, so a save made as the page is hidden finishes).
+    Each folder of the site keeps its own copy, so a site's development and release builds do not share one.
+*/
+void restore_from_web_storage(const std::string &path);
+/// Copy the file at \p path into the browser's storage, for restore_from_web_storage() to bring back.
+void save_to_web_storage(const std::string &path);
+
 /// Ask the browser to confirm before it navigates away while images are loaded.
 /**
     The web build holds everything in memory, so leaving the page discards it. The GLFW port swallows most

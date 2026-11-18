@@ -751,6 +751,8 @@ private:
     void            setup_persistence_callbacks(optional<float> force_exposure, optional<float> force_gamma,
                                                 optional<bool> force_dither, optional<bool> force_apple_keys);
     void            setup_imgui_style_callbacks();
+    /// Store the settings HDRView keeps itself, as a user pref in Hello ImGui's settings file.
+    void            save_user_settings();
     void            setup_frame_callbacks();
     void            setup_dialogs(const vector<string> &in_files);
     void            setup_actions(ImGuiKey modKey, const vector<DockableWindowExtraInfo> &window_info);

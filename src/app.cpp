@@ -15,6 +15,8 @@
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
+#include <emscripten/html5.h>
+#include <hello_imgui/internal/hello_imgui_ini_settings.h>
 #endif
 
 #ifdef HELLOIMGUI_USE_GLFW3
@@ -476,6 +478,27 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
         // see platform_utils
         install_touch_handlers();
         install_navigation_guard();
+
+        // A web page never exits, so what a native build saves on exit is saved whenever the page is hidden, the
+        // last moment it is reliably told of: switching tabs or apps, closing it and leaving it all hide it first.
+        emscripten_set_visibilitychange_callback(
+            this, EM_FALSE,
+            [](int, const EmscriptenVisibilityChangeEvent *event, void *data) -> EM_BOOL
+            {
+                auto &app = *static_cast<HDRViewApp *>(data);
+                if (!event->hidden)
+                    return EM_FALSE;
+                const auto ini = IniSettingsLocation(app.m_params);
+                if (!ini)
+                    return EM_FALSE;
+                // what Hello ImGui's TearDown() saves, then HDRView's own, as BeforeExit does
+                HelloImGuiIniSettings::SaveImGuiSettings(ini, app.m_params.dockingParams.layoutName);
+                HelloImGuiIniSettings::SaveDockableWindowsVisibility(ini, app.m_params.dockingParams);
+                HelloImGuiIniSettings::SaveHelloImGuiMiscSettings(ini, app.m_params);
+                app.save_user_settings();
+                save_to_web_storage(*ini);
+                return EM_FALSE;
+            });
 #endif
 
         spdlog::info("Loading user settings from '{}'", IniSettingsLocation(m_params).value_or("(disabled)"));
@@ -588,47 +611,7 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
         m_preview_build.reset();
         m_render_pass.reset();
 
-        spdlog::info("Saving user settings to '{}'", IniSettingsLocation(m_params).value_or("(disabled)"));
-
-        json j;
-        j["recent files"]            = m_image_loader.recent_files();
-        j["background mode"]         = (int)m_bg_mode;
-        j["background color"]        = m_bg_color.xyz();
-        j["draw data window"]        = m_draw_data_window;
-        j["draw display window"]     = m_draw_display_window;
-        j["auto fit data window"]    = m_auto_fit_data;
-        j["auto fit display window"] = m_auto_fit_display;
-        j["auto fit selection"]      = m_auto_fit_selection;
-        j["draw pixel info"]         = m_draw_pixel_info;
-        j["draw pixel grid"]         = m_draw_grid;
-        j["exposure"]                = m_exposure;
-        j["gamma"]                   = m_gamma;
-        j["tonemap"]                 = m_tonemap;
-        j["clamp to LDR"]            = m_clamp_to_LDR;
-        j["highlight rolloff"]       = m_rolloff_settings.to_json();
-        j["dither"]                  = m_dither;
-        j["verbosity"]               = spdlog::get_level();
-        j["file list mode"]          = m_file_list_mode;
-        j["short names"]             = m_short_names;
-        j["left align names"]        = m_left_align_names;
-        j["clip warnings"]           = m_clip_warnings;
-        j["show FPS"]                = m_show_FPS;
-        j["clip range"]              = m_clip_range;
-        j["histogram height"]        = m_histogram_height;
-        j["status pixel target"]     = m_status_pixel_target;
-        j["histogram x scale"]       = m_x_scale;
-        j["histogram y scale"]       = m_y_scale;
-        j["show developer menu"]     = m_show_developer_menu;
-        j["show tool palette"]       = m_show_tool_palette;
-        j["tool palette collapsed"]  = m_tool_palette_collapsed;
-        j["tool palette vertical"]   = m_tool_palette_vertical;
-        j["tool palette corner"]     = m_tool_palette_corner;
-        j["playback speed"]          = m_playback_speed;
-        j["colormap index"]          = m_colormap_index;
-
-        m_theme.save(j, m_params.dpiAwareParams.dpiWindowSizeFactor);
-
-        SaveUserPref("UserSettings", j.dump(4));
+        save_user_settings();
 
         // Stop the thread pool here rather than in its static destructor: that destructor's ordering against
         // other statics (e.g. spdlog's logger registry, which worker threads touch) is unspecified, so a
@@ -637,6 +620,51 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
         if (auto *pool = stp::ThreadPool::try_singleton())
             pool->stop();
     };
+}
+
+void HDRViewApp::save_user_settings()
+{
+    spdlog::info("Saving user settings to '{}'", IniSettingsLocation(m_params).value_or("(disabled)"));
+
+    json j;
+    j["recent files"]            = m_image_loader.recent_files();
+    j["background mode"]         = (int)m_bg_mode;
+    j["background color"]        = m_bg_color.xyz();
+    j["draw data window"]        = m_draw_data_window;
+    j["draw display window"]     = m_draw_display_window;
+    j["auto fit data window"]    = m_auto_fit_data;
+    j["auto fit display window"] = m_auto_fit_display;
+    j["auto fit selection"]      = m_auto_fit_selection;
+    j["draw pixel info"]         = m_draw_pixel_info;
+    j["draw pixel grid"]         = m_draw_grid;
+    j["exposure"]                = m_exposure;
+    j["gamma"]                   = m_gamma;
+    j["tonemap"]                 = m_tonemap;
+    j["clamp to LDR"]            = m_clamp_to_LDR;
+    j["highlight rolloff"]       = m_rolloff_settings.to_json();
+    j["dither"]                  = m_dither;
+    j["verbosity"]               = spdlog::get_level();
+    j["file list mode"]          = m_file_list_mode;
+    j["short names"]             = m_short_names;
+    j["left align names"]        = m_left_align_names;
+    j["clip warnings"]           = m_clip_warnings;
+    j["show FPS"]                = m_show_FPS;
+    j["clip range"]              = m_clip_range;
+    j["histogram height"]        = m_histogram_height;
+    j["status pixel target"]     = m_status_pixel_target;
+    j["histogram x scale"]       = m_x_scale;
+    j["histogram y scale"]       = m_y_scale;
+    j["show developer menu"]     = m_show_developer_menu;
+    j["show tool palette"]       = m_show_tool_palette;
+    j["tool palette collapsed"]  = m_tool_palette_collapsed;
+    j["tool palette vertical"]   = m_tool_palette_vertical;
+    j["tool palette corner"]     = m_tool_palette_corner;
+    j["playback speed"]          = m_playback_speed;
+    j["colormap index"]          = m_colormap_index;
+
+    m_theme.save(j, m_params.dpiAwareParams.dpiWindowSizeFactor);
+
+    SaveUserPref("UserSettings", j.dump(4));
 }
 
 void HDRViewApp::setup_imgui_style_callbacks()

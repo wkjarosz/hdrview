@@ -27,6 +27,11 @@ using namespace HelloImGui;
 
 void HDRViewApp::run()
 {
+#if defined(__EMSCRIPTEN__)
+    // before Hello ImGui reads the settings file
+    if (const auto ini = IniSettingsLocation(m_params))
+        restore_from_web_storage(*ini);
+#endif
     ImPlot::CreateContext();
     Run(m_params);
     ImPlot::DestroyContext();
