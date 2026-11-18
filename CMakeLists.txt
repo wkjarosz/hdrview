@@ -625,7 +625,9 @@ list(APPEND HDRVIEW_DEPENDENCIES "qoi")
 
 if(EMSCRIPTEN)
 
-  CPMAddPackage("gh:Armchair-Software/emscripten-browser-file#d21dec772050d581c02aa9820e4d877fdb060dc8")
+  # a fork whose Safari file picker keeps its input in the page until it reports, without which a web app added to
+  # an iOS home screen never receives the chosen file
+  CPMAddPackage("gh:wkjarosz/emscripten-browser-file#471c6cdd2d926e200bb1b46a7e98b844dbb06550")
   if(NOT emscripten-browser-file_ADDED)
     message(FATAL_ERROR "Could not download emscripten-browser-file library.")
   endif()
