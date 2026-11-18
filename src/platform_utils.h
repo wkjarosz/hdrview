@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <string>
 
 bool        host_is_apple();
@@ -53,15 +54,16 @@ std::string folder_path(const char *title, void *glfw_window);
 /// Register the browser touch listeners that supply pinch-to-zoom, which no backend provides.
 void install_touch_handlers();
 
-/// Recreate the file at \p path from the copy save_to_web_storage() left in the browser, creating its folder.
+/// Keep the settings file at \p path in the browser's storage, saving it, with \p save_app_settings, as the page hides.
 /**
-    A web page's files live in memory and are gone when it is closed, so whatever must outlive the page is copied
-    into the browser's storage (localStorage, which is synchronous, so a save made as the page is hidden finishes).
-    Each folder of the site keeps its own copy, so a site's development and release builds do not share one.
+    A web page's files live in memory, gone when it closes, and it never exits, when a native build saves. So this
+    restores the file from the browser's storage now, before Hello ImGui reads it, and whenever the page is hidden,
+    the last moment a browser reliably reports, saves what Hello ImGui saves on exit, then calls
+    \p save_app_settings, then copies the file back. The storage is localStorage, which is synchronous, so the save
+    finishes as the page goes; each folder of a site keeps its own copy, so its development and release builds do
+    not share one.
 */
-void restore_from_web_storage(const std::string &path);
-/// Copy the file at \p path into the browser's storage, for restore_from_web_storage() to bring back.
-void save_to_web_storage(const std::string &path);
+void keep_settings_in_browser(const std::string &path, std::function<void()> save_app_settings);
 
 /// Ask the browser to confirm before it navigates away while images are loaded.
 /**

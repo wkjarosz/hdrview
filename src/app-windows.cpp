@@ -28,9 +28,9 @@ using namespace HelloImGui;
 void HDRViewApp::run()
 {
 #if defined(__EMSCRIPTEN__)
-    // before Hello ImGui reads the settings file
+    // a web page neither keeps its files nor exits, when a native build saves its settings
     if (const auto ini = IniSettingsLocation(m_params))
-        restore_from_web_storage(*ini);
+        keep_settings_in_browser(*ini, [this] { save_user_settings(); });
 #endif
     ImPlot::CreateContext();
     Run(m_params);

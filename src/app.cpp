@@ -15,8 +15,6 @@
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
-#include <emscripten/html5.h>
-#include <hello_imgui/internal/hello_imgui_ini_settings.h>
 #endif
 
 #ifdef HELLOIMGUI_USE_GLFW3
@@ -478,27 +476,6 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
         // see platform_utils
         install_touch_handlers();
         install_navigation_guard();
-
-        // A web page never exits, so what a native build saves on exit is saved whenever the page is hidden, the
-        // last moment it is reliably told of: switching tabs or apps, closing it and leaving it all hide it first.
-        emscripten_set_visibilitychange_callback(
-            this, EM_FALSE,
-            [](int, const EmscriptenVisibilityChangeEvent *event, void *data) -> EM_BOOL
-            {
-                auto &app = *static_cast<HDRViewApp *>(data);
-                if (!event->hidden)
-                    return EM_FALSE;
-                const auto ini = IniSettingsLocation(app.m_params);
-                if (!ini)
-                    return EM_FALSE;
-                // what Hello ImGui's TearDown() saves, then HDRView's own, as BeforeExit does
-                HelloImGuiIniSettings::SaveImGuiSettings(ini, app.m_params.dockingParams.layoutName);
-                HelloImGuiIniSettings::SaveDockableWindowsVisibility(ini, app.m_params.dockingParams);
-                HelloImGuiIniSettings::SaveHelloImGuiMiscSettings(ini, app.m_params);
-                app.save_user_settings();
-                save_to_web_storage(*ini);
-                return EM_FALSE;
-            });
 #endif
 
         spdlog::info("Loading user settings from '{}'", IniSettingsLocation(m_params).value_or("(disabled)"));
