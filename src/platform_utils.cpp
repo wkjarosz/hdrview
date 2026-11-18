@@ -1,6 +1,9 @@
 #include "platform_utils.h"
 
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <spdlog/spdlog.h>
 #include <string>
 #include <vector>
@@ -25,8 +28,10 @@
 
 #ifdef __EMSCRIPTEN__
 #include "app.h"
+#include "imgui.h"
 
 #include <emscripten/html5.h>
+#include <hello_imgui/internal/hello_imgui_ini_settings.h>
 
 EM_JS(bool, isSafari, (), {
     var is_safari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
@@ -351,6 +356,69 @@ static const char *on_before_unload(int, const void *, void *)
 }
 
 void install_navigation_guard() { emscripten_set_beforeunload_callback(nullptr, on_before_unload); }
+
+// localStorage throws where storage is disabled (some private modes), which leaves the page without saved files
+EM_JS_DEPS(hdrview_web_storage, "$stringToNewUTF8");
+EM_JS(char *, hdrview_web_storage_get, (const char *name), {
+    try
+    {
+        const folder = location.pathname.substring(0, location.pathname.lastIndexOf("/") + 1);
+        const value  = window.localStorage.getItem(folder + UTF8ToString(name));
+        return value == null ? 0 : stringToNewUTF8(value);
+    }
+    catch (e)
+    {
+        return 0;
+    }
+});
+EM_JS(void, hdrview_web_storage_set, (const char *name, const char *value), {
+    try
+    {
+        const folder = location.pathname.substring(0, location.pathname.lastIndexOf("/") + 1);
+        window.localStorage.setItem(folder + UTF8ToString(name), UTF8ToString(value));
+    }
+    catch (e)
+    {
+        console.warn("HDRView could not save " + UTF8ToString(name) + ": " + e);
+    }
+});
+
+static std::string           s_settings_path;
+static std::function<void()> s_save_app_settings;
+
+/// Save the settings file as Hello ImGui's TearDown() and the app do on exit, then copy it into the browser's storage.
+static EM_BOOL save_settings_when_hidden(int, const EmscriptenVisibilityChangeEvent *event, void *)
+{
+    // nothing worth saving until the app has run a frame, by when it has loaded the settings it would overwrite
+    if (!event->hidden || !ImGui::GetCurrentContext() || ImGui::GetFrameCount() == 0)
+        return EM_FALSE;
+    const HelloImGui::RunnerParams &params = *HelloImGui::GetRunnerParams();
+    HelloImGui::HelloImGuiIniSettings::SaveImGuiSettings(s_settings_path, params.dockingParams.layoutName);
+    HelloImGui::HelloImGuiIniSettings::SaveDockableWindowsVisibility(s_settings_path, params.dockingParams);
+    HelloImGui::HelloImGuiIniSettings::SaveHelloImGuiMiscSettings(s_settings_path, params);
+    s_save_app_settings();
+
+    std::ifstream     file(s_settings_path, std::ios::binary);
+    const std::string contents{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+    hdrview_web_storage_set(s_settings_path.c_str(), contents.c_str());
+    return EM_FALSE;
+}
+
+void keep_settings_in_browser(const std::string &path, std::function<void()> save_app_settings)
+{
+    // the folder too, which Hello ImGui writes into without creating
+    std::error_code ec;
+    std::filesystem::create_directories(std::filesystem::path(path).parent_path(), ec);
+    if (char *saved = hdrview_web_storage_get(path.c_str()))
+    {
+        std::ofstream(path, std::ios::binary) << saved;
+        free(saved);
+    }
+
+    s_settings_path     = path;
+    s_save_app_settings = std::move(save_app_settings);
+    emscripten_set_visibilitychange_callback(nullptr, EM_FALSE, save_settings_when_hidden);
+}
 
 extern "C"
 {
