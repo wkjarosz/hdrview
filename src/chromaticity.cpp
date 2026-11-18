@@ -84,17 +84,11 @@ bool box_meets_spectral_locus(float2 lo, float2 hi)
     return false;
 }
 
-/// Each of the legend's flags and the key the app's settings store it under.
-static const pair<const char *, bool ChromaticityLegend::*> k_legend_flags[] = {
-    {"pixel density", &ChromaticityLegend::density},     {"image gamut", &ChromaticityLegend::image_gamut},
-    {"display gamut", &ChromaticityLegend::display_gamut}, {"wavelengths", &ChromaticityLegend::wavelengths},
-    {"daylight locus", &ChromaticityLegend::daylight},   {"hovered pixel", &ChromaticityLegend::hovered},
-    {"legend collapsed", &ChromaticityLegend::collapsed}};
-
 json ChromaticityLegend::to_json() const
 {
     json j = json::object();
-    for (auto [key, flag] : k_legend_flags) j[key] = this->*flag;
+    for (const auto &e : k_chromaticity_legend_entries) j[e.key] = this->*e.flag;
+    j["legend collapsed"]      = collapsed;
     j["pixel density opacity"] = density_opacity;
     return j;
 }
@@ -103,9 +97,13 @@ void ChromaticityLegend::from_json(const json &j)
 {
     if (!j.is_object())
         return;
-    for (auto [key, flag] : k_legend_flags)
+    auto take = [&j](const char *key, bool &flag)
+    {
         if (j.contains(key) && j[key].is_boolean())
-            this->*flag = j[key].get<bool>();
+            flag = j[key].get<bool>();
+    };
+    for (const auto &e : k_chromaticity_legend_entries) take(e.key, this->*e.flag);
+    take("legend collapsed", collapsed);
     if (j.contains("pixel density opacity") && j["pixel density opacity"].is_number())
         density_opacity = std::clamp(j["pixel density opacity"].get<float>(), 0.f, 1.f);
 }
@@ -134,8 +132,6 @@ ChromaticityGrid ChromaticityGrid::covering(float2 lo, float2 hi)
     g.first         = int2(la::floor(lo / texel)) - 1;
     const int2 last = int2(la::floor(hi / texel)) + 1;
     g.size          = last - g.first + 1;
-    g.min           = float2(g.first) * texel;
-    g.max           = float2(last + 1) * texel;
     return g;
 }
 

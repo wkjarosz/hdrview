@@ -58,30 +58,19 @@ Texture *Image::chromaticity_density_texture(const ChromaticityBins &bins)
     return m_chromaticity_density.get();
 }
 
-/// Each entry of the chromaticity diagram's legend: its label and the flag it toggles.
-static std::array<std::pair<const char *, bool *>, 6> legend_entries(ChromaticityLegend &legend)
-{
-    return {{{"Pixel density", &legend.density},
-             {"Image gamut", &legend.image_gamut},
-             {"Display gamut", &legend.display_gamut},
-             {"Wavelengths", &legend.wavelengths},
-             {"Daylight locus", &legend.daylight},
-             {"Hovered pixel", &legend.hovered}}};
-}
-
 /// A checkbox per legend entry; right-clicking "Pixel density" sets its opacity, and "Display gamut" tells its source.
 static void draw_legend_checkboxes(ChromaticityLegend &legend)
 {
     ImGui::BeginGroup();
-    for (auto &[label, shown] : legend_entries(legend))
+    for (const auto &e : k_chromaticity_legend_entries)
     {
-        ImGui::Checkbox(label, shown);
-        if (shown == &legend.density && ImGui::BeginPopupContextItem("density options"))
+        ImGui::Checkbox(e.label, &(legend.*e.flag));
+        if (e.flag == &ChromaticityLegend::density && ImGui::BeginPopupContextItem("density options"))
         {
             ImGui::SliderFloat("Opacity", &legend.density_opacity, 0.f, 1.f, "%.2f");
             ImGui::EndPopup();
         }
-        if (shown == &legend.display_gamut && ImGui::BeginItemTooltip())
+        if (e.flag == &ChromaticityLegend::display_gamut && ImGui::BeginItemTooltip())
         {
             const DisplayGamut display = hdrview()->display_gamut();
             const ColorGamut_  named   = named_color_gamut(display.chroma);
@@ -124,10 +113,9 @@ static void draw_legend(ChromaticityLegend &legend, float2 plot_min, float2 plot
     const float       row    = ImGui::GetFrameHeight(); // a checkbox's height, and the arrow button's size
 
     // the checkboxes' extent, sized as draw_legend_checkboxes() lays them out
-    const auto entries   = legend_entries(legend);
-    const int  n_entries = int(entries.size());
-    float      width     = 0.f;
-    for (auto &[label, shown] : entries) width = std::max(width, ImGui::CalcTextSize(label).x);
+    const int n_entries = int(std::size(k_chromaticity_legend_entries));
+    float     width     = 0.f;
+    for (const auto &e : k_chromaticity_legend_entries) width = std::max(width, ImGui::CalcTextSize(e.label).x);
     const float2 checkboxes{width + row + style.ItemInnerSpacing.x,
                             n_entries * row + (n_entries - 1) * style.ItemSpacing.y};
 
@@ -235,7 +223,7 @@ void Image::draw_chromaticity_diagram(float width)
         //
         const ChromaticityGrid &grid = chromaticity_grid();
         ImPlot::PlotImage("##chromaticity_image", (ImTextureID)chromaticity_texture()->texture_handle(),
-                          ImPlotPoint(grid.min.x, grid.min.y), ImPlotPoint(grid.max.x, grid.max.y), {0.f, 1.f},
+                          ImPlotPoint(grid.min().x, grid.min().y), ImPlotPoint(grid.max().x, grid.max().y), {0.f, 1.f},
                           {1.f, 0.f});
         if (legend.density)
         {
@@ -246,8 +234,8 @@ void Image::draw_chromaticity_diagram(float width)
                 float4 tint = ImGui::GetStyleColorVec4(ImGuiCol_Text);
                 tint.w      = legend.density_opacity;
                 ImPlot::PlotImage("##chromaticity_density", (ImTextureID)density->texture_handle(),
-                                  ImPlotPoint(bins.grid.min.x, bins.grid.min.y),
-                                  ImPlotPoint(bins.grid.max.x, bins.grid.max.y), {0.f, 1.f}, {1.f, 0.f}, tint);
+                                  ImPlotPoint(bins.grid.min().x, bins.grid.min().y),
+                                  ImPlotPoint(bins.grid.max().x, bins.grid.max().y), {0.f, 1.f}, {1.f, 0.f}, tint);
             }
         }
 

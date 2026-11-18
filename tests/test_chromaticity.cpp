@@ -93,7 +93,6 @@ TEST_CASE("Every chromaticity grid holds what it covers with one texel to spare,
         CAPTURE(g.first);
         CAPTURE(g.size);
         REQUIRE(la::all(la::greater(g.size, int2{0})));
-        CHECK(la::maxelem(la::abs(g.max - g.min - float2(g.size) * t)) < 1e-5f);
 
         // a full texel beyond the locus and each corner, so bilinear filtering fades it out inside the texture,
         // and at most two beyond the farthest of them, so the texels go to the content
@@ -103,10 +102,10 @@ TEST_CASE("Every chromaticity grid holds what it covers with one texel to spare,
             lo = la::min(lo, xy);
             hi = la::max(hi, xy);
         }
-        CHECK(la::all(la::gequal(lo, g.min + t)));
-        CHECK(la::all(la::lequal(hi, g.max - t)));
-        CHECK(la::all(la::lequal(lo, g.min + 2.f * t)));
-        CHECK(la::all(la::gequal(hi, g.max - 2.f * t)));
+        CHECK(la::all(la::gequal(lo, g.min() + t)));
+        CHECK(la::all(la::lequal(hi, g.max() - t)));
+        CHECK(la::all(la::lequal(lo, g.min() + 2.f * t)));
+        CHECK(la::all(la::gequal(hi, g.max() - 2.f * t)));
 
         // on the locus grid's lattice, so a texel of one covers exactly a texel of the other
         for (int2 p : {int2{0, 0}, locus.size - 1, locus.size / 2})
@@ -140,7 +139,7 @@ TEST_CASE("Every chromaticity grid holds what it covers with one texel to spare,
     CHECK(disagree == 0);
 }
 
-TEST_CASE("Chromaticity bins count each primary and white at its chromaticity, at any brightness")
+TEST_CASE("Chromaticity bins count each selected pixel once, by its color whatever its brightness and alpha")
 {
     // Each row is one color at brightnesses spanning many stops. The last row is red less nearly as much blue as
     // cancels its X + Y + Z, which lands its chromaticity far off any grid; the three before it have none.
@@ -175,10 +174,7 @@ TEST_CASE("Chromaticity bins count each primary and white at its chromaticity, a
         CHECK(total(b) + b.outside + b.skipped == int64_t(n_colors) * n_scales);
         CHECK(b.max_count == n_scales);
     }
-}
 
-TEST_CASE("Chromaticity bins ignore alpha and count only the selected region")
-{
     const int2 size{16, 8};
     // a spread of positive colors, varying across the image
     auto color = [](int c, int x, int y) { return 0.05f + 0.9f * std::fmod(0.37f * x + 0.61f * y + 0.29f * c, 1.f); };

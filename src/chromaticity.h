@@ -29,10 +29,13 @@ struct ChromaticityGrid
     */
     static constexpr float texel = 1.f / 256.f;
 
-    int2   first{0}; ///< Where texel (0, 0) lies on the lattice
-    int2   size{0};  ///< Texels across and down
-    float2 min{0.f}; ///< xy at the outer corner of texel (0, 0)
-    float2 max{0.f}; ///< xy at the outer corner of texel (size - 1)
+    int2 first{0}; ///< Where texel (0, 0) lies on the lattice
+    int2 size{0};  ///< Texels across and down
+
+    /// The xy at the outer corner of texel (0, 0).
+    float2 min() const { return float2(first) * texel; }
+    /// The xy at the outer corner of texel (size - 1).
+    float2 max() const { return float2(first + size) * texel; }
 
     /// The smallest grid holding every xy from \p lo to \p hi, with a texel to spare on each side.
     static ChromaticityGrid covering(float2 lo, float2 hi);
@@ -44,11 +47,11 @@ struct ChromaticityGrid
     */
     int2 texel_of(float2 xy) const
     {
-        return int2(la::clamp(la::floor((xy - min) / texel), float2{-1.f}, float2(size)));
+        return int2(la::clamp(la::floor((xy - min()) / texel), float2{-1.f}, float2(size)));
     }
 
     /// The xy at the center of texel \p t.
-    float2 center(int2 t) const { return min + (float2(t) + 0.5f) * texel; }
+    float2 center(int2 t) const { return min() + (float2(t) + 0.5f) * texel; }
 
     bool contains(int2 t) const { return t.x >= 0 && t.y >= 0 && t.x < size.x && t.y < size.y; }
 
@@ -80,6 +83,23 @@ struct ChromaticityLegend
     /// Take the settings \p j holds; a missing key, or a value of the wrong type, leaves that setting as it is.
     void from_json(const json &j);
 };
+
+/// One of the legend's checkboxes: its label, the key the settings store it under, and the flag it toggles.
+struct ChromaticityLegendEntry
+{
+    const char              *label;
+    const char              *key;
+    bool ChromaticityLegend::*flag;
+};
+
+/// The legend's checkboxes, in the order they show.
+inline constexpr ChromaticityLegendEntry k_chromaticity_legend_entries[] = {
+    {"Pixel density", "pixel density", &ChromaticityLegend::density},
+    {"Image gamut", "image gamut", &ChromaticityLegend::image_gamut},
+    {"Display gamut", "display gamut", &ChromaticityLegend::display_gamut},
+    {"Wavelengths", "wavelengths", &ChromaticityLegend::wavelengths},
+    {"Daylight locus", "daylight locus", &ChromaticityLegend::daylight},
+    {"Hovered pixel", "hovered pixel", &ChromaticityLegend::hovered}};
 
 /// The chromaticity diagram's legend, shared by every image's diagram and saved with the app's settings.
 ChromaticityLegend &chromaticity_legend();
