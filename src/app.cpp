@@ -354,8 +354,26 @@ void HDRViewApp::setup_platform_backend_callbacks(vector<string> in_files)
 #if defined(HELLOIMGUI_USE_GLFW3)
     m_params.callbacks.PostInit_AddPlatformBackendCallbacks = [this, in_files]
     {
+        // GLFW's messages join HDRView's log, where a platform's lacking a feature (the web's GLFW reports each one
+        // as a warning, code 0) is a detail for the debug log rather than an error
+        glfwSetErrorCallback(
+            [](int code, const char *description)
+            {
+                string_view text{description ? description : ""};
+                while (!text.empty() && text.back() == '\n') text.remove_suffix(1);
+#ifdef GLFW_FEATURE_UNAVAILABLE // GLFW 3.4 on
+                if (code == GLFW_FEATURE_UNAVAILABLE)
+                    code = 0;
+#endif
+                if (code == 0)
+                    spdlog::debug("GLFW: {}", text);
+                else
+                    spdlog::error("GLFW error {}: {}", code, text);
+            });
+
+#if !defined(__EMSCRIPTEN__)
+        // a web page's drops reach hdrview_loadfile() through the page's own handler instead
         spdlog::trace("Registering glfw drop callback");
-        // spdlog::trace("m_params.backendPointers.glfwWindow: {}", m_params.backendPointers.glfwWindow);
         glfwSetDropCallback((GLFWwindow *)m_params.backendPointers.glfwWindow,
                             [](GLFWwindow *, int count, const char **filenames)
                             {
@@ -364,6 +382,7 @@ void HDRViewApp::setup_platform_backend_callbacks(vector<string> in_files)
                                 for (int i = 0; i < count; ++i) arg[i] = filenames[i];
                                 hdrview()->load_images(arg);
                             });
+#endif
 
 #if !defined(__EMSCRIPTEN__)
         // Without file dialogs no file can be opened or saved through the menus, which is better learned now than
