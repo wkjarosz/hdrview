@@ -28,6 +28,7 @@
 
 #ifdef __EMSCRIPTEN__
 #include "app.h"
+#include "imgui.h"
 
 #include <emscripten/html5.h>
 #include <hello_imgui/internal/hello_imgui_ini_settings.h>
@@ -388,7 +389,8 @@ static std::function<void()> s_save_app_settings;
 /// Save the settings file as Hello ImGui's TearDown() and the app do on exit, then copy it into the browser's storage.
 static EM_BOOL save_settings_when_hidden(int, const EmscriptenVisibilityChangeEvent *event, void *)
 {
-    if (!event->hidden)
+    // nothing worth saving until the app has run a frame, by when it has loaded the settings it would overwrite
+    if (!event->hidden || !ImGui::GetCurrentContext() || ImGui::GetFrameCount() == 0)
         return EM_FALSE;
     const HelloImGui::RunnerParams &params = *HelloImGui::GetRunnerParams();
     HelloImGui::HelloImGuiIniSettings::SaveImGuiSettings(s_settings_path, params.dockingParams.layoutName);
