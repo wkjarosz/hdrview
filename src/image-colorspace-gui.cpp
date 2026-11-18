@@ -466,7 +466,7 @@ void Image::draw_colorspace()
     // scrolling child.
     if (ImGui::PE::Begin("Colorspace", table_flags))
     {
-        // The diagram gets its own full-width row when the value column alone is too narrow to render it legibly.
+        // The diagram goes below the table, at its full width, when the value column is too narrow to show it legibly.
         const bool diagram_fits_in_value_column = ImGui::PE::ColumnWidth(1) > HelloImGui::EmSize(12.f);
         ImGui::Indent(ImGui::GetStyle().CellPadding.x);
         ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
@@ -684,17 +684,22 @@ void Image::draw_colorspace()
                                  draw_chromaticity_diagram(ImGui::GetContentRegionAvail().x);
                                  return false;
                              });
-        else
-            ImGui::PE::FullWidthEntry("Diagram",
-                                      [this](float width)
-                                      {
-                                          draw_chromaticity_diagram(width);
-                                          return false;
-                                      });
 
         ImGui::PopStyleVar();
         ImGui::Unindent(ImGui::GetStyle().CellPadding.x);
         ImGui::PE::End();
+
+        // Otherwise the diagram follows the table rather than spanning a row of it, where the column boundary's
+        // resize handle, which runs the table's whole height, would take the drags meant for the plot. It is drawn
+        // under the IDs the row has, so the plot keeps its pan and zoom when the layout switches.
+        if (!diagram_fits_in_value_column)
+        {
+            ImGui::PushID("Colorspace");
+            ImGui::PushID("Diagram");
+            draw_chromaticity_diagram(ImGui::GetContentRegionAvail().x);
+            ImGui::PopID();
+            ImGui::PopID();
+        }
     }
     color_edit.end(*this, ImGui::IsAnyItemActive());
 }
