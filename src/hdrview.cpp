@@ -71,6 +71,7 @@ int main(int argc, char **argv)
 
     std::optional<float> exposure, gamma;
     std::optional<bool>  dither, force_sdr, apple_keys;
+    bool                 reset_settings = false;
     string               url;
 
 #if HDRVIEW_ENABLE_IPC
@@ -143,6 +144,10 @@ severities are:
 The default is 2 (info).)")
             ->check(CLI::Range(0, 6))
             ->option_text("INT in [0-6]")
+            ->group("Misc");
+
+        app.add_flag("--reset-settings", reset_settings,
+                     "Start from the default settings, deleting the saved ones,\nwhen they keep HDRView from working.")
             ->group("Misc");
 
         app.add_flag("--apple-keys,--non-apple-keys{false}", apple_keys,
@@ -232,7 +237,7 @@ until another channel selector is encountered.)")
 #endif
 
         hdrview()->load_url(url);
-        hdrview()->run();
+        hdrview()->run(reset_settings);
     }
     // Exceptions will only be thrown upon failed logger or sink construction (not during logging)
     catch (const spdlog::spdlog_ex &e)

@@ -824,6 +824,27 @@ void HDRViewApp::setup_dialogs(const vector<string> &in_files)
         make_unique<PopupDialog>("Replace session?", [this](bool &open) { draw_confirm_load_session_dialog(open); }));
     m_dialogs.push_back(make_unique<PopupDialog>("Discard unsaved changes?",
                                                  [this](bool &open) { draw_confirm_discard_dialog(open); }));
+    m_dialogs.push_back(make_unique<PopupDialog>(
+        "Reset settings?",
+        [this](bool &open)
+        {
+#if defined(__EMSCRIPTEN__)
+            const char *message = "Every setting, the window layout included, goes back to its default. The page "
+                                  "reloads, which closes the open images.";
+#else
+            const char *message = "Every setting, the window layout included, goes back to its default when HDRView "
+                                  "next starts. Until then, settings changed here are not saved.";
+#endif
+            if (ImGui::ConfirmDialog("Reset settings?", open, message, "Reset") != ImGui::DialogResult::Confirm)
+                return;
+            // Deleted, and kept from being written back: every save of the settings file goes through
+            // IniSettingsLocation(), which iniDisable turns off.
+            DeleteIniSettings(m_params);
+            m_params.iniDisable = true;
+#if defined(__EMSCRIPTEN__)
+            forget_settings_in_browser();
+#endif
+        }));
     // Every command that has one, so a dialog cannot be forgotten when a command is added, and all of
     // them wear the same shell, subject selector and footer; see draw_edit_command_dialog().
     for (auto &cmd : m_edit_commands)
@@ -1217,6 +1238,12 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    0,
                    [this]() { m_params.dockingParams.layoutReset = true; },
                    [this]() { return !m_params.dockingParams.dockableWindows.empty(); }});
+
+        add(Action{{"Reset settings..."},
+                   ICON_MY_RESET_SETTINGS,
+                   ImGuiKey_None,
+                   0,
+                   [this]() { dialog("Reset settings?").open = true; }});
 
         add(Action{{"Show developer menu"},
                    ICON_MY_DEVELOPER_WINDOW,

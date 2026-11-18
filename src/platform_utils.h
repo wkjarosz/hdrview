@@ -64,6 +64,8 @@ void install_touch_handlers();
     not share one.
 */
 void keep_settings_in_browser(const std::string &path, std::function<void()> save_app_settings);
+/// Remove the copy keep_settings_in_browser() keeps and reload the page, which then starts from the defaults.
+void forget_settings_in_browser();
 
 /// Ask the browser to confirm before it navigates away while images are loaded.
 /**

@@ -64,7 +64,8 @@ public:
     HDRViewApp(optional<float> exposure, optional<float> gamma, optional<bool> dither, optional<bool> force_sdr,
                optional<bool> force_apple_keys, vector<string> in_files = {});
 
-    void run();
+    /// Run the app until it quits; \p reset_settings deletes the saved settings first, so it starts from the defaults.
+    void run(bool reset_settings = false);
 
 #ifdef HDRVIEW_ENABLE_GUI_TEST_ENGINE
     /// Turn on Dear ImGui Test Engine for this app instance; must be called before run().

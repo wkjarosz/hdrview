@@ -641,6 +641,10 @@ void HDRViewApp::draw_menus()
             ImGui::EndMenu();
         }
 
+        ImGui::Separator();
+
+        MenuItem(action("Reset settings..."));
+
         ImGui::EndMenu();
     }
 
