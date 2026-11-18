@@ -2353,6 +2353,9 @@ if(EMSCRIPTEN)
     -sNO_DISABLE_EXCEPTION_CATCHING
     -sMAX_WEBGL_VERSION=2
     -sMIN_WEBGL_VERSION=2
+    # only Hello ImGui's window icon reads it at run time, which a web page cannot have; the favicon is made from it
+    # at build time
+    "SHELL:--exclude-file */app_settings/icon.png"
     # Emscripten's 64 kB default stack is too small for libaom's AV1 decoder, which overflows it on HDR
     # AVIFs and aborts the whole module. Memory growth is enabled, so a native-thread-sized stack is free.
     -sSTACK_SIZE=4MB
