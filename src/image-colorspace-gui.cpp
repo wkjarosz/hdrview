@@ -16,6 +16,7 @@
 #include "imgui_ext.h"
 #include "imgui_internal.h"
 #include "implot.h"
+#include "implot_internal.h"
 #include "texture.h"
 #include <hello_imgui/dpi_aware.h>
 
@@ -58,54 +59,48 @@ Texture *Image::chromaticity_density_texture(const ChromaticityBins &bins)
     return m_chromaticity_density.get();
 }
 
-/// A checkbox per overlay; right-clicking "Pixel density" sets its opacity, and "Display gamut" tells its source.
-static void draw_overlay_checkboxes(ChromaticityOverlays &shown)
+/// The plot's legend, whose entries show and hide the overlays; call between SetupFinish() and EndPlot().
+/**
+    Each overlay is a dummy item, so its entry lists whether or not it has anything to draw; the drawing reads the
+    flags. Right-clicking "Pixel density" sets its opacity, and hovering "Display gamut" tells its source.
+*/
+static void show_overlay_legend(ChromaticityOverlays &shown)
 {
-    ImGui::BeginGroup();
+    ImPlotSpec spec;
+    spec.LineColor = ImPlot::GetStyleColorVec4(ImPlotCol_LegendText);
     for (const auto &o : k_chromaticity_overlays)
     {
-        ImGui::Checkbox(o.label, &(shown.*o.flag));
-        if (o.flag == &ChromaticityOverlays::density && ImGui::BeginPopupContextItem("density options"))
-        {
-            ImGui::SliderFloat("Opacity", &shown.density_opacity, 0.f, 1.f, "%.2f");
-            ImGui::EndPopup();
-        }
-        if (o.flag == &ChromaticityOverlays::display_gamut && ImGui::BeginItemTooltip())
-        {
-            const DisplayGamut display = hdrview()->display_gamut();
-            const ColorGamut_  named   = named_color_gamut(display.chroma);
-            ImGui::PushTextWrapPos(ImGui::GetFontSize() * 25.f);
-            ImGui::TextUnformatted(display.panel ? "The primaries of the colors the screen can show, as the system "
-                                                   "reports them."
-                                                 : "The primaries the frame is encoded in for the screen; colors "
-                                                   "beyond them clip, whatever the screen could show.");
-            if (named != ColorGamut_Custom)
-                ImGui::TextDisabled("%s", color_gamut_name(named));
-            ImGui::PopTextWrapPos();
-            ImGui::EndTooltip();
-        }
+        if (const ImPlotItem *item = ImPlot::GetItem(o.label))
+            shown.*o.flag = item->Show; // as a click on its entry left it
+        else
+            ImPlot::HideNextItem(!(shown.*o.flag)); // first drawn: as the settings left it
+        ImPlot::PlotDummy(o.label, spec);
     }
-    ImGui::EndGroup();
-}
 
-/// A dropdown of draw_overlay_checkboxes(), previewing the overlays shown.
-static void draw_overlay_combo(ChromaticityOverlays &shown)
-{
-    string preview;
-    for (const auto &o : k_chromaticity_overlays)
-        if (shown.*o.flag)
-            preview += (preview.empty() ? "" : ", ") + string(o.label);
-    // a checkbox, unlike a Selectable, leaves the dropdown open
-    if (ImGui::BeginCombo("##overlays", preview.empty() ? "None" : preview.c_str(), ImGuiComboFlags_HeightLargest))
+    if (ImPlot::BeginLegendPopup("Pixel density"))
     {
-        draw_overlay_checkboxes(shown);
-        ImGui::EndCombo();
+        ImGui::SliderFloat("Opacity", &shown.density_opacity, 0.f, 1.f, "%.2f");
+        ImPlot::EndLegendPopup();
+    }
+    if (ImPlot::IsLegendEntryHovered("Display gamut") && ImGui::BeginTooltip())
+    {
+        const DisplayGamut display = hdrview()->display_gamut();
+        const ColorGamut_  named   = named_color_gamut(display.chroma);
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 25.f);
+        ImGui::TextUnformatted(display.panel ? "The primaries of the colors the screen can show, as the system "
+                                               "reports them."
+                                             : "The primaries the frame is encoded in for the screen; colors "
+                                               "beyond them clip, whatever the screen could show.");
+        if (named != ColorGamut_Custom)
+            ImGui::TextDisabled("%s", color_gamut_name(named));
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
     }
 }
 
 void Image::draw_chromaticity_diagram(float width)
 {
-    const auto &shown = chromaticity_overlays();
+    auto &shown = chromaticity_overlays();
 
     static float2 vMin{-0.05f, -0.05f};
     static float2 vMax{0.75f, 0.9f};
@@ -119,7 +114,7 @@ void Image::draw_chromaticity_diagram(float width)
     float4 plot_bg = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg); //{0.35f, 0.35f, 0.35f, 1.f};
     ImGui::PushStyleColor(ImGuiCol_WindowBg, plot_bg);
     if (ImPlot::BeginPlot("##Chromaticity diagram", ImVec2(size, size / aspect * 0.95f),
-                          ImPlotFlags_Crosshairs | ImPlotFlags_Equal | ImPlotFlags_NoLegend | ImPlotFlags_NoTitle))
+                          ImPlotFlags_Crosshairs | ImPlotFlags_Equal | ImPlotFlags_NoTitle))
     {
         static constexpr float lambda_min   = 400.f;
         static constexpr float lambda_max   = 680.f;
@@ -136,11 +131,14 @@ void Image::draw_chromaticity_diagram(float width)
         ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Linear);
         ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Linear);
         ImPlot::SetupAxesLimits(vMin.x, vMax.x, vMin.y, vMax.y);
-        ImPlot::SetupMouseText(ImPlotLocation_NorthEast, ImPlotMouseTextFlags_NoFormat);
+        ImPlot::SetupLegend(ImPlotLocation_NorthEast);
+        ImPlot::SetupMouseText(ImPlotLocation_SouthEast, ImPlotMouseTextFlags_NoFormat);
 
         ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
         ImPlot::SetupFinish();
         ImGui::PopFont();
+
+        show_overlay_legend(shown);
 
         ImPlot::PushPlotClipRect();
 
@@ -679,37 +677,20 @@ void Image::draw_colorspace()
                 return modified;
             });
 
-        // Beside the diagram, its overlays' checkboxes fill the label cell, clipped if they must be; above a
-        // full-width diagram, a dropdown holds them.
-        auto &overlays = chromaticity_overlays();
         if (diagram_fits_in_value_column)
-            ImGui::PE::CustomLabelEntry(
-                "Diagram",
-                [&overlays]()
-                {
-                    ImGui::PE::Label("Diagram");
-                    draw_overlay_checkboxes(overlays);
-                },
-                [this]()
-                {
-                    draw_chromaticity_diagram(ImGui::GetContentRegionAvail().x);
-                    return false;
-                });
-        else
-        {
             ImGui::PE::Entry("Diagram",
-                             [&overlays]()
+                             [this]()
                              {
-                                 draw_overlay_combo(overlays);
+                                 draw_chromaticity_diagram(ImGui::GetContentRegionAvail().x);
                                  return false;
                              });
+        else
             ImGui::PE::FullWidthEntry("Diagram",
                                       [this](float width)
                                       {
                                           draw_chromaticity_diagram(width);
                                           return false;
                                       });
-        }
 
         ImGui::PopStyleVar();
         ImGui::Unindent(ImGui::GetStyle().CellPadding.x);

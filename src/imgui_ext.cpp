@@ -1551,38 +1551,28 @@ static bool PushPELabelFont()
     return font != nullptr;
 }
 
-void PE::Label(const std::string &property_name, const std::string &tooltip, const std::function<void()> &tooltip_more)
+// Generic entry, the lambda function should return true if the widget changed
+bool PE::Entry(const std::string &property_name, const std::function<bool()> &content_fct, const std::string &tooltip,
+               const std::function<void()> &tooltip_more)
 {
+    ImGui::PushID(property_name.c_str());
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
     ImGui::AlignTextToFramePadding();
     bool pop_font = PushPELabelFont();
     ImGui::TextAligned2(0.f, -FLT_MIN, "%s", property_name.c_str());
+    // ImGui::TextUnformatted(property_name.c_str());
     if (pop_font)
         ImGui::PopFont();
     if (tooltip_more)
         Tooltip(tooltip.c_str(), tooltip_more);
     else if (!tooltip.empty())
         Tooltip(tooltip.c_str());
-}
-
-bool PE::CustomLabelEntry(const char *id, const std::function<void()> &label_fct,
-                          const std::function<bool()> &content_fct)
-{
-    ImGui::PushID(id);
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    label_fct();
     ImGui::TableNextColumn();
     ImGui::SetNextItemWidth(-FLT_MIN);
     bool result = content_fct();
     ImGui::PopID();
     return result; // returning if the widget changed
-}
-
-// Generic entry, the lambda function should return true if the widget changed
-bool PE::Entry(const std::string &property_name, const std::function<bool()> &content_fct, const std::string &tooltip,
-               const std::function<void()> &tooltip_more)
-{
-    return CustomLabelEntry(property_name.c_str(), [&] { Label(property_name, tooltip, tooltip_more); }, content_fct);
 }
 
 bool PE::TreeNode(const char *name, ImGuiTreeNodeFlags flags)
