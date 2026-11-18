@@ -46,72 +46,29 @@ bool inside_spectral_locus(float2 xy)
     return in;
 }
 
-/// Whether the segment from \p a to \p b touches the box from \p lo to \p hi, by clipping it to each axis's slab.
-static bool segment_meets_box(float2 a, float2 b, float2 lo, float2 hi)
-{
-    const float2 d  = b - a;
-    float        t0 = 0.f, t1 = 1.f;
-    for (int i = 0; i < 2; ++i)
-    {
-        if (d[i] == 0.f)
-        {
-            if (a[i] < lo[i] || a[i] > hi[i])
-                return false;
-            continue;
-        }
-        float ta = (lo[i] - a[i]) / d[i], tb = (hi[i] - a[i]) / d[i];
-        if (ta > tb)
-            swap(ta, tb);
-        t0 = std::max(t0, ta);
-        t1 = std::min(t1, tb);
-        if (t0 > t1)
-            return false;
-    }
-    return true;
-}
-
-bool box_meets_spectral_locus(float2 lo, float2 hi)
-{
-    // They meet when the box lies wholly inside the locus, and then so does any corner, or when the locus's outline
-    // enters the box, which includes the locus lying wholly inside it.
-    if (inside_spectral_locus(lo))
-        return true;
-    const auto  &locus = spectral_locus();
-    const size_t n     = locus.size();
-    for (size_t i = 0, j = n - 1; i < n; j = i++)
-        if (segment_meets_box(locus[j], locus[i], lo, hi))
-            return true;
-    return false;
-}
-
-json ChromaticityLegend::to_json() const
+json ChromaticityOverlays::to_json() const
 {
     json j = json::object();
-    for (const auto &e : k_chromaticity_legend_entries) j[e.key] = this->*e.flag;
-    j["legend collapsed"]      = collapsed;
+    for (const auto &o : k_chromaticity_overlays) j[o.key] = this->*o.flag;
     j["pixel density opacity"] = density_opacity;
     return j;
 }
 
-void ChromaticityLegend::from_json(const json &j)
+void ChromaticityOverlays::from_json(const json &j)
 {
     if (!j.is_object())
         return;
-    auto take = [&j](const char *key, bool &flag)
-    {
-        if (j.contains(key) && j[key].is_boolean())
-            flag = j[key].get<bool>();
-    };
-    for (const auto &e : k_chromaticity_legend_entries) take(e.key, this->*e.flag);
-    take("legend collapsed", collapsed);
+    for (const auto &o : k_chromaticity_overlays)
+        if (j.contains(o.key) && j[o.key].is_boolean())
+            this->*o.flag = j[o.key].get<bool>();
     if (j.contains("pixel density opacity") && j["pixel density opacity"].is_number())
         density_opacity = std::clamp(j["pixel density opacity"].get<float>(), 0.f, 1.f);
 }
 
-ChromaticityLegend &chromaticity_legend()
+ChromaticityOverlays &chromaticity_overlays()
 {
-    static ChromaticityLegend legend;
-    return legend;
+    static ChromaticityOverlays overlays;
+    return overlays;
 }
 
 /// The bounding box of spectral_locus().

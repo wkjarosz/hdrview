@@ -58,19 +58,19 @@ Texture *Image::chromaticity_density_texture(const ChromaticityBins &bins)
     return m_chromaticity_density.get();
 }
 
-/// A checkbox per legend entry; right-clicking "Pixel density" sets its opacity, and "Display gamut" tells its source.
-static void draw_legend_checkboxes(ChromaticityLegend &legend)
+/// A checkbox per overlay; right-clicking "Pixel density" sets its opacity, and "Display gamut" tells its source.
+static void draw_overlay_checkboxes(ChromaticityOverlays &shown)
 {
     ImGui::BeginGroup();
-    for (const auto &e : k_chromaticity_legend_entries)
+    for (const auto &o : k_chromaticity_overlays)
     {
-        ImGui::Checkbox(e.label, &(legend.*e.flag));
-        if (e.flag == &ChromaticityLegend::density && ImGui::BeginPopupContextItem("density options"))
+        ImGui::Checkbox(o.label, &(shown.*o.flag));
+        if (o.flag == &ChromaticityOverlays::density && ImGui::BeginPopupContextItem("density options"))
         {
-            ImGui::SliderFloat("Opacity", &legend.density_opacity, 0.f, 1.f, "%.2f");
+            ImGui::SliderFloat("Opacity", &shown.density_opacity, 0.f, 1.f, "%.2f");
             ImGui::EndPopup();
         }
-        if (e.flag == &ChromaticityLegend::display_gamut && ImGui::BeginItemTooltip())
+        if (o.flag == &ChromaticityOverlays::display_gamut && ImGui::BeginItemTooltip())
         {
             const DisplayGamut display = hdrview()->display_gamut();
             const ColorGamut_  named   = named_color_gamut(display.chroma);
@@ -88,97 +88,24 @@ static void draw_legend_checkboxes(ChromaticityLegend &legend)
     ImGui::EndGroup();
 }
 
-/// The chromaticity diagram's legend: a translucent panel of checkboxes in the plot's top-right corner.
-/**
-    An arrow button in the panel's corner folds it down to just the button and opens it again. While the open
-    legend would cover part of the spectral locus, or not fit in the plot, it starts folded and opens only until
-    folded again, without changing what `legend.collapsed` keeps for when there is room; open, it is clipped to
-    the plot.
-
-    Submitted after the plot, so it takes the mouse from it, ImPlot letting later items overlap its plots; its
-    background is a button too, so a drag across it does not pan the plot.
-
-    The plot area spans \p plot_min to \p plot_max on screen, and \p xy_min to \p xy_max in chromaticity.
-*/
-static void draw_legend(ChromaticityLegend &legend, float2 plot_min, float2 plot_max, float2 xy_min, float2 xy_max)
+/// A dropdown of draw_overlay_checkboxes(), previewing the overlays shown.
+static void draw_overlay_combo(ChromaticityOverlays &shown)
 {
-    ImGui::PushID("chromaticity legend");
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{1.f, 1.f});
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{ImGui::GetStyle().ItemSpacing.x, 1.f});
-
-    const ImGuiStyle &style    = ImGui::GetStyle();
-    const ImU32       panel_bg = ImGui::GetColorU32(ImGuiCol_PopupBg, 0.85f);
-    const float2      pad{EmSize(0.3f), EmSize(0.3f)};
-    const float2      cursor = ImGui::GetCursorScreenPos();
-    const float       row    = ImGui::GetFrameHeight(); // a checkbox's height, and the arrow button's size
-
-    // the checkboxes' extent, sized as draw_legend_checkboxes() lays them out
-    const int n_entries = int(std::size(k_chromaticity_legend_entries));
-    float     width     = 0.f;
-    for (const auto &e : k_chromaticity_legend_entries) width = std::max(width, ImGui::CalcTextSize(e.label).x);
-    const float2 checkboxes{width + row + style.ItemInnerSpacing.x,
-                            n_entries * row + (n_entries - 1) * style.ItemSpacing.y};
-
-    // open, the panel holds the checkboxes with the button beside the first; folded, just the button
-    const float2 open_panel = float2{checkboxes.x + style.ItemInnerSpacing.x + row, checkboxes.y} + 2.f * pad;
-
-    // the open panel fits where it, with a margin, stays within the plot and clear of the spectral locus
-    const float2 open_min{plot_max.x - pad.x - open_panel.x, plot_min.y + pad.y};
-    auto         to_xy = [&](float2 p)
+    string preview;
+    for (const auto &o : k_chromaticity_overlays)
+        if (shown.*o.flag)
+            preview += (preview.empty() ? "" : ", ") + string(o.label);
+    // a checkbox, unlike a Selectable, leaves the dropdown open
+    if (ImGui::BeginCombo("##overlays", preview.empty() ? "None" : preview.c_str(), ImGuiComboFlags_HeightLargest))
     {
-        const float2 t = (p - plot_min) / (plot_max - plot_min); // screen y runs down, xy's y up
-        return float2{xy_min.x + t.x * (xy_max.x - xy_min.x), xy_max.y - t.y * (xy_max.y - xy_min.y)};
-    };
-    const float2 corner_a = to_xy(open_min - pad), corner_b = to_xy(open_min + open_panel + pad);
-    const bool   fits = la::all(la::lequal(open_panel + 2.f * pad, plot_max - plot_min)) &&
-                      !box_meets_spectral_locus(la::min(corner_a, corner_b), la::max(corner_a, corner_b));
-
-    // while it does not fit, whether it is open lives in ImGui's storage for this ID, reset once it fits
-    ImGuiStorage *storage  = ImGui::GetStateStorage();
-    const ImGuiID small_id = ImGui::GetID("open while small");
-    if (fits)
-        storage->SetBool(small_id, false);
-    const bool   open  = fits ? !legend.collapsed : storage->GetBool(small_id, false);
-    const float2 panel = open ? open_panel : float2{row} + 2.f * pad;
-    const float2 panel_min{plot_max.x - pad.x - panel.x, plot_min.y + pad.y};
-
-    ImGui::PushClipRect(plot_min, plot_max, true);
-    ImGui::GetWindowDrawList()->AddRectFilled(panel_min, panel_min + panel, panel_bg, style.FrameRounding);
-
-    // the background, under the button and checkboxes, which it lets take the mouse
-    ImGui::SetCursorScreenPos(panel_min);
-    ImGui::SetNextItemAllowOverlap();
-    ImGui::InvisibleButton("background", panel);
-
-    ImGui::SetCursorScreenPos(float2{panel_min.x + panel.x - pad.x - row, panel_min.y + pad.y});
-    if (ImGui::ArrowButton("fold", open ? ImGuiDir_Up : ImGuiDir_Down))
-    {
-        if (fits)
-            legend.collapsed = !legend.collapsed;
-        else
-            storage->SetBool(small_id, !open);
+        draw_overlay_checkboxes(shown);
+        ImGui::EndCombo();
     }
-    ImGui::SetItemTooltip(open ? "Hide the legend" : "Show the legend");
-
-    if (open)
-    {
-        ImGui::SetCursorScreenPos(panel_min + pad);
-        draw_legend_checkboxes(legend);
-    }
-    ImGui::PopClipRect();
-
-    ImGui::PopStyleVar(2);
-    ImGui::PopID();
-
-    // Back to where the plot left the cursor. A zero-size item a line above lands exactly there, and tells ImGui
-    // the cursor was moved within what the window already holds rather than to extend it.
-    ImGui::SetCursorScreenPos(ImVec2{cursor.x, cursor.y - ImGui::GetStyle().ItemSpacing.y});
-    ImGui::Dummy(ImVec2{0.f, 0.f});
 }
 
 void Image::draw_chromaticity_diagram(float width)
 {
-    auto &legend = chromaticity_legend();
+    const auto &shown = chromaticity_overlays();
 
     static float2 vMin{-0.05f, -0.05f};
     static float2 vMax{0.75f, 0.9f};
@@ -209,8 +136,7 @@ void Image::draw_chromaticity_diagram(float width)
         ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Linear);
         ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Linear);
         ImPlot::SetupAxesLimits(vMin.x, vMax.x, vMin.y, vMax.y);
-        // the legend takes the top-right corner; both are corners the locus leaves empty
-        ImPlot::SetupMouseText(ImPlotLocation_SouthEast, ImPlotMouseTextFlags_NoFormat);
+        ImPlot::SetupMouseText(ImPlotLocation_NorthEast, ImPlotMouseTextFlags_NoFormat);
 
         ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
         ImPlot::SetupFinish();
@@ -225,14 +151,14 @@ void Image::draw_chromaticity_diagram(float width)
         ImPlot::PlotImage("##chromaticity_image", (ImTextureID)chromaticity_texture()->texture_handle(),
                           ImPlotPoint(grid.min().x, grid.min().y), ImPlotPoint(grid.max().x, grid.max().y), {0.f, 1.f},
                           {1.f, 0.f});
-        if (legend.density)
+        if (shown.density)
         {
             // tinted, so what lies outside the locus takes the text's color, which shows against the plot
             const ChromaticityBins &bins = *chromaticity_bins(hdrview()->roi());
             if (Texture *density = chromaticity_density_texture(bins))
             {
                 float4 tint = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-                tint.w      = legend.density_opacity;
+                tint.w      = shown.density_opacity;
                 ImPlot::PlotImage("##chromaticity_density", (ImTextureID)density->texture_handle(),
                                   ImPlotPoint(bins.grid.min().x, bins.grid.min().y),
                                   ImPlotPoint(bins.grid.max().x, bins.grid.max().y), {0.f, 1.f}, {1.f, 0.f}, tint);
@@ -281,7 +207,7 @@ void Image::draw_chromaticity_diagram(float width)
         //
         // draw wavelength tick marks
         //
-        if (legend.wavelengths)
+        if (shown.wavelengths)
         {
             ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
             // Draw tick marks stored in tick_marks
@@ -333,7 +259,7 @@ void Image::draw_chromaticity_diagram(float width)
         //
         // draw the locus of D (daylight) CCTs
         //
-        if (legend.daylight)
+        if (shown.daylight)
         {
             auto create_CCT_locus = []()
             {
@@ -411,7 +337,7 @@ void Image::draw_chromaticity_diagram(float width)
         //
         auto draw_display_gamut = [&]
         {
-            if (!legend.display_gamut)
+            if (!shown.display_gamut)
                 return;
             const Chromaticities chr       = hdrview()->display_gamut().chroma;
             const float2         corners[] = {ImPlot::PlotToPixels(chr.red.x, chr.red.y),
@@ -420,13 +346,13 @@ void Image::draw_chromaticity_diagram(float width)
             ImGui::AddDashedPolyline(ImPlot::GetPlotDrawList(), corners, 3, ImGui::GetColorU32(text_color_f), true,
                                      scale_factor, 3.f * scale_factor);
         };
-        if (!legend.image_gamut)
+        if (!shown.image_gamut)
             draw_display_gamut();
 
         //
         // draw the primaries, gamut triangle, whitepoint, and text labels
         //
-        if (legend.image_gamut)
+        if (shown.image_gamut)
         {
             Chromaticities gamut_chr{chromaticities.value_or(Chromaticities{})};
             ImVec4         colors[] = {
@@ -502,7 +428,7 @@ void Image::draw_chromaticity_diagram(float width)
         {
             auto &io      = ImGui::GetIO();
             auto  rgb2xyz = mul(M_RGB_to_XYZ, inverse(M_to_sRGB));
-            if (legend.hovered && hdrview()->mouse_over_viewport())
+            if (shown.hovered && hdrview()->mouse_over_viewport())
             {
                 auto   hovered_pixel = int2{hdrview()->pixel_at_app_pos(io.MousePos)};
                 float4 color32       = hdrview()->pixel_value(hovered_pixel, false, 0);
@@ -520,16 +446,9 @@ void Image::draw_chromaticity_diagram(float width)
 
         ImPlot::PopStyleColor();
 
-        const float2     plot_min = ImPlot::GetPlotPos();
-        const float2     plot_max = plot_min + float2{ImPlot::GetPlotSize()};
-        const ImPlotRect limits   = ImPlot::GetPlotLimits();
-
         ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
         ImPlot::EndPlot();
         ImGui::PopFont();
-        // in the UI's own font, unlike the plot's labels: it is controls, like the rest of the UI's
-        draw_legend(legend, plot_min, plot_max, float2{float(limits.X.Min), float(limits.Y.Min)},
-                    float2{float(limits.X.Max), float(limits.Y.Max)});
     }
     ImGui::PopStyleColor();
     ImGui::PopFont();
@@ -760,20 +679,37 @@ void Image::draw_colorspace()
                 return modified;
             });
 
+        // Beside the diagram, its overlays' checkboxes fill the label cell, clipped if they must be; above a
+        // full-width diagram, a dropdown holds them.
+        auto &overlays = chromaticity_overlays();
         if (diagram_fits_in_value_column)
+            ImGui::PE::CustomLabelEntry(
+                "Diagram",
+                [&overlays]()
+                {
+                    ImGui::PE::Label("Diagram");
+                    draw_overlay_checkboxes(overlays);
+                },
+                [this]()
+                {
+                    draw_chromaticity_diagram(ImGui::GetContentRegionAvail().x);
+                    return false;
+                });
+        else
+        {
             ImGui::PE::Entry("Diagram",
-                             [this]()
+                             [&overlays]()
                              {
-                                 draw_chromaticity_diagram(ImGui::GetContentRegionAvail().x);
+                                 draw_overlay_combo(overlays);
                                  return false;
                              });
-        else
             ImGui::PE::FullWidthEntry("Diagram",
                                       [this](float width)
                                       {
                                           draw_chromaticity_diagram(width);
                                           return false;
                                       });
+        }
 
         ImGui::PopStyleVar();
         ImGui::Unindent(ImGui::GetStyle().CellPadding.x);

@@ -512,6 +512,14 @@ bool Begin(const char     *label = "PE::Table",
 void End();
 bool Entry(const std::string &property_name, const std::function<bool()> &content_fct, const std::string &tooltip = {},
            const std::function<void()> &tooltip_more = {});
+/// A row whose label cell \p label_fct draws, beside the content \p content_fct draws, under ID \p id.
+/**
+    For a label cell holding more than the name; Label() draws the name as Entry() does.
+*/
+bool CustomLabelEntry(const char *id, const std::function<void()> &label_fct, const std::function<bool()> &content_fct);
+/// The property name as Entry() draws it in the label cell, with its tooltip.
+void Label(const std::string &property_name, const std::string &tooltip = {},
+           const std::function<void()> &tooltip_more = {});
 /// An unlabeled row whose content spans both columns.
 /**
     content_fct receives the available width, since a cell's content region only reports its own column.

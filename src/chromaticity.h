@@ -59,8 +59,8 @@ struct ChromaticityGrid
     bool in_locus(int2 t) const;
 };
 
-/// What the chromaticity diagram's legend shows, and how; saved with the app's settings.
-struct ChromaticityLegend
+/// Which overlays the chromaticity diagram shows, and how; saved with the app's settings.
+struct ChromaticityOverlays
 {
     /// Whether the density starts out shown: not in the web build, where each count holds up a frame.
 #ifdef __EMSCRIPTEN__
@@ -76,33 +76,32 @@ struct ChromaticityLegend
     bool  daylight        = true;               ///< The daylight locus, with ticks at correlated color temperatures
     bool  hovered         = true;               ///< The chromaticity of the pixel under the cursor
     float density_opacity = 0.7f;               ///< How strongly the density shows, within the locus and beyond it
-    bool  collapsed       = false;              ///< Whether the legend is folded down to its button
 
-    /// The legend as the app's settings store it.
+    /// The overlays as the app's settings store them.
     json to_json() const;
     /// Take the settings \p j holds; a missing key, or a value of the wrong type, leaves that setting as it is.
     void from_json(const json &j);
 };
 
-/// One of the legend's checkboxes: its label, the key the settings store it under, and the flag it toggles.
-struct ChromaticityLegendEntry
+/// One overlay's checkbox: its label, the key the settings store it under, and the flag it toggles.
+struct ChromaticityOverlay
 {
-    const char              *label;
-    const char              *key;
-    bool ChromaticityLegend::*flag;
+    const char *label;
+    const char *key;
+    bool ChromaticityOverlays::*flag;
 };
 
-/// The legend's checkboxes, in the order they show.
-inline constexpr ChromaticityLegendEntry k_chromaticity_legend_entries[] = {
-    {"Pixel density", "pixel density", &ChromaticityLegend::density},
-    {"Image gamut", "image gamut", &ChromaticityLegend::image_gamut},
-    {"Display gamut", "display gamut", &ChromaticityLegend::display_gamut},
-    {"Wavelengths", "wavelengths", &ChromaticityLegend::wavelengths},
-    {"Daylight locus", "daylight locus", &ChromaticityLegend::daylight},
-    {"Hovered pixel", "hovered pixel", &ChromaticityLegend::hovered}};
+/// Every overlay, in the order the checkboxes show.
+inline constexpr ChromaticityOverlay k_chromaticity_overlays[] = {
+    {"Pixel density", "pixel density", &ChromaticityOverlays::density},
+    {"Image gamut", "image gamut", &ChromaticityOverlays::image_gamut},
+    {"Display gamut", "display gamut", &ChromaticityOverlays::display_gamut},
+    {"Wavelengths", "wavelengths", &ChromaticityOverlays::wavelengths},
+    {"Daylight locus", "daylight locus", &ChromaticityOverlays::daylight},
+    {"Hovered pixel", "hovered pixel", &ChromaticityOverlays::hovered}};
 
-/// The chromaticity diagram's legend, shared by every image's diagram and saved with the app's settings.
-ChromaticityLegend &chromaticity_legend();
+/// The chromaticity diagram's overlays, shared by every image's diagram and saved with the app's settings.
+ChromaticityOverlays &chromaticity_overlays();
 
 /// The grid over spectral_locus(), on which the chromaticity diagram's background is drawn.
 const ChromaticityGrid &chromaticity_grid();
@@ -120,6 +119,3 @@ const std::vector<float2> &spectral_locus();
 
 /// Whether \p xy lies inside spectral_locus(), the region of physically realizable chromaticities.
 bool inside_spectral_locus(float2 xy);
-
-/// Whether the box from \p lo to \p hi in xy touches the region spectral_locus() encloses.
-bool box_meets_spectral_locus(float2 lo, float2 hi);

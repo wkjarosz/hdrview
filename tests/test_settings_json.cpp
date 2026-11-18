@@ -5,7 +5,7 @@
 //
 
 // The sections of the app's settings that read and write themselves as JSON: the highlight rolloff's, which
-// session files store too, and the chromaticity diagram's legend.
+// session files store too, and the chromaticity diagram's overlays.
 
 #include <doctest/doctest.h>
 
@@ -66,52 +66,52 @@ TEST_CASE("Each settings section survives JSON, and bad values cannot get in")
         CHECK(same.to_json() == s.to_json());
     }
 
-    // the chromaticity diagram's legend
+    // the chromaticity diagram's overlays
     {
-        using Legend = ChromaticityLegend;
+        using Overlays = ChromaticityOverlays;
         // the keys saved settings files hold, each flag's own
-        const std::array<std::pair<const char *, bool Legend::*>, 7> flags = {
-            {{"pixel density", &Legend::density},
-             {"image gamut", &Legend::image_gamut},
-             {"display gamut", &Legend::display_gamut},
-             {"wavelengths", &Legend::wavelengths},
-             {"daylight locus", &Legend::daylight},
-             {"hovered pixel", &Legend::hovered},
-             {"legend collapsed", &Legend::collapsed}}};
-        const Legend defaults;
+        const std::array<std::pair<const char *, bool Overlays::*>, 6> flags = {
+            {{"pixel density", &Overlays::density},
+             {"image gamut", &Overlays::image_gamut},
+             {"display gamut", &Overlays::display_gamut},
+             {"wavelengths", &Overlays::wavelengths},
+             {"daylight locus", &Overlays::daylight},
+             {"hovered pixel", &Overlays::hovered}}};
+        const Overlays defaults;
         CHECK(defaults.to_json().size() == flags.size() + 1); // the flags and the opacity
         CHECK(defaults.to_json()["pixel density opacity"] == defaults.density_opacity);
 
         // each flag away from its default alone, under its own key, and back in place
         for (size_t i = 0; i < flags.size(); ++i)
         {
-            auto [key, flag] = flags[i];
+            const char *key  = flags[i].first;
+            const auto  flag = flags[i].second;
             CAPTURE(key);
-            Legend changed;
+            Overlays changed;
             changed.*flag = !(changed.*flag);
             CHECK(changed.to_json()[key] == changed.*flag);
-            Legend back;
+            Overlays back;
             back.from_json(changed.to_json());
             for (auto [other, f] : flags) CHECK(back.*f == changed.*f);
             CHECK(back.density_opacity == defaults.density_opacity);
         }
-        Legend dimmer;
+        Overlays dimmer;
         dimmer.density_opacity = 0.25f;
-        Legend back;
+        Overlays back;
         back.from_json(dimmer.to_json());
         CHECK(back.density_opacity == 0.25f);
 
         // values of the wrong type leave the settings as they were, and the opacity is clamped
-        Legend odd;
-        odd.from_json({{"pixel density", "no"}, {"legend collapsed", 1}, {"pixel density opacity", 3.f}});
+        Overlays odd;
+        odd.from_json({{"pixel density", "no"}, {"wavelengths", 1}, {"pixel density opacity", 3.f}});
         CHECK(odd.density == defaults.density);
-        CHECK(odd.collapsed == defaults.collapsed);
+        CHECK(odd.wavelengths == defaults.wavelengths);
         CHECK(odd.density_opacity == 1.f);
         odd.from_json({{"pixel density opacity", "half"}});
         CHECK(odd.density_opacity == 1.f);
 
         // and anything that is not an object changes nothing
-        Legend same;
+        Overlays same;
         same.from_json(json::array());
         CHECK(same.to_json() == defaults.to_json());
     }
