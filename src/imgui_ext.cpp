@@ -1396,7 +1396,10 @@ DialogResult ConfirmDialog(const char *title, bool &open, const char *message, c
     DialogResult result = DialogResult::None;
     if (BeginModalDialog(title, open, position))
     {
+        // wrapped at a preferred width, which a short message falls short of and the window then shrinks to
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + HelloImGui::EmSize(30.f));
         ImGui::TextUnformatted(message);
+        ImGui::PopTextWrapPos();
         ImGui::Spacing();
 
         result = DialogButtons(confirm_label);

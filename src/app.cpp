@@ -829,11 +829,9 @@ void HDRViewApp::setup_dialogs(const vector<string> &in_files)
         [this](bool &open)
         {
 #if defined(__EMSCRIPTEN__)
-            const char *message = "Every setting, the window layout included, goes back to its default. The page "
-                                  "reloads, which closes the open images.";
+            const char *message = "This will delete HDRView's setting file, including theme choice and window layouts, and reload HDRView, which closes any open images.";
 #else
-            const char *message = "Every setting, the window layout included, goes back to its default when HDRView "
-                                  "next starts. Until then, settings changed here are not saved.";
+            const char *message = "This will delete HDRView's setting file, including theme choice and window layouts, and prevent HDRView from saving settings upon exiting this session. HDRView will launch with default settings next time.";
 #endif
             if (ImGui::ConfirmDialog("Reset settings?", open, message, "Reset") != ImGui::DialogResult::Confirm)
                 return;

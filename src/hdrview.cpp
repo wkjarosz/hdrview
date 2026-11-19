@@ -147,7 +147,7 @@ The default is 2 (info).)")
             ->group("Misc");
 
         app.add_flag("--reset-settings", reset_settings,
-                     "Start from the default settings, deleting the saved ones,\nwhen they keep HDRView from working.")
+                     "Start from the default settings, deleting the saved ones.")
             ->group("Misc");
 
         app.add_flag("--apple-keys,--non-apple-keys{false}", apple_keys,
