@@ -7,6 +7,7 @@
 #include "fwd.h"
 
 #include "app.h"
+#include "chromaticity.h"
 #include "colorspace.h"
 #include "common.h"
 #include "dithermatrix256.h"
@@ -60,7 +61,6 @@ void Image::make_default_textures()
 {
     static constexpr float s_black{0.f};
     static constexpr float s_white{1.f};
-    static constexpr int   chr_w = 256;
     s_black_texture  = std::make_unique<Texture>(Texture::PixelFormat::R, Texture::ComponentFormat::Float32, int2{1, 1},
                                                  Texture::InterpolationMode::Nearest,
                                                  Texture::InterpolationMode::Nearest, Texture::WrapMode::Repeat);
@@ -70,86 +70,31 @@ void Image::make_default_textures()
     s_dither_texture = std::make_unique<Texture>(Texture::PixelFormat::R, Texture::ComponentFormat::UInt8,
                                                  int2{dither_texture_width()}, Texture::InterpolationMode::Nearest,
                                                  Texture::InterpolationMode::Nearest, Texture::WrapMode::Repeat);
-    s_chromaticity_texture = std::make_unique<Texture>(
-        Texture::PixelFormat::RGBA, Texture::ComponentFormat::UInt8, int2{chr_w}, Texture::InterpolationMode::Bilinear,
+    // every chromaticity on the grid at full brightness in sRGB, transparent outside the spectral locus
+    const ChromaticityGrid &grid = chromaticity_grid();
+    s_chromaticity_texture       = std::make_unique<Texture>(
+        Texture::PixelFormat::RGBA, Texture::ComponentFormat::UInt8, grid.size, Texture::InterpolationMode::Bilinear,
         Texture::InterpolationMode::Bilinear, Texture::WrapMode::ClampToEdge);
 
-    auto create_locus = []()
+    auto          xyz_to_rgb = XYZ_to_RGB(Chromaticities{}, 1.f);
+    vector<byte4> chromaticity_data(grid.size.x * grid.size.y);
+    for (int y = 0; y < grid.size.y; ++y)
     {
-        constexpr int    sample_count = 200;
-        ImVector<ImVec2> poly;
-        poly.resize(sample_count);
-
-        constexpr float wavelength_min = 380.f;
-        constexpr float wavelength_max = 700.f;
-
-        auto &illum = white_point_spectrum(WhitePoint_D65);
-        auto &XYZ   = CIE_XYZ_spectra();
-
-        // Compute chromaticity line
-        for (int i = 0; i < sample_count; ++i)
+        for (int x = 0; x < grid.size.x; ++x)
         {
-            float wavelength = lerp(wavelength_min, wavelength_max, ((float)i) / ((float)(sample_count - 1)));
-            auto  xyz        = illum.eval(wavelength) * XYZ.eval(wavelength);
-            poly[i]          = xyz.xy() / la::sum(xyz); // normalize
-        }
-
-        return poly;
-    };
-
-    static const ImVector<ImVec2> locus = create_locus();
-
-    // lambda to check if a point is inside a polygon using the ray-casting algorithm
-    auto is_inside = [](float2 point) -> bool
-    {
-        int n     = locus.size(); // Number of vertices in the polygon
-        int count = 0;            // Count of intersections
-
-        // Iterate through each edge of the polygon
-        for (int i = 0; i < n; i++)
-        {
-            ImVec2 p1 = locus[i];
-            ImVec2 p2 = locus[(i + 1) % n]; // Ensure the last point connects to the first point
-
-            // Check if the point's y-coordinate is within the edge's y-range and if the point is to the left of the
-            // edge
-            if ((point.y > min(p1.y, p2.y)) && (point.y <= max(p1.y, p2.y)) && (point.x <= max(p1.x, p2.x)))
-            {
-                // Calculate the x-coordinate of the intersection of the edge with a horizontal line through the point
-                auto xIntersect = (point.y - p1.y) * (p2.x - p1.x) / (p2.y - p1.y) + p1.x;
-                // If the edge is vertical or the point's x-coordinate is less than or equal to the intersection
-                // x-coordinate, increment count
-                if (p1.x == p2.x || point.x <= xIntersect)
-                    count++;
-            }
-        }
-
-        return count % 2 == 1;
-    };
-
-    auto rgb2xyz = XYZ_to_RGB(Chromaticities{}, 1.f);
-
-    vector<byte4> g_chromaticity_data(chr_w * chr_w);
-    for (int y = 0; y < chr_w; ++y)
-    {
-        for (int x = 0; x < chr_w; ++x)
-        {
-            float  xn = (x + 0.5f) / chr_w;
-            float  yn = (y + 0.5f) / chr_w;
-            float3 xyz{xn, yn, 1.f - xn - yn};
-            float3 rgb = mul(rgb2xyz, xyz);
+            float2 xy  = grid.center(int2{x, y});
+            float3 rgb = mul(xyz_to_rgb, float3{xy, 1.f - xy.x - xy.y});
             rgb        = linear_to_sRGB(rgb / la::maxelem(rgb));
-            byte4 rgba8{quantize_full<uint8_t>(rgb.x), quantize_full<uint8_t>(rgb.y), quantize_full<uint8_t>(rgb.z),
-                        is_inside(xyz.xy()) ? (uint8_t)255 : (uint8_t)0};
-
-            g_chromaticity_data[y * chr_w + x] = rgba8;
+            chromaticity_data[y * grid.size.x + x] =
+                byte4{quantize_full<uint8_t>(rgb.x), quantize_full<uint8_t>(rgb.y), quantize_full<uint8_t>(rgb.z),
+                      grid.in_locus(int2{x, y}) ? (uint8_t)255 : (uint8_t)0};
         }
     }
 
     s_black_texture->upload((const uint8_t *)&s_black);
     s_white_texture->upload((const uint8_t *)&s_white);
     s_dither_texture->upload((const uint8_t *)dither_texture_data());
-    s_chromaticity_texture->upload((const uint8_t *)g_chromaticity_data.data());
+    s_chromaticity_texture->upload((const uint8_t *)chromaticity_data.data());
 }
 
 void Image::cleanup_default_textures()
@@ -636,10 +581,7 @@ float4x4 ChannelGroup::colors() const
     }
 }
 
-Channel::Channel(const std::string &name, int2 size) :
-    Array2Df(size), cached_stats(make_shared<PixelStats>()), async_stats(make_shared<PixelStats>()), name(name)
-{
-}
+Channel::Channel(const std::string &name, int2 size) : Array2Df(size), name(name) {}
 
 Texture *Channel::get_texture()
 {
@@ -723,24 +665,10 @@ bool PixelStats::Settings::match(const Settings &other) const
            ref_content_version == other.ref_content_version;
 }
 
-PixelStats *Channel::get_stats()
-{
-    MY_ASSERT(cached_stats, "PixelStats::cached_stats should never be null");
-
-    // We always return the cached stats, but before we do we might update the cache from the async stats
-    if (async_tracker.ready() && async_stats->computed)
-    {
-        spdlog::trace("Replacing cached channel stats with async computation");
-        adopt_async_stats();
-    }
-
-    return cached_stats.get();
-}
+PixelStats *Channel::get_stats() { return m_stats.get(); }
 
 void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
 {
-    MY_ASSERT(cached_stats, "PixelStats::cached_stats should never be null");
-
     PixelStats::Settings desired_settings{hdrview()->exposure(),
                                           hdrview()->histogram_x_scale(),
                                           hdrview()->histogram_y_scale(),
@@ -750,16 +678,6 @@ void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
                                           img2 ? img2->reference_group : -1,
                                           img1->content_version,
                                           img2 ? img2->content_version : 0};
-
-    // Pixels streaming in from a renderer change the content version faster than a full pass over the image
-    // can finish, and chasing every version would cancel each computation partway. So a newer version is
-    // only picked up once the cache has stood as a finished result for a moment.
-    static constexpr auto k_min_stats_age = std::chrono::milliseconds{200};
-    if (cached_stats->computed && std::chrono::steady_clock::now() - stats_ready_at < k_min_stats_age)
-    {
-        desired_settings.content_version     = cached_stats->settings.content_version;
-        desired_settings.ref_content_version = cached_stats->settings.ref_content_version;
-    }
 
     // The group's alpha channel, when this channel needs dividing by it to report the file's values; null
     // for the alpha channel itself, which is stored as the file had it.
@@ -773,62 +691,123 @@ void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
     };
 
     // img2 is captured so the reference image outlives the task: the raw Channel pointers below point into
-    // it, and closing it drops the app's last reference. img1 owns this Channel, whose destructor cancels
-    // and waits for the task.
-    auto recompute_async_stats = [this, desired_settings, img1, img2, img_data_origin = img1->data_window.min,
-                                  alpha           = alpha_of(img1, img1->selected_group),
-                                  ref             = (img2 && img2->is_valid_group(img2->reference_group))
-                                                        ? &img2->channels[img2->groups[img2->reference_group].channels[c]]
-                                                        : nullptr,
-                                  ref_alpha       = alpha_of(img2, img2 ? img2->reference_group : -1),
-                                  ref_data_origin = img2 ? img2->data_window.min : int2{}]()
+    // it, and closing it drops the app's last reference. img1 owns this Channel, whose cache cancels and
+    // waits for the task before either goes.
+    m_stats.update(desired_settings,
+                   [this, img2, img_data_origin = img1->data_window.min, alpha = alpha_of(img1, img1->selected_group),
+                    ref             = (img2 && img2->is_valid_group(img2->reference_group))
+                                          ? &img2->channels[img2->groups[img2->reference_group].channels[c]]
+                                          : nullptr,
+                    ref_alpha       = alpha_of(img2, img2 ? img2->reference_group : -1),
+                    ref_data_origin = img2 ? img2->data_window.min : int2{}](
+                       PixelStats &stats, const PixelStats::Settings &settings, std::atomic<bool> &canceled)
+                   {
+                       spdlog::debug("Starting a new stats computation");
+                       stats.calculate(*this, alpha, img_data_origin, ref, ref_alpha, ref_data_origin, settings,
+                                       canceled);
+                   });
+}
+
+bool ChromaticityBins::Settings::match(const Settings &other) const
+{
+    return roi == other.roi && la::all(la::equal(channels, other.channels)) && num_channels == other.num_channels &&
+           type == other.type && M_RGB_to_XYZ == other.M_RGB_to_XYZ &&
+           la::all(la::equal(luminance_weights, other.luminance_weights)) && content_version == other.content_version;
+}
+
+void ChromaticityBins::calculate(const Image &img, const Settings &desired, std::atomic<bool> &canceled)
+{
+    try
     {
-        spdlog::debug("id: {}", img1->id);
-        // First cancel the potential previous async task
-        if (async_canceled)
+        *this    = ChromaticityBins();
+        settings = desired;
+        grid     = chromaticity_grid(desired.M_RGB_to_XYZ);
+
+        Box2i roi = img.data_window;
+        if (desired.roi.has_volume())
+            roi = roi.intersect(desired.roi);
+        // intersect() can leave an inverted box when the two miss each other
+        const int2 extent = roi.has_volume() ? roi.size() : int2{0};
+
+        std::array<const Channel *, 4> ch{};
+        for (int c = 0; c < desired.num_channels; ++c) ch[c] = &img.channels[desired.channels[c]];
+
+        struct Partial
         {
-            spdlog::trace("Canceling outdated stats computation.");
-            *async_canceled = true;
-            async_tracker.wait();
-        }
+            std::vector<uint32_t> counts;
+            int64_t               outside = 0, skipped = 0;
+        };
 
-        // create the new task
-        async_canceled = make_shared<atomic<bool>>(false);
-        async_tracker  = do_async(
-            [this, desired_settings, canceled = async_canceled, img2, img_data_origin, alpha, ref, ref_alpha,
-             ref_data_origin]()
+        const int            rows_per_unit = std::max(1, 1024 * 1024 / std::max(1, extent.x));
+        const size_t         num_threads   = estimate_threads(extent.y, rows_per_unit, *ThreadPool::singleton());
+        std::vector<Partial> partials(max<size_t>(1, num_threads));
+
+        parallel_for(
+            blocked_range<int>(0, extent.y, rows_per_unit),
+            [&](int begin_y, int end_y, int unit_index, int)
             {
-                spdlog::debug("Starting a new stats computation");
-                async_stats->calculate(*this, alpha, img_data_origin, ref, ref_alpha, ref_data_origin, desired_settings,
-                                        *canceled);
-            });
-        async_settings = desired_settings;
-    };
+                Partial &part = partials[unit_index];
+                if (part.counts.empty())
+                    part.counts.assign(size_t(grid.size.x) * grid.size.y, 0u);
 
-    // if the cached stats match and are valid, no need to recompute
-    if (cached_stats->settings.match(desired_settings) && cached_stats->computed)
-        return;
+                for (int y = begin_y; y < end_y; ++y)
+                {
+                    if (canceled)
+                        throw std::runtime_error("Canceling chromaticity binning");
 
-    // cached stats are outdated, need to recompute
+                    for (int x = 0; x < extent.x; ++x)
+                    {
+                        const int2 p = roi.min - img.data_window.min + int2{x, y};
+                        float4     raw{float3{0.f}, 1.f};
+                        for (int c = 0; c < desired.num_channels; ++c) raw[c] = (*ch[c])(p);
 
-    // if the async computation settings are outdated, or it was never computed -> recompute
-    if (!async_settings.match(desired_settings) || (async_tracker.ready() && !async_stats->computed))
-    {
-        recompute_async_stats();
-        return;
+                        const float3 XYZ = mul(desired.M_RGB_to_XYZ, group_rgb(desired.type, desired.num_channels, raw,
+                                                                               desired.luminance_weights));
+                        const float  sum = XYZ.x + XYZ.y + XYZ.z;
+                        if (!(sum > 0.f) || !std::isfinite(sum))
+                        {
+                            ++part.skipped;
+                            continue;
+                        }
+
+                        const int2 t = grid.texel_of(XYZ.xy() / sum);
+                        if (!grid.contains(t))
+                            ++part.outside;
+                        else
+                            ++part.counts[size_t(t.y) * grid.size.x + t.x];
+                    }
+                }
+            },
+            (int)num_threads);
+
+        counts.assign(size_t(grid.size.x) * grid.size.y, 0u);
+        for (const auto &part : partials)
+        {
+            outside += part.outside;
+            skipped += part.skipped;
+            for (size_t i = 0; i < part.counts.size(); ++i) counts[i] += part.counts[i];
+        }
+        max_count = counts.empty() ? 0u : *std::max_element(counts.begin(), counts.end());
+        computed  = true;
     }
-
-    // if the async computation is ready, grab it and possibly schedule again
-    if (async_tracker.ready() && async_stats->computed)
+    catch (...)
     {
-        spdlog::trace("Replacing cached channel stats with async computation");
-        // replace cache with newer async stats
-        adopt_async_stats();
-
-        // if these newer stats are still outdated, schedule a new async computation
-        if (!cached_stats->settings.match(desired_settings))
-            recompute_async_stats();
+        *this = ChromaticityBins();
     }
+}
+
+const ChromaticityBins *Image::chromaticity_bins(const Box2i &roi)
+{
+    if (!is_valid_group(selected_group))
+        return m_chromaticity_bins.get();
+
+    const ChannelGroup        &group = groups[selected_group];
+    ChromaticityBins::Settings desired{roi,          group.channels,    group.num_channels, group.type,
+                                       M_RGB_to_XYZ, luminance_weights, content_version};
+    m_chromaticity_bins.update(
+        desired, [this](ChromaticityBins &bins, const ChromaticityBins::Settings &settings, std::atomic<bool> &canceled)
+        { bins.calculate(*this, settings, canceled); });
+    return m_chromaticity_bins.get();
 }
 
 void Image::set_null_texture(Target_ target, Shader &shader)
@@ -1746,30 +1725,13 @@ float4 Image::rgba_pixel(int2 p, Target_ target) const
     if (!contains(p))
         return float4{0.f};
 
-    int                 group_idx = active_group_index(target);
-    const ChannelGroup &group     = groups[group_idx];
+    const ChannelGroup &group = groups[active_group_index(target)];
 
-    float4 value{float3{0.f}, 1.f};
-    {
-        for (int c = 0; c < group.num_channels; ++c) value[c] = channels[group.channels[c]](p - data_window.min);
-        if (group.num_channels == 1) // if group has 1 channel, replicate it across RGB
-            value[1] = value[2] = value[0];
-        else if (group.num_channels == 2)
-        {
-            if (group.type == ChannelGroup::YA_Channels)
-            {
-                value[3]    = value[1];
-                value.xyz() = YC_to_RGB(float3{0.f, value[0], 0.f}, luminance_weights);
-            }
-            else
-                value[2] = 0.f;
-        }
-        if (group.type == ChannelGroup::YCA_Channels || group.type == ChannelGroup::YC_Channels)
-            value.xyz() = YC_to_RGB(value.xyz(), luminance_weights);
-    }
+    float4 raw{float3{0.f}, 1.f};
+    for (int c = 0; c < group.num_channels; ++c) raw[c] = channels[group.channels[c]](p - data_window.min);
 
-    value.xyz() = mul(M_to_sRGB, value.xyz());
-    return value;
+    const float alpha = group.num_channels == 4 ? raw[3] : group.type == ChannelGroup::YA_Channels ? raw[1] : 1.f;
+    return float4{mul(M_to_sRGB, group_rgb(group.type, group.num_channels, raw, luminance_weights)), alpha};
 }
 
 static void calculate_tree_visibility(LayerTreeNode &node, const Image *image)

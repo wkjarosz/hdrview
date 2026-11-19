@@ -39,7 +39,8 @@ static void apply_hdrview_dark_theme()
     style.FramePadding             = ImVec2(4, 4);
 
     ImVec4 *colors                             = style.Colors;
-    colors[ImGuiCol_Text]                      = ImVec4(1.00f, 1.00f, 1.00f, 0.71f);
+    // opaque, since ImPlot dims a hidden legend entry by clearing bits of its alpha, which can erase translucent text
+    colors[ImGuiCol_Text]                      = ImVec4(0.76f, 0.76f, 0.76f, 1.00f);
     colors[ImGuiCol_TextDisabled]              = ImVec4(0.50f, 0.50f, 0.50f, 0.71f);
     colors[ImGuiCol_WindowBg]                  = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
     colors[ImGuiCol_ChildBg]                   = ImVec4(0.04f, 0.04f, 0.04f, 0.20f);

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "chromaticity.h"
 #include "dithermatrix256.h"
 #include "fonts.h"
 #include "image.h"
@@ -515,6 +516,7 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
                 m_show_FPS         = j.value<bool>("show FPS", m_show_FPS);
                 m_clip_range       = j.value<float2>("clip range", m_clip_range);
                 m_histogram_height = j.value<float>("histogram height", m_histogram_height);
+                chromaticity_overlays().from_json(j.value<json>("chromaticity diagram", json::object()));
                 // Clamped: it indexes pixel_color_widget()'s current/reference/composite choices, and the
                 // settings file is ordinary user-editable text.
                 m_status_pixel_target = clamp<int>(j.value<int>("status pixel target", m_status_pixel_target), 0, 2);
@@ -628,6 +630,7 @@ void HDRViewApp::save_user_settings()
     j["show FPS"]                = m_show_FPS;
     j["clip range"]              = m_clip_range;
     j["histogram height"]        = m_histogram_height;
+    j["chromaticity diagram"]    = chromaticity_overlays().to_json();
     j["status pixel target"]     = m_status_pixel_target;
     j["histogram x scale"]       = m_x_scale;
     j["histogram y scale"]       = m_y_scale;

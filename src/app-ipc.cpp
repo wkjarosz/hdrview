@@ -324,6 +324,9 @@ void HDRViewApp::apply_ipc_update(const IpcUpdateImage &info)
     // its own top-left corner
     const Box2i bounds{info.bounds.min - image.data_window.min, info.bounds.max - image.data_window.min};
 
+    // statistics tasks read these pixels from worker threads, some of them across several channels
+    image.cancel_stats();
+
     bool any = false;
     for (int c = 0; c < info.num_channels(); ++c)
     {

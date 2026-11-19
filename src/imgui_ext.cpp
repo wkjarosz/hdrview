@@ -443,6 +443,70 @@ bool StrokeFillSwatches(const char *id, float4 &stroke, float4 &fill)
     return changed;
 }
 
+std::vector<std::pair<float2, float2>> DashedPolyline(const float2 *points, int count, bool closed, float dash,
+                                                      float2 clip_min, float2 clip_max)
+{
+    std::vector<std::pair<float2, float2>> dashes;
+    if (!(dash > 0.f) || count < 2)
+        return dashes;
+
+    const double period = 2.0 * dash;
+    double       offset = 0.0; // how far into the pattern the current edge starts
+    const int    edges  = closed ? count : count - 1;
+    for (int i = 0; i < edges; ++i)
+    {
+        const double2 a{points[i].x, points[i].y}, b{points[(i + 1) % count].x, points[(i + 1) % count].y};
+        const double2 d      = b - a;
+        const double  length = la::length(d);
+        if (!std::isfinite(length) || length <= 0.0)
+            continue;
+
+        // the part of the edge within the box, as fractions [t0, t1] of it, clipping to each axis's slab in turn
+        double t0 = 0.0, t1 = 1.0;
+        for (int k = 0; k < 2 && t0 < t1; ++k)
+        {
+            if (d[k] == 0.0)
+            {
+                if (a[k] < clip_min[k] || a[k] > clip_max[k])
+                    t1 = t0;
+                continue;
+            }
+            double ta = (clip_min[k] - a[k]) / d[k], tb = (clip_max[k] - a[k]) / d[k];
+            if (ta > tb)
+                std::swap(ta, tb);
+            t0 = std::max(t0, ta);
+            t1 = std::min(t1, tb);
+        }
+
+        if (t0 < t1)
+        {
+            // dashes start a whole number of periods after the pattern's start, here phase before s0
+            const double s0 = t0 * length, s1 = t1 * length;
+            const double phase = std::fmod(s0 + offset, period);
+            const int    n     = (int)std::ceil((s1 - s0 + phase) / period);
+            for (int j = 0; j < n; ++j)
+            {
+                const double start = s0 - phase + j * period;
+                const double from = std::max(s0, start), to = std::min(s1, start + dash);
+                if (from < to)
+                    dashes.push_back({float2(a + d * (from / length)), float2(a + d * (to / length))});
+            }
+        }
+        offset = std::fmod(offset + length, period);
+    }
+    return dashes;
+}
+
+void AddDashedPolyline(ImDrawList *draw_list, const float2 *points, int count, ImU32 color, bool closed,
+                       float thickness, float dash)
+{
+    // widened by the stroke, so a dash ending at the clip rectangle's edge is not cut short of it
+    const float2 pad{thickness};
+    for (auto &[from, to] : DashedPolyline(points, count, closed, dash, float2{draw_list->GetClipRectMin()} - pad,
+                                           float2{draw_list->GetClipRectMax()} + pad))
+        draw_list->AddLine(from, to, color, thickness);
+}
+
 void AddTextAligned(ImDrawList *draw_list, float2 pos, ImU32 color, const string &text, float2 align)
 {
     draw_list->AddText(pos - align * float2{ImGui::CalcTextSize(text.c_str())}, color, text.c_str());
@@ -1439,36 +1503,6 @@ float PE::ColumnWidth(int column_n)
     return table && column_n < table->ColumnsCount ? table->Columns[column_n].WidthGiven : 0.f;
 }
 
-bool PE::FullWidthEntry(const char *id, const std::function<bool(float)> &content_fct)
-{
-    ImGui::PushID(id);
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    // Advance into column 1 before drawing. The content below spans both columns via the cursor/clip rect
-    // override, but ImGui's per-column auto-fit width tracking attributes whatever the cursor reaches to
-    // whichever column is current, and column 0 is the one double-clicking the resize border auto-fits.
-    ImGui::TableNextColumn();
-
-    // WidthGiven excludes each column's cell padding and inter-column spacing, so summing per-column widths
-    // falls short of the row's real span; read the bounds off the table instead. Also reset the cursor to
-    // column 0's true left edge, undoing any ambient Indent() a caller applied (column 0 has
-    // ImGuiTableColumnFlags_IndentEnable on by default).
-    const ImGuiTable *table   = ImGui::GetCurrentTable();
-    const float       left_x  = table ? table->Columns[0].WorkMinX : ImGui::GetCursorScreenPos().x;
-    const float       right_x = table && table->ColumnsCount > 1 ? table->Columns[1].WorkMaxX : left_x;
-    ImGui::SetCursorScreenPos(ImVec2(left_x, ImGui::GetCursorScreenPos().y));
-
-    // Tables clip each cell to its own column, so widen the clip rect to cover both before drawing across them.
-    const float  width = right_x - left_x;
-    const ImVec2 p0    = ImGui::GetCursorScreenPos();
-    ImGui::PushClipRect(p0, ImVec2(p0.x + width, ImGui::GetCurrentWindow()->ClipRect.Max.y), false);
-    bool result = content_fct(width);
-    ImGui::PopClipRect();
-
-    ImGui::PopID();
-    return result;
-}
-
 static ImVector<ImFont *> g_pe_label_fonts;
 
 void PE::PushLabelFont(ImFont *font) { g_pe_label_fonts.push_back(font); }
@@ -1655,14 +1689,9 @@ bool BeginToneCurvePlot(const char *id, bool draggable)
         ImPlot::PushPlotClipRect();
         dl->AddRectFilled(ImVec2(lo.x, hi.y), ImVec2(hi.x, lo.y), ImGui::GetColorU32(ImGuiCol_Text, 0.06f));
         dl->AddRect(ImVec2(lo.x, hi.y), ImVec2(hi.x, lo.y), ImGui::GetColorU32(ImGuiCol_Text, 0.25f));
-        const float dash = HelloImGui::EmSize(0.3f), length = std::hypot(to.x - from.x, to.y - from.y);
-        for (float d = 0.f; d < length; d += 2.f * dash)
-        {
-            const float t0 = d / length, t1 = std::min(d + dash, length) / length;
-            dl->AddLine(ImVec2(from.x + (to.x - from.x) * t0, from.y + (to.y - from.y) * t0),
-                        ImVec2(from.x + (to.x - from.x) * t1, from.y + (to.y - from.y) * t1),
-                        ImGui::GetColorU32(ImGuiCol_Text, 0.3f));
-        }
+        const float2 diagonal[] = {from, to};
+        AddDashedPolyline(dl, diagonal, 2, ImGui::GetColorU32(ImGuiCol_Text, 0.3f), false, 1.f,
+                          HelloImGui::EmSize(0.3f));
         ImPlot::PopPlotClipRect();
     }
 

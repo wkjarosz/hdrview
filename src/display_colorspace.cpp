@@ -7,6 +7,7 @@
 #include "display_colorspace.h"
 
 #include <chrono>
+#include <cmath>
 #include <spdlog/spdlog.h>
 
 // glad (via hello_imgui_include_opengl.h) must be included before GLFW/glfw3.h, and GLFW_INCLUDE_NONE keeps
@@ -134,7 +135,8 @@ bool DisplayColorSpace::operator==(const DisplayColorSpace &o) const
         return false;
     if (tf.type == TransferFunction::Gamma && tf.gamma != o.tf.gamma)
         return false;
-    return chroma == o.chroma && sdr_white_nits == o.sdr_white_nits && min_nits == o.min_nits && max_nits == o.max_nits;
+    return chroma == o.chroma && panel == o.panel && sdr_white_nits == o.sdr_white_nits && min_nits == o.min_nits &&
+           max_nits == o.max_nits;
 }
 
 string DisplayColorSpace::name() const
@@ -143,7 +145,33 @@ string DisplayColorSpace::name() const
     s += fmt::format(", {:g} nits SDR white", sdr_white_nits);
     if (max_nits > 0.f)
         s += fmt::format(", {:g}-{:g} nits range", min_nits, max_nits);
+    if (panel)
+        s += fmt::format(", panel R({:.3f}, {:.3f}) G({:.3f}, {:.3f}) B({:.3f}, {:.3f})", panel->red.x, panel->red.y,
+                         panel->green.x, panel->green.y, panel->blue.x, panel->blue.y);
     return s;
+}
+
+/// True for primaries that span a triangle around their white, as any RGB space's do; EDIDs often hold zeros.
+static bool plausible_primaries(const Chromaticities &c)
+{
+    const float2 v[] = {c.red, c.green, c.blue, c.white};
+    for (float2 p : v)
+        if (!std::isfinite(p.x) || !std::isfinite(p.y))
+            return false;
+
+    // the white lies on the same side of each edge as the triangle's interior, with room to spare
+    auto cross2 = [](float2 a, float2 b) { return a.x * b.y - a.y * b.x; };
+    for (int i = 0; i < 3; ++i)
+        if (cross2(v[(i + 1) % 3] - v[i], c.white - v[i]) < 1e-3f)
+            return false;
+    return true;
+}
+
+DisplayGamut display_gamut(const DisplayColorSpace &display, bool float_buffer)
+{
+    if (float_buffer && display.panel && plausible_primaries(*display.panel))
+        return {*display.panel, true};
+    return {display.chroma, false};
 }
 
 DisplayDither display_dither(const DisplayColorSpace &display, bool color_managed, bool float_buffer)
@@ -176,29 +204,35 @@ DisplayColorSpace query_display_colorspace([[maybe_unused]] void *window)
     // adapter/output enumeration for the ceiling), which is too expensive to do every frame. A few times a
     // second still follows the "SDR content brightness" slider live. The cache is a function-local static
     // because HDRView only ever has one window.
-    static auto  last_query       = std::chrono::steady_clock::now() - std::chrono::hours(1);
-    static float cached_sdr_white = 0.f;
-    static float cached_max_nits  = 0.f;
+    static auto         last_query       = std::chrono::steady_clock::now() - std::chrono::hours(1);
+    static float        cached_sdr_white = 0.f;
+    static Win32Display cached_display;
 
     auto now = std::chrono::steady_clock::now();
     if (now - last_query >= std::chrono::milliseconds(250))
     {
         cached_sdr_white = glfwGetWindowSdrWhiteLevel(w);
-        // GLFW's Win32 backend reports max luminance as a flag, not a measurement: 80 nits when the display
-        // is not in HDR mode, 0 ("unknown") when it is. Only the unknown is worth asking DXGI about.
-        cached_max_nits = cs.max_nits == 0.f ? win32_display_max_nits(w) : 0.f;
-        last_query      = now;
+        cached_display   = win32_display(w);
+        last_query       = now;
     }
 
     float sdr_white = cached_sdr_white;
+    // GLFW's Win32 backend reports max luminance as a flag, not a measurement: 80 nits when the display is not
+    // in HDR mode, 0 ("unknown") when it is. Only the unknown is worth replacing with DXGI's number.
     if (cs.max_nits == 0.f)
-        cs.max_nits = cached_max_nits;
+        cs.max_nits = cached_display.max_nits;
+    cs.panel = cached_display.primaries;
 #else
     float sdr_white = glfwGetWindowSdrWhiteLevel(w);
 #endif
 
     // 0 from GLFW means "unknown", not "no limit".
     cs.sdr_white_nits = sdr_white > 0.f ? sdr_white : 80.f;
+#endif
+
+#if defined(__APPLE__)
+    // outside the guard above: GLFW's Cocoa backend reports only sRGB, and the screen's profile has the rest
+    cs.panel = cocoa_display_primaries(window);
 #endif
 
     return cs;

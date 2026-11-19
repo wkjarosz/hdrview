@@ -4,6 +4,7 @@
 // be found in the LICENSE.txt file.
 //
 
+#include "chromaticity.h"
 #include "colorspace.h"
 #include "fwd.h"
 
@@ -15,16 +16,92 @@
 #include "imgui_ext.h"
 #include "imgui_internal.h"
 #include "implot.h"
+#include "implot_internal.h"
 #include "texture.h"
 #include <hello_imgui/dpi_aware.h>
 
+#include <array>
 #include <string>
 
 using namespace std;
 using namespace HelloImGui;
 
+Texture *Image::chromaticity_density_texture(const ChromaticityBins &bins)
+{
+    if (!bins.computed)
+        return nullptr;
+    if (m_chromaticity_density && m_chromaticity_density_generation == m_chromaticity_bins.generation())
+        return m_chromaticity_density.get();
+
+    const ChromaticityGrid &grid = bins.grid;
+    if (!m_chromaticity_density || m_chromaticity_density->size() != grid.size)
+        m_chromaticity_density = std::make_unique<Texture>(
+            Texture::PixelFormat::RGBA, Texture::ComponentFormat::UInt8, grid.size,
+            Texture::InterpolationMode::Bilinear, Texture::InterpolationMode::Bilinear, Texture::WrapMode::ClampToEdge);
+
+    // Log density, so a few pixels of a color show beside the millions of a flat background. An empty texel
+    // outside the locus is transparent black, so bilinear filtering blends no white into the locus's edge.
+    const float   scale = bins.max_count > 0 ? 1.f / std::log1p(float(bins.max_count)) : 0.f;
+    vector<byte4> data(bins.counts.size(), byte4{0, 0, 0, 0});
+    for (int y = 0; y < grid.size.y; ++y)
+        for (int x = 0; x < grid.size.x; ++x)
+        {
+            const size_t  i       = size_t(y) * grid.size.x + x;
+            const uint8_t density = quantize_full<uint8_t>(std::log1p(float(bins.counts[i])) * scale);
+            if (grid.in_locus(int2{x, y}))
+                data[i].w = 255 - density;
+            else if (bins.counts[i])
+                data[i] = byte4{255, 255, 255, density};
+        }
+    m_chromaticity_density->upload((const uint8_t *)data.data());
+
+    m_chromaticity_density_generation = m_chromaticity_bins.generation();
+    return m_chromaticity_density.get();
+}
+
+/// The plot's legend, whose entries show and hide the overlays; call between SetupFinish() and EndPlot().
+/**
+    Each overlay is a dummy item, so its entry lists whether or not it has anything to draw; the drawing reads the
+    flags. Right-clicking "Pixel density" sets its opacity, and hovering "Display gamut" tells its source.
+*/
+static void show_overlay_legend(ChromaticityOverlays &shown)
+{
+    ImPlotSpec spec;
+    spec.LineColor = ImPlot::GetStyleColorVec4(ImPlotCol_LegendText);
+    for (const auto &o : k_chromaticity_overlays)
+    {
+        if (const ImPlotItem *item = ImPlot::GetItem(o.label))
+            shown.*o.flag = item->Show; // as a click on its entry left it
+        else
+            ImPlot::HideNextItem(!(shown.*o.flag)); // first drawn: as the settings left it
+        ImPlot::PlotDummy(o.label, spec);
+    }
+
+    if (ImPlot::BeginLegendPopup("Pixel density"))
+    {
+        ImGui::SliderFloat("Opacity", &shown.density_opacity, 0.f, 1.f, "%.2f");
+        ImPlot::EndLegendPopup();
+    }
+    if (ImPlot::IsLegendEntryHovered("Display gamut") && ImGui::BeginTooltip())
+    {
+        const DisplayGamut display = hdrview()->display_gamut();
+        const ColorGamut_  named   = named_color_gamut(display.chroma);
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 25.f);
+        ImGui::TextUnformatted(display.panel ? "The primaries of the colors the screen can show, as the system "
+                                               "reports them."
+                                             : "The primaries the frame is encoded in for the screen; colors "
+                                               "beyond them clip, whatever the screen could show.");
+        if (named != ColorGamut_Custom)
+            ImGui::TextDisabled("%s", color_gamut_name(named));
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
+}
+
 void Image::draw_chromaticity_diagram(float width)
 {
+    auto &shown = chromaticity_overlays();
+
     static float2 vMin{-0.05f, -0.05f};
     static float2 vMax{0.75f, 0.9f};
     static float2 vSize  = vMax - vMin;
@@ -37,7 +114,7 @@ void Image::draw_chromaticity_diagram(float width)
     float4 plot_bg = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg); //{0.35f, 0.35f, 0.35f, 1.f};
     ImGui::PushStyleColor(ImGuiCol_WindowBg, plot_bg);
     if (ImPlot::BeginPlot("##Chromaticity diagram", ImVec2(size, size / aspect * 0.95f),
-                          ImPlotFlags_Crosshairs | ImPlotFlags_Equal | ImPlotFlags_NoLegend | ImPlotFlags_NoTitle))
+                          ImPlotFlags_Crosshairs | ImPlotFlags_Equal | ImPlotFlags_NoTitle))
     {
         static constexpr float lambda_min   = 400.f;
         static constexpr float lambda_max   = 680.f;
@@ -54,19 +131,37 @@ void Image::draw_chromaticity_diagram(float width)
         ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Linear);
         ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Linear);
         ImPlot::SetupAxesLimits(vMin.x, vMax.x, vMin.y, vMax.y);
-        ImPlot::SetupMouseText(ImPlotLocation_NorthEast, ImPlotMouseTextFlags_NoFormat);
+        ImPlot::SetupLegend(ImPlotLocation_NorthEast);
+        ImPlot::SetupMouseText(ImPlotLocation_SouthEast, ImPlotMouseTextFlags_NoFormat);
 
         ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
         ImPlot::SetupFinish();
         ImGui::PopFont();
+
+        show_overlay_legend(shown);
 
         ImPlot::PushPlotClipRect();
 
         //
         // plot background texture
         //
+        const ChromaticityGrid &grid = chromaticity_grid();
         ImPlot::PlotImage("##chromaticity_image", (ImTextureID)chromaticity_texture()->texture_handle(),
-                          ImPlotPoint(0.0, 0.0), ImPlotPoint(.73f, .83f), {0.f, .83f}, {.73f, 0.f});
+                          ImPlotPoint(grid.min().x, grid.min().y), ImPlotPoint(grid.max().x, grid.max().y), {0.f, 1.f},
+                          {1.f, 0.f});
+        if (shown.density)
+        {
+            // tinted, so what lies outside the locus takes the text's color, which shows against the plot
+            const ChromaticityBins &bins = *chromaticity_bins(hdrview()->roi());
+            if (Texture *density = chromaticity_density_texture(bins))
+            {
+                float4 tint = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+                tint.w      = shown.density_opacity;
+                ImPlot::PlotImage("##chromaticity_density", (ImTextureID)density->texture_handle(),
+                                  ImPlotPoint(bins.grid.min().x, bins.grid.min().y),
+                                  ImPlotPoint(bins.grid.max().x, bins.grid.max().y), {0.f, 1.f}, {1.f, 0.f}, tint);
+            }
+        }
 
         auto normal_to_plot_tangent = [](const float2 &tangent, float pixel_length) -> float2
         {
@@ -89,7 +184,7 @@ void Image::draw_chromaticity_diagram(float width)
             pixels_per_plot_unit = length(plot_size / float2((float)plot_rect.X.Max - (float)plot_rect.X.Min,
                                                              (float)plot_rect.Y.Max - (float)plot_rect.Y.Min));
             // compute width in pixels of a chromaticity texture texel
-            pixels_per_texel = 1.f / 256.f * pixels_per_plot_unit;
+            pixels_per_texel = ChromaticityGrid::texel * pixels_per_plot_unit;
             scale_factor     = std::clamp(pixels_per_texel * 1.2f, 1.f, 4.f);
 
             // ImPlot::PlotLine draws ugly, unrounded, line segments, so we use AddPolyline ourselves
@@ -110,6 +205,7 @@ void Image::draw_chromaticity_diagram(float width)
         //
         // draw wavelength tick marks
         //
+        if (shown.wavelengths)
         {
             ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
             // Draw tick marks stored in tick_marks
@@ -161,6 +257,7 @@ void Image::draw_chromaticity_diagram(float width)
         //
         // draw the locus of D (daylight) CCTs
         //
+        if (shown.daylight)
         {
             auto create_CCT_locus = []()
             {
@@ -234,8 +331,26 @@ void Image::draw_chromaticity_diagram(float width)
         }
 
         //
+        // the display's gamut, dashed and in the locus' color to tell it from the image's
+        //
+        auto draw_display_gamut = [&]
+        {
+            if (!shown.display_gamut)
+                return;
+            const Chromaticities chr       = hdrview()->display_gamut().chroma;
+            const float2         corners[] = {ImPlot::PlotToPixels(chr.red.x, chr.red.y),
+                                              ImPlot::PlotToPixels(chr.green.x, chr.green.y),
+                                              ImPlot::PlotToPixels(chr.blue.x, chr.blue.y)};
+            ImGui::AddDashedPolyline(ImPlot::GetPlotDrawList(), corners, 3, ImGui::GetColorU32(text_color_f), true,
+                                     scale_factor, 3.f * scale_factor);
+        };
+        if (!shown.image_gamut)
+            draw_display_gamut();
+
+        //
         // draw the primaries, gamut triangle, whitepoint, and text labels
         //
+        if (shown.image_gamut)
         {
             Chromaticities gamut_chr{chromaticities.value_or(Chromaticities{})};
             ImVec4         colors[] = {
@@ -254,6 +369,8 @@ void Image::draw_chromaticity_diagram(float width)
             triangle_spec.LineWeight = scale_factor;
             triangle_spec.Stride     = sizeof(double2);
             ImPlot::PlotLine("##gamut_triangle", &primaries[0].x, &primaries[0].y, 4, triangle_spec);
+            // over the image's triangle, so both show where they coincide, but under its handles
+            draw_display_gamut();
 
             primaries[3] = double2(gamut_chr.white);
 
@@ -309,7 +426,7 @@ void Image::draw_chromaticity_diagram(float width)
         {
             auto &io      = ImGui::GetIO();
             auto  rgb2xyz = mul(M_RGB_to_XYZ, inverse(M_to_sRGB));
-            if (hdrview()->mouse_over_viewport())
+            if (shown.hovered && hdrview()->mouse_over_viewport())
             {
                 auto   hovered_pixel = int2{hdrview()->pixel_at_app_pos(io.MousePos)};
                 float4 color32       = hdrview()->pixel_value(hovered_pixel, false, 0);
@@ -349,7 +466,7 @@ void Image::draw_colorspace()
     // scrolling child.
     if (ImGui::PE::Begin("Colorspace", table_flags))
     {
-        // The diagram gets its own full-width row when the value column alone is too narrow to render it legibly.
+        // The diagram goes below the table, at its full width, when the value column is too narrow to show it legibly.
         const bool diagram_fits_in_value_column = ImGui::PE::ColumnWidth(1) > HelloImGui::EmSize(12.f);
         ImGui::Indent(ImGui::GetStyle().CellPadding.x);
         ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
@@ -567,17 +684,22 @@ void Image::draw_colorspace()
                                  draw_chromaticity_diagram(ImGui::GetContentRegionAvail().x);
                                  return false;
                              });
-        else
-            ImGui::PE::FullWidthEntry("Diagram",
-                                      [this](float width)
-                                      {
-                                          draw_chromaticity_diagram(width);
-                                          return false;
-                                      });
 
         ImGui::PopStyleVar();
         ImGui::Unindent(ImGui::GetStyle().CellPadding.x);
         ImGui::PE::End();
+
+        // Otherwise the diagram follows the table rather than spanning a row of it, where the column boundary's
+        // resize handle, which runs the table's whole height, would take the drags meant for the plot. It is drawn
+        // under the IDs the row has, so the plot keeps its pan and zoom when the layout switches.
+        if (!diagram_fits_in_value_column)
+        {
+            ImGui::PushID("Colorspace");
+            ImGui::PushID("Diagram");
+            draw_chromaticity_diagram(ImGui::GetContentRegionAvail().x);
+            ImGui::PopID();
+            ImGui::PopID();
+        }
     }
     color_edit.end(*this, ImGui::IsAnyItemActive());
 }

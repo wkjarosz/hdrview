@@ -15,6 +15,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace ImGui
 {
@@ -279,6 +280,19 @@ bool MenuItemEx(const std::string &label, const std::string &icon, const std::st
 void AddTextAligned(ImDrawList *draw_list, float2 pos, ImU32 color, const std::string &text,
                     float2 align = float2{0.f});
 
+/// The dashes along the polyline through \p points that lie within the box from \p clip_min to \p clip_max.
+/**
+    Dashes and the gaps between them are \p dash long, and the pattern carries on around the corners. The loop
+    over each edge counts whole dashes across its clipped part, so the work is bounded by the box's size over
+    \p dash whatever the coordinates, and points that are not finite drop the edges they end.
+*/
+std::vector<std::pair<float2, float2>> DashedPolyline(const float2 *points, int count, bool closed, float dash,
+                                                      float2 clip_min, float2 clip_max);
+
+/// Strokes DashedPolyline()'s dashes, clipped to the draw list's current clip rectangle.
+void AddDashedPolyline(ImDrawList *draw_list, const float2 *points, int count, ImU32 color, bool closed,
+                       float thickness, float dash);
+
 void ScrollWhenDraggingOnVoid(const ImVec2 &delta, ImGuiMouseButton mouse_button);
 
 void PlotMultiLines(const char *label, int num_datas, const char **names, const ImColor *colors,
@@ -498,11 +512,6 @@ bool Begin(const char     *label = "PE::Table",
 void End();
 bool Entry(const std::string &property_name, const std::function<bool()> &content_fct, const std::string &tooltip = {},
            const std::function<void()> &tooltip_more = {});
-/// An unlabeled row whose content spans both columns.
-/**
-    content_fct receives the available width, since a cell's content region only reports its own column.
-*/
-bool FullWidthEntry(const char *id, const std::function<bool(float)> &content_fct);
 /// Width in pixels of a column of the innermost table, or 0 outside one. Valid between Begin and End.
 float       ColumnWidth(int column_n);
 inline void Entry(const std::string &property_name, const std::string &value)

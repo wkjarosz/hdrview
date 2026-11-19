@@ -104,8 +104,9 @@ float HDRViewApp::display_headroom() const
 // The colorpass. When m_color_managed is true, everything HDRView draws (the image content, and Dear ImGui's
 // UI, which has no notion of display color space) is redirected into an offscreen texture, and a full-screen
 // pass converts that to whatever the real framebuffer needs just before the frame is presented.
-// Modeled on nanogui-1's Screen::m_wants_color_management / ColorPass. Every function below no-ops when
-// m_color_managed is false, including on macOS EDR, which consumes extended sRGB directly.
+// Modeled on nanogui-1's Screen::m_wants_color_management / ColorPass. Apart from update_colorpass() querying the
+// display, every function below no-ops when m_color_managed is false, including on macOS EDR, which consumes
+// extended sRGB directly.
 //
 // The two halves run at different points in the frame (begin_colorpass_frame() from CustomBackground,
 // end_colorpass_frame() from BeforeSwap), so update_colorpass() decides once per frame ahead of both.
@@ -113,10 +114,7 @@ float HDRViewApp::display_headroom() const
 
 void HDRViewApp::update_colorpass()
 {
-#if defined(HELLOIMGUI_HAS_OPENGL)
-    if (m_colorpass_failed)
-        return;
-
+    // queried on every backend, since the chromaticity diagram shows the display's gamut
     auto cs = query_display_colorspace(m_params.backendPointers.glfwWindow);
     if (cs != m_display_cs)
     {
@@ -125,6 +123,10 @@ void HDRViewApp::update_colorpass()
         spdlog::info("Display color space is now {} ({}).", cs.name(),
                      cs.needs_color_management() ? "colorpass active" : "no color management needed");
     }
+
+#if defined(HELLOIMGUI_HAS_OPENGL)
+    if (m_colorpass_failed)
+        return;
 
     m_color_managed = cs.needs_color_management();
     if (!m_color_managed)

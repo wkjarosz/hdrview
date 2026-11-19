@@ -96,7 +96,7 @@ bool modify_image(const EditContext &ctx, const string &name, const function<voi
 
     // a statistics task reads these pixels from a worker thread, so it has to be off them before the
     // write, and before the undo entry reads them
-    for (auto &c : img->channels) c.cancel_stats();
+    img->cancel_stats();
 
     // built first: an entry that stores pixels has to see them as they were
     auto entry = make_undo(*img, name);

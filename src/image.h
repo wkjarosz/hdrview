@@ -10,7 +10,9 @@
 
 #include "annotations.h"
 #include "array2d.h"
+#include "async_cache.h"
 #include "box.h"
+#include "chromaticity.h"
 #include "colorspace.h"
 #include "edit/undo.h"
 #include "imageio/exif.h"
@@ -93,7 +95,6 @@ struct Image;
 struct PixelStats
 {
     static constexpr int MAX_BINS = 512;
-    using Ptr                     = std::shared_ptr<PixelStats>;
 
     /// Number of histogram bins appropriate for a source with \p bits bits per sample.
     /**
@@ -130,6 +131,13 @@ struct PixelStats
         int ref_content_version = 0;
 
         bool match(const Settings &other) const;
+
+        /// Copy \p other's content versions, for AsyncCache's streaming throttle.
+        void take_content_versions(const Settings &other)
+        {
+            content_version     = other.content_version;
+            ref_content_version = other.ref_content_version;
+        }
     };
 
     Settings settings;
@@ -267,23 +275,7 @@ struct Channel : public Array2Df
     bool selected = false;
 
 private:
-    PixelStats::Ptr                    cached_stats;
-    ThreadPool::TaskTracker            async_tracker;
-    std::shared_ptr<std::atomic<bool>> async_canceled; // this is a shared_ptr instead of a bare atomic<bool> because
-                                                       // the latter has a deleted move constructor
-    PixelStats::Ptr      async_stats;
-    PixelStats::Settings async_settings{};
-
-    /// When cached_stats last became a finished computation, for update_stats()'s streaming throttle.
-    std::chrono::steady_clock::time_point stats_ready_at{};
-
-    /// Take the finished async statistics as the cache and start a fresh slot for the next computation.
-    void adopt_async_stats()
-    {
-        cached_stats   = async_stats;
-        async_stats    = std::make_shared<PixelStats>();
-        stats_ready_at = std::chrono::steady_clock::now();
-    }
+    AsyncCache<PixelStats> m_stats;
 
 public:
     static std::pair<std::string, std::string> split(const std::string &full_name);
@@ -315,14 +307,7 @@ public:
     Channel &operator=(Channel &&other) noexcept = default;
 
     /// Stop any in-flight statistics computation for this channel and wait for it to unwind.
-    void cancel_stats()
-    {
-        if (async_canceled)
-            async_canceled->store(true);
-        async_tracker.wait();
-    }
-
-    ~Channel() { cancel_stats(); }
+    void cancel_stats() { m_stats.cancel(); }
 
     template <typename Func>
     void apply(Func &&func)
@@ -419,6 +404,60 @@ inline bool group_has_alpha(ChannelGroup::Type type)
            type == ChannelGroup::YCA_Channels || type == ChannelGroup::XYZA_Channels;
 }
 
+/// The color a group's samples stand for, in the image's own primaries.
+/**
+    \p raw holds the group's channels in order. A single channel is gray, as is Y with its alpha, the YC types
+    convert through \p luminance_weights, and any other pair fills red and green.
+*/
+inline float3 group_rgb(ChannelGroup::Type type, int num_channels, float4 raw, float3 luminance_weights)
+{
+    if (num_channels == 1)
+        return float3{raw[0]};
+    if (num_channels == 2)
+        return type == ChannelGroup::YA_Channels ? YC_to_RGB(float3{0.f, raw[0], 0.f}, luminance_weights)
+                                                 : float3{raw[0], raw[1], 0.f};
+    if (type == ChannelGroup::YCA_Channels || type == ChannelGroup::YC_Channels)
+        return YC_to_RGB(raw.xyz(), luminance_weights);
+    return raw.xyz();
+}
+
+/// How many of an image's pixels fall in each texel of a chromaticity grid, by their CIE 1931 xy.
+/**
+    A pixel's chromaticity is that of the color group_rgb() gives it, so a premultiplied pixel and its straight
+    version count the same, as do any two differing only in exposure. A pixel whose X + Y + Z is not positive and
+    finite, black included, has none.
+*/
+struct ChromaticityBins
+{
+    struct Settings
+    {
+        Box2i              roi = Box2i{int2{0}}; ///< Restricts the count to this region, when it has volume
+        int4               channels{-1};         ///< The group's channels, as indices into Image::channels
+        int                num_channels = 0;
+        ChannelGroup::Type type         = ChannelGroup::Single_Channel;
+        float3x3           M_RGB_to_XYZ = la::identity;
+        float3             luminance_weights{0.f};
+        int                content_version = 0; ///< Image::content_version of the counted image
+
+        bool match(const Settings &other) const;
+
+        /// Copy \p other's content version, for AsyncCache's streaming throttle.
+        void take_content_versions(const Settings &other) { content_version = other.content_version; }
+    };
+
+    Settings settings;
+    bool     computed = false;
+
+    ChromaticityGrid      grid;          ///< The grid counted on, chromaticity_grid() of the settings' matrix
+    std::vector<uint32_t> counts;        ///< One per texel of grid, row by row; empty until computed
+    uint32_t              max_count = 0; ///< The largest of counts
+    int64_t               outside   = 0; ///< Pixels whose chromaticity lies off the grid
+    int64_t               skipped   = 0; ///< Pixels with no chromaticity, as above
+
+    /// Count \p img's pixels for \p desired; leaves `computed` false if \p canceled is raised first.
+    void calculate(const Image &img, const Settings &desired, std::atomic<bool> &canceled);
+};
+
 struct Layer
 {
 public:
@@ -501,6 +540,22 @@ public:
 
     std::vector<Channel> channels;
 
+private:
+    /// Declared after `channels`, so it is destroyed, and its task stopped, before they are.
+    AsyncCache<ChromaticityBins> m_chromaticity_bins;
+    std::unique_ptr<Texture>     m_chromaticity_density;
+    int                          m_chromaticity_density_generation = -1; ///< Of the bins it was built from
+
+    /// The chromaticity density of \p bins, the current chromaticity_bins(), as an overlay on the diagram, or null.
+    /**
+        Laid out on the bins' grid. Within the spectral locus it is black, opaque where the image has no pixels and
+        clear where it has the most, so over chromaticity_texture() the background keeps its colors only at the
+        chromaticities the image holds. Outside, where there is no background, it is white where the image has
+        pixels, for drawing tinted in a color that shows against the plot.
+    */
+    Texture *chromaticity_density_texture(const ChromaticityBins &bins);
+
+public:
     /// True for an image whose pixels arrive from a running process rather than from a file.
     /**
         Nothing on disk backs it, so it cannot be reloaded and is left out of a saved session. Otherwise an
@@ -591,17 +646,31 @@ public:
     Image(const Image &) = delete;
     Image(Image &&)      = default;
 
-    /// Stops every channel's statistics computation before any channel is destroyed.
+    /// Stops every statistics computation before any channel is destroyed.
     /**
         A task computing one channel's statistics also reads its group's alpha channel, and the channel
         vector destroys its elements back to front -- so the alpha channel, being last, would be freed while
-        an earlier channel's task was still reading it. Each Channel destructor only cancels its own task,
-        which is too late by then.
+        an earlier channel's task was still reading it. Each channel's own cache stops only its own task as it
+        goes, which is too late by then.
     */
-    ~Image()
+    ~Image() { cancel_stats(); }
+
+    /// Stop every statistics computation reading this image's pixels and wait for them to unwind.
+    /**
+        Call before writing pixels or changing the channels, since the tasks read them from worker threads.
+    */
+    void cancel_stats()
     {
+        m_chromaticity_bins.cancel();
         for (auto &c : channels) c.cancel_stats();
     }
+
+    /// The selected group's chromaticity density within \p roi, starting a computation when it is stale.
+    /**
+        Returns the newest finished one meanwhile, which may describe other settings or none at all, so check
+        `computed` and `settings`. Never null.
+    */
+    const ChromaticityBins *chromaticity_bins(const Box2i &roi);
 
     std::string file_and_partname() const { return partname.empty() ? filename : filename + ":" + partname; }
     std::string delimiter() const { return partname.empty() ? ":" : "."; }
