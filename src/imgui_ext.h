@@ -53,6 +53,11 @@ public:
 
     void clear();
 
+    /// The level below which the window drops messages.
+    spdlog::level::level_enum level() const { return m_ringbuffer_sink->level(); }
+    /// Drop messages below \p level; SetLogVerbosity() does so for the console too.
+    void set_level(spdlog::level::level_enum level);
+
     void  set_level_color(spdlog::level::level_enum level, ImU32 color);
     ImU32 get_level_color(spdlog::level::level_enum level);
 
@@ -76,6 +81,13 @@ protected:
 
 // reference to a global SpdLogWindow instance
 SpdLogWindow &GlobalSpdLogWindow();
+
+/// The verbosity when neither the command line nor the saved settings name one.
+inline constexpr spdlog::level::level_enum DefaultLogVerbosity = spdlog::level::info;
+/// The level below which log messages are dropped, by the console and the log window alike.
+spdlog::level::level_enum LogVerbosity();
+/// Drop log messages below \p level, from the console and the log window alike.
+void SetLogVerbosity(spdlog::level::level_enum level);
 
 // icon representing a given spdlog level, from the app's active icon set
 const char *LogLevelIcon(spdlog::level::level_enum level);
@@ -214,8 +226,8 @@ enum class DialogResult
 DialogResult DialogButtons(const char *confirm_label = "OK", const char *cancel_label = "Cancel",
                            bool use_shortcuts = true, bool confirm_enabled = true);
 
-// Draws `message` plus a Cancel/confirm_label footer (via DialogButtons, with shortcuts enabled) inside a
-// BeginModalDialog shell. Returns Confirm/Cancel the frame a button fires (also closing the popup then),
+// Draws `message`, wrapped at 30em, plus a Cancel/confirm_label footer (via DialogButtons, with shortcuts enabled)
+// inside a BeginModalDialog shell. Returns Confirm/Cancel the frame a button fires (also closing the popup then),
 // else None.
 DialogResult ConfirmDialog(const char *title, bool &open, const char *message, const char *confirm_label = "OK",
                            DialogPosition position = DialogPosition::Center);

@@ -641,6 +641,10 @@ void HDRViewApp::draw_menus()
             ImGui::EndMenu();
         }
 
+        ImGui::Separator();
+
+        MenuItem(action("Reset settings..."));
+
         ImGui::EndMenu();
     }
 
@@ -920,8 +924,7 @@ void HDRViewApp::draw_command_palette(bool &open)
                                },
                                [](int selected_option)
                                {
-                                   ImGui::GlobalSpdLogWindow().sink()->set_level(
-                                       spdlog::level::level_enum(selected_option));
+                                   ImGui::SetLogVerbosity(spdlog::level::level_enum(selected_option));
                                    spdlog::info("Setting verbosity threshold to level {:d}.", selected_option);
                                },
                                nullptr,

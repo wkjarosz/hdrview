@@ -25,8 +25,9 @@
 using namespace std;
 using namespace HelloImGui;
 
-void HDRViewApp::run()
+void HDRViewApp::run(bool reset_settings)
 {
+    m_params.iniClearPreviousSettings = reset_settings;
 #if defined(__EMSCRIPTEN__)
     // a web page neither keeps its files nor exits, when a native build saves its settings
     if (const auto ini = IniSettingsLocation(m_params))

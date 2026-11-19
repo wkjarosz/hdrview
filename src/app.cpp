@@ -33,7 +33,7 @@ using namespace HelloImGui;
 static HDRViewApp *g_hdrview = nullptr;
 
 void init_hdrview(optional<float> exposure, optional<float> gamma, optional<bool> dither, optional<bool> force_sdr,
-                  optional<bool> apple_keys, const vector<string> &in_files)
+                  optional<bool> apple_keys, optional<int> verbosity, const vector<string> &in_files)
 {
     if (g_hdrview)
     {
@@ -46,8 +46,9 @@ void init_hdrview(optional<float> exposure, optional<float> gamma, optional<bool
     spdlog::info("Overriding dither: {}", dither.has_value());
     spdlog::info("Forcing SDR: {}", force_sdr.has_value());
     spdlog::info("Overriding Apple-keyboard behavior: {}", apple_keys.has_value());
+    spdlog::info("Overriding verbosity: {}", verbosity.has_value());
 
-    g_hdrview = new HDRViewApp(exposure, gamma, dither, force_sdr, apple_keys, in_files);
+    g_hdrview = new HDRViewApp(exposure, gamma, dither, force_sdr, apple_keys, verbosity, in_files);
 
     // load after g_hdrview is set: session loading calls hdrview()
     g_hdrview->load_images(in_files);
@@ -74,7 +75,8 @@ void HDRViewApp::set_mouse_mode(MouseMode m)
 }
 
 HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gamma, optional<bool> force_dither,
-                       optional<bool> force_sdr, optional<bool> force_apple_keys, vector<string> in_files)
+                       optional<bool> force_sdr, optional<bool> force_apple_keys, optional<int> force_verbosity,
+                       vector<string> in_files)
 {
     setup_window_and_backend(force_sdr);
     setup_hello_imgui_params();
@@ -82,7 +84,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 
     auto window_setup = setup_dockable_windows();
     setup_platform_backend_callbacks(in_files);
-    setup_persistence_callbacks(force_exposure, force_gamma, force_dither, force_apple_keys);
+    setup_persistence_callbacks(force_exposure, force_gamma, force_dither, force_apple_keys, force_verbosity);
     setup_imgui_style_callbacks();
     setup_frame_callbacks();
     setup_dialogs(in_files);
@@ -463,7 +465,8 @@ void HDRViewApp::setup_platform_backend_callbacks(vector<string> in_files)
 }
 
 void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, optional<float> force_gamma,
-                                             optional<bool> force_dither, optional<bool> force_apple_keys)
+                                             optional<bool> force_dither, optional<bool> force_apple_keys,
+                                             optional<int> force_verbosity)
 {
     //
     // Load user settings at `PostInit` and save them at `BeforeExit`
@@ -471,7 +474,7 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
 
     m_params.iniFolderType      = IniFolderType::AppUserConfigFolder;
     m_params.iniFilename        = "HDRView/settings.ini";
-    m_params.callbacks.PostInit = [this, force_exposure, force_gamma, force_dither, force_apple_keys]
+    m_params.callbacks.PostInit = [this, force_exposure, force_gamma, force_dither, force_apple_keys, force_verbosity]
     {
 #if defined(__EMSCRIPTEN__)
         // see platform_utils
@@ -486,49 +489,7 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
         {
             try
             {
-                json j = json::parse(s);
-                spdlog::debug("Restoring recent file list...");
-                m_image_loader.set_recent_files(j.value<vector<string>>("recent files", {}));
-                m_bg_mode = (BackgroundMode_)clamp(j.value<int>("background mode", (int)m_bg_mode), (int)BGMode_Black,
-                                                   (int)BGMode_COUNT - 1);
-                m_bg_color.xyz() = j.value<float3>("background color", m_bg_color.xyz());
-
-                m_draw_data_window    = j.value<bool>("draw data window", m_draw_data_window);
-                m_draw_display_window = j.value<bool>("draw display window", m_draw_display_window);
-                m_auto_fit_data       = j.value<bool>("auto fit data window", m_auto_fit_data);
-                m_auto_fit_display    = j.value<bool>("auto fit display window", m_auto_fit_display);
-                m_auto_fit_selection  = j.value<bool>("auto fit selection", m_auto_fit_selection);
-                m_draw_pixel_info     = j.value<bool>("draw pixel info", m_draw_pixel_info);
-                m_draw_grid           = j.value<bool>("draw pixel grid", m_draw_grid);
-                m_left_align_names    = j.value<bool>("left align names", m_left_align_names);
-                m_exposure_live = m_exposure = j.value<float>("exposure", m_exposure);
-                m_gamma_live = m_gamma = std::max(MIN_GAMMA, j.value<float>("gamma", m_gamma));
-                m_tonemap        = (Tonemap_)clamp<int>(j.value<Tonemap_>("tonemap", m_tonemap), 0, Tonemap_COUNT - 1);
-                m_clamp_to_LDR   = j.value<bool>("clamp to LDR", m_clamp_to_LDR);
-                m_rolloff_settings.from_json(j.value<json>("highlight rolloff", json::object()));
-                m_dither         = j.value<bool>("dither", m_dither);
-                m_file_list_mode = clamp<int>(j.value<int>("file list mode", m_file_list_mode), 0, 2);
-                m_short_names    = j.value<bool>("short names", m_short_names);
-                // "draw clip warnings" is the older key, a single toggle covering both ends; fall back to it
-                // so settings written by an earlier version still take effect
-                bool both          = j.value<bool>("draw clip warnings", false);
-                m_clip_warnings    = j.value<bool2>("clip warnings", bool2{both, both});
-                m_show_FPS         = j.value<bool>("show FPS", m_show_FPS);
-                m_clip_range       = j.value<float2>("clip range", m_clip_range);
-                m_histogram_height = j.value<float>("histogram height", m_histogram_height);
-                chromaticity_overlays().from_json(j.value<json>("chromaticity diagram", json::object()));
-                // Clamped: it indexes pixel_color_widget()'s current/reference/composite choices, and the
-                // settings file is ordinary user-editable text.
-                m_status_pixel_target = clamp<int>(j.value<int>("status pixel target", m_status_pixel_target), 0, 2);
-                m_x_scale        = clamp<int>(j.value<int>("histogram x scale", m_x_scale), 0, AxisScale_COUNT - 1);
-                m_y_scale        = clamp<int>(j.value<int>("histogram y scale", m_y_scale), 0, AxisScale_COUNT - 1);
-                m_playback_speed = j.value<float>("playback speed", m_playback_speed);
-                m_colormap_index = clamp<int>(j.value<int>("colormap index", 0), 0, (int)std::size(m_colormaps) - 1);
-                m_show_developer_menu    = j.value<bool>("show developer menu", m_show_developer_menu);
-                m_show_tool_palette      = j.value<bool>("show tool palette", m_show_tool_palette);
-                m_tool_palette_collapsed = j.value<bool>("tool palette collapsed", m_tool_palette_collapsed);
-                m_tool_palette_vertical  = j.value<bool>("tool palette vertical", m_tool_palette_vertical);
-                m_tool_palette_corner    = clamp<int>(j.value<int>("tool palette corner", m_tool_palette_corner), 0, 3);
+                apply_user_settings(json::parse(s));
             }
             catch (json::exception &e)
             {
@@ -550,6 +511,8 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
             m_gamma_live = m_gamma = std::max(MIN_GAMMA, *force_gamma);
         if (force_dither.has_value())
             m_dither = *force_dither;
+        if (force_verbosity.has_value())
+            ImGui::SetLogVerbosity(spdlog::level::level_enum(*force_verbosity));
 
         auto is_safari = host_is_safari();
         auto is_apple  = host_is_apple();
@@ -601,10 +564,8 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
     };
 }
 
-void HDRViewApp::save_user_settings()
+json HDRViewApp::user_settings() const
 {
-    spdlog::info("Saving user settings to '{}'", IniSettingsLocation(m_params).value_or("(disabled)"));
-
     json j;
     j["recent files"]            = m_image_loader.recent_files();
     j["background mode"]         = (int)m_bg_mode;
@@ -622,7 +583,7 @@ void HDRViewApp::save_user_settings()
     j["clamp to LDR"]            = m_clamp_to_LDR;
     j["highlight rolloff"]       = m_rolloff_settings.to_json();
     j["dither"]                  = m_dither;
-    j["verbosity"]               = spdlog::get_level();
+    j["log verbosity"]           = ImGui::LogVerbosity();
     j["file list mode"]          = m_file_list_mode;
     j["short names"]             = m_short_names;
     j["left align names"]        = m_left_align_names;
@@ -643,8 +604,62 @@ void HDRViewApp::save_user_settings()
     j["colormap index"]          = m_colormap_index;
 
     m_theme.save(j, m_params.dpiAwareParams.dpiWindowSizeFactor);
+    return j;
+}
 
-    SaveUserPref("UserSettings", j.dump(4));
+void HDRViewApp::apply_user_settings(const json &j)
+{
+    m_image_loader.set_recent_files(j.value<vector<string>>("recent files", m_image_loader.recent_files()));
+    m_bg_mode        = (BackgroundMode_)clamp(j.value<int>("background mode", (int)m_bg_mode), (int)BGMode_Black,
+                                              (int)BGMode_COUNT - 1);
+    m_bg_color.xyz() = j.value<float3>("background color", m_bg_color.xyz());
+
+    m_draw_data_window    = j.value<bool>("draw data window", m_draw_data_window);
+    m_draw_display_window = j.value<bool>("draw display window", m_draw_display_window);
+    m_auto_fit_data       = j.value<bool>("auto fit data window", m_auto_fit_data);
+    m_auto_fit_display    = j.value<bool>("auto fit display window", m_auto_fit_display);
+    m_auto_fit_selection  = j.value<bool>("auto fit selection", m_auto_fit_selection);
+    m_draw_pixel_info     = j.value<bool>("draw pixel info", m_draw_pixel_info);
+    m_draw_grid           = j.value<bool>("draw pixel grid", m_draw_grid);
+    m_left_align_names    = j.value<bool>("left align names", m_left_align_names);
+    m_exposure_live = m_exposure = j.value<float>("exposure", m_exposure);
+    m_gamma_live = m_gamma = std::max(MIN_GAMMA, j.value<float>("gamma", m_gamma));
+    m_tonemap              = (Tonemap_)clamp<int>(j.value<Tonemap_>("tonemap", m_tonemap), 0, Tonemap_COUNT - 1);
+    m_clamp_to_LDR         = j.value<bool>("clamp to LDR", m_clamp_to_LDR);
+    m_rolloff_settings.from_json(j.value<json>("highlight rolloff", json::object()));
+    m_dither         = j.value<bool>("dither", m_dither);
+    m_file_list_mode = clamp<int>(j.value<int>("file list mode", m_file_list_mode), 0, 2);
+    m_short_names    = j.value<bool>("short names", m_short_names);
+    // "draw clip warnings" is the older key, a single toggle covering both ends; fall back to it
+    // so settings written by an earlier version still take effect
+    if (j.contains("draw clip warnings"))
+        m_clip_warnings = bool2{j.value<bool>("draw clip warnings", false)};
+    m_clip_warnings    = j.value<bool2>("clip warnings", m_clip_warnings);
+    m_show_FPS         = j.value<bool>("show FPS", m_show_FPS);
+    m_clip_range       = j.value<float2>("clip range", m_clip_range);
+    m_histogram_height = j.value<float>("histogram height", m_histogram_height);
+    chromaticity_overlays().from_json(j.value<json>("chromaticity diagram", json::object()));
+    // Clamped: it indexes pixel_color_widget()'s current/reference/composite choices, and the
+    // settings file is ordinary user-editable text.
+    m_status_pixel_target = clamp<int>(j.value<int>("status pixel target", m_status_pixel_target), 0, 2);
+    m_x_scale             = clamp<int>(j.value<int>("histogram x scale", m_x_scale), 0, AxisScale_COUNT - 1);
+    m_y_scale             = clamp<int>(j.value<int>("histogram y scale", m_y_scale), 0, AxisScale_COUNT - 1);
+    m_playback_speed      = j.value<float>("playback speed", m_playback_speed);
+    m_colormap_index = clamp<int>(j.value<int>("colormap index", m_colormap_index), 0, (int)std::size(m_colormaps) - 1);
+    m_show_developer_menu    = j.value<bool>("show developer menu", m_show_developer_menu);
+    m_show_tool_palette      = j.value<bool>("show tool palette", m_show_tool_palette);
+    m_tool_palette_collapsed = j.value<bool>("tool palette collapsed", m_tool_palette_collapsed);
+    m_tool_palette_vertical  = j.value<bool>("tool palette vertical", m_tool_palette_vertical);
+    m_tool_palette_corner    = clamp<int>(j.value<int>("tool palette corner", m_tool_palette_corner), 0, 3);
+    // not "verbosity", which older settings files hold as the logger's own level (always trace), not this threshold
+    ImGui::SetLogVerbosity(spdlog::level::level_enum(
+        clamp<int>(j.value<int>("log verbosity", ImGui::LogVerbosity()), 0, spdlog::level::n_levels - 1)));
+}
+
+void HDRViewApp::save_user_settings() const
+{
+    spdlog::info("Saving user settings to '{}'", IniSettingsLocation(m_params).value_or("(disabled)"));
+    SaveUserPref("UserSettings", user_settings().dump(4));
 }
 
 void HDRViewApp::setup_imgui_style_callbacks()
@@ -824,6 +839,52 @@ void HDRViewApp::setup_dialogs(const vector<string> &in_files)
         make_unique<PopupDialog>("Replace session?", [this](bool &open) { draw_confirm_load_session_dialog(open); }));
     m_dialogs.push_back(make_unique<PopupDialog>("Discard unsaved changes?",
                                                  [this](bool &open) { draw_confirm_discard_dialog(open); }));
+    // Taken before PostInit loads the saved settings, so these are the defaults a reset returns to; only the
+    // verbosity is set by then, from the command line.
+    json defaults             = user_settings();
+    defaults["log verbosity"] = ImGui::DefaultLogVerbosity;
+    m_dialogs.push_back(make_unique<PopupDialog>(
+        "Reset settings",
+        [this, defaults, default_status_bar = m_params.imGuiWindowParams.showStatusBar,
+         preferences = true, theme = true, layout = true, recent = false](bool &open) mutable
+        {
+            if (!ImGui::BeginModalDialog("Reset settings", open, ImGui::DialogPosition::Center))
+                return;
+
+            ImGui::TextUnformatted("Return these settings to their defaults:");
+            ImGui::Checkbox("Viewing preferences", &preferences);
+            ImGui::Tooltip(
+                "Exposure, tonemapping, overlays, the background, each window's options, and the log's verbosity.");
+            ImGui::Checkbox("Theme", &theme);
+            ImGui::Checkbox("Window layout", &layout);
+            ImGui::Tooltip("The docked windows, the status bar, and the tool palette.");
+            ImGui::Checkbox("Recently opened files", &recent);
+            ImGui::Spacing();
+
+            auto result = ImGui::DialogButtons("Reset", "Cancel", true, preferences || theme || layout || recent);
+            if (result == ImGui::DialogResult::Confirm)
+            {
+                json j = user_settings();
+                for (const auto &[key, value] : defaults.items())
+                {
+                    const bool in_layout = key.find("tool palette") != string::npos;
+                    if (key == "recent files" ? recent : in_layout ? layout : preferences)
+                        j[key] = value;
+                }
+                apply_user_settings(j);
+
+                if (theme)
+                    m_theme.set(Theme::DARK_THEME);
+                if (layout)
+                {
+                    m_params.dockingParams.layoutReset       = true;
+                    m_params.imGuiWindowParams.showStatusBar = default_status_bar;
+                }
+            }
+            if (result != ImGui::DialogResult::None)
+                ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }));
     // Every command that has one, so a dialog cannot be forgotten when a command is added, and all of
     // them wear the same shell, subject selector and footer; see draw_edit_command_dialog().
     for (auto &cmd : m_edit_commands)
@@ -1217,6 +1278,12 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    0,
                    [this]() { m_params.dockingParams.layoutReset = true; },
                    [this]() { return !m_params.dockingParams.dockableWindows.empty(); }});
+
+        add(Action{{"Reset settings..."},
+                   ICON_MY_RESET_SETTINGS,
+                   ImGuiKey_None,
+                   0,
+                   [this]() { dialog("Reset settings").open = true; }});
 
         add(Action{{"Show developer menu"},
                    ICON_MY_DEVELOPER_WINDOW,
