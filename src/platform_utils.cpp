@@ -371,16 +371,6 @@ EM_JS(char *, hdrview_web_storage_get, (const char *name), {
         return 0;
     }
 });
-EM_JS(void, hdrview_web_storage_remove, (const char *name), {
-    try
-    {
-        const folder = location.pathname.substring(0, location.pathname.lastIndexOf("/") + 1);
-        window.localStorage.removeItem(folder + UTF8ToString(name));
-    }
-    catch (e)
-    {
-    }
-});
 EM_JS(void, hdrview_web_storage_set, (const char *name, const char *value), {
     try
     {
@@ -403,9 +393,6 @@ static EM_BOOL save_settings_when_hidden(int, const EmscriptenVisibilityChangeEv
     if (!event->hidden || !ImGui::GetCurrentContext() || ImGui::GetFrameCount() == 0)
         return EM_FALSE;
     const HelloImGui::RunnerParams &params = *HelloImGui::GetRunnerParams();
-    // nor once saving has been turned off, as a reset does
-    if (!HelloImGui::IniSettingsLocation(params))
-        return EM_FALSE;
     HelloImGui::HelloImGuiIniSettings::SaveImGuiSettings(s_settings_path, params.dockingParams.layoutName);
     HelloImGui::HelloImGuiIniSettings::SaveDockableWindowsVisibility(s_settings_path, params.dockingParams);
     HelloImGui::HelloImGuiIniSettings::SaveHelloImGuiMiscSettings(s_settings_path, params);
@@ -431,12 +418,6 @@ void keep_settings_in_browser(const std::string &path, std::function<void()> sav
     s_settings_path     = path;
     s_save_app_settings = std::move(save_app_settings);
     emscripten_set_visibilitychange_callback(nullptr, EM_FALSE, save_settings_when_hidden);
-}
-
-void forget_settings_in_browser()
-{
-    hdrview_web_storage_remove(s_settings_path.c_str());
-    emscripten_run_script("location.reload()");
 }
 
 extern "C"

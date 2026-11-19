@@ -25,7 +25,7 @@ int main(int, char **)
     HelloImGui::AddAssetsSearchPath(HDRVIEW_BUILD_TREE_ASSETS_DIR);
 #endif
 
-    init_hdrview({}, {}, {}, {}, {});
+    init_hdrview({}, {}, {}, {}, {}, {});
     // the About dialog auto-opens when no files were passed on the command line, always the case here, and
     // would sit on top of the menu bar and toolbar
     *hdrview()->action("Show help").p_selected = false;

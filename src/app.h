@@ -62,7 +62,7 @@ class HDRViewApp
 {
 public:
     HDRViewApp(optional<float> exposure, optional<float> gamma, optional<bool> dither, optional<bool> force_sdr,
-               optional<bool> force_apple_keys, vector<string> in_files = {});
+               optional<bool> force_apple_keys, optional<int> force_verbosity, vector<string> in_files = {});
 
     /// Run the app until it quits; \p reset_settings deletes the saved settings first, so it starts from the defaults.
     void run(bool reset_settings = false);
@@ -149,6 +149,10 @@ public:
     void save_session();
     void load_session();
     void load_session(const string &filename);
+    /// The settings HDRView keeps itself, as save_user_settings() stores them.
+    json user_settings() const;
+    /// Take on the settings in \p j, keeping the current value of any it lacks.
+    void apply_user_settings(const json &j);
     /// The "HDRView session" manifest for the images and view settings as they stand.
     /**
         \p path_of supplies each image's "path": filesystem-relative for a plain .hsess, an in-bundle
@@ -752,10 +756,11 @@ private:
     WindowSetupInfo setup_dockable_windows();
     void            setup_platform_backend_callbacks(vector<string> in_files);
     void            setup_persistence_callbacks(optional<float> force_exposure, optional<float> force_gamma,
-                                                optional<bool> force_dither, optional<bool> force_apple_keys);
+                                                optional<bool> force_dither, optional<bool> force_apple_keys,
+                                                optional<int> force_verbosity);
     void            setup_imgui_style_callbacks();
-    /// Store the settings HDRView keeps itself, as a user pref in Hello ImGui's settings file.
-    void            save_user_settings();
+    /// Store user_settings() as a user pref in Hello ImGui's settings file.
+    void            save_user_settings() const;
     void            setup_frame_callbacks();
     void            setup_dialogs(const vector<string> &in_files);
     void            setup_actions(ImGuiKey modKey, const vector<DockableWindowExtraInfo> &window_info);
@@ -1129,7 +1134,7 @@ private:
 
 /// Create the global singleton HDRViewApp instance
 void init_hdrview(optional<float> exposure, optional<float> gamma, optional<bool> dither, optional<bool> force_sdr,
-                  optional<bool> apple_keys, const vector<string> &in_files = {});
+                  optional<bool> apple_keys, optional<int> verbosity, const vector<string> &in_files = {});
 
 /// Return a pointer to the global singleton HDRViewApp instance
 HDRViewApp *hdrview();
