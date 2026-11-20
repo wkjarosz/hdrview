@@ -548,7 +548,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         // the index in groups[] of the one holding \p key, as the dialog's tooltips describe them
         const auto group_of = [](const std::string &key)
         {
-            if (key == "/theme")
+            if (key == "/theme" || key == "/font size")
                 return 1;
             if (key == "/status bar" || key.find("tool palette") != std::string::npos)
                 return 2;
@@ -567,7 +567,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             wait_for_window_closed(ctx, dialog);
         };
         auto      &status_bar = HelloImGui::GetRunnerParams()->imGuiWindowParams.showStatusBar;
-        // the numbers and toggles by JSON pointer, and the theme, recent files and status bar
+        // the numbers and toggles by JSON pointer, and the theme, font size, recent files and status bar
         const auto settings = [&]
         {
             const json j = hdrview()->user_settings(), flat = j.flatten();
@@ -576,6 +576,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
                 if (it->is_number() || it->is_boolean())
                     kept[it.key()] = *it;
             kept["/theme"]        = j["theme"];
+            kept["/font size"]    = ImGui::GetStyle().FontSizeBase;
             kept["/recent files"] = j["recent files"];
             kept["/status bar"]   = status_bar;
             return kept;
@@ -585,7 +586,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         const json defaults = settings();
 
         json j = defaults;
-        for (const char *by_hand : {"/theme", "/recent files", "/status bar"}) j.erase(by_hand);
+        for (const char *by_hand : {"/theme", "/font size", "/recent files", "/status bar"}) j.erase(by_hand);
         for (auto &v : j)
             if (v.is_boolean())
                 v = !v.get<bool>();
@@ -602,6 +603,9 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             ctx->SetRef("##MainMenuBar");
             ctx->MenuClick("Windows/Theme/HDRView light");
             ctx->SetRef("");
+            // as the theme tweak window's font size does; a size set directly is overwritten within the frame
+            ImGui::GetStyle()._NextFrameFontSizeBase = defaults["/font size"].get<float>() + 3.f;
+            ctx->Yield(2);
         };
 
         change();
