@@ -583,7 +583,7 @@ json HDRViewApp::user_settings() const
     j["clamp to LDR"]            = m_clamp_to_LDR;
     j["highlight rolloff"]       = m_rolloff_settings.to_json();
     j["dither"]                  = m_dither;
-    j["log verbosity"]           = ImGui::LogVerbosity();
+    j["verbosity"]               = ImGui::LogVerbosity();
     j["file list mode"]          = m_file_list_mode;
     j["short names"]             = m_short_names;
     j["left align names"]        = m_left_align_names;
@@ -651,9 +651,8 @@ void HDRViewApp::apply_user_settings(const json &j)
     m_tool_palette_collapsed = j.value<bool>("tool palette collapsed", m_tool_palette_collapsed);
     m_tool_palette_vertical  = j.value<bool>("tool palette vertical", m_tool_palette_vertical);
     m_tool_palette_corner    = clamp<int>(j.value<int>("tool palette corner", m_tool_palette_corner), 0, 3);
-    // not "verbosity", which older settings files hold as the logger's own level (always trace), not this threshold
     ImGui::SetLogVerbosity(spdlog::level::level_enum(
-        clamp<int>(j.value<int>("log verbosity", ImGui::LogVerbosity()), 0, spdlog::level::n_levels - 1)));
+        clamp<int>(j.value<int>("verbosity", ImGui::LogVerbosity()), 0, spdlog::level::n_levels - 1)));
 }
 
 void HDRViewApp::save_user_settings() const
@@ -841,8 +840,8 @@ void HDRViewApp::setup_dialogs(const vector<string> &in_files)
                                                  [this](bool &open) { draw_confirm_discard_dialog(open); }));
     // Taken before PostInit loads the saved settings, so these are the defaults a reset returns to; only the
     // verbosity is set by then, from the command line.
-    json defaults             = user_settings();
-    defaults["log verbosity"] = ImGui::DefaultLogVerbosity;
+    json defaults         = user_settings();
+    defaults["verbosity"] = ImGui::DefaultLogVerbosity;
     m_dialogs.push_back(make_unique<PopupDialog>(
         "Reset settings",
         [this, defaults, default_status_bar = m_params.imGuiWindowParams.showStatusBar,
