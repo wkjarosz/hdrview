@@ -538,6 +538,94 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         };
     }
 
+    // Each of the reset dialog's groups returns its own settings to their defaults and leaves every other setting
+    // alone. Every setting is changed first, which also holds apply_user_settings() to reading back each one that
+    // is saved; the rolloff's enums, saved as strings, are read back in test_settings_json.cpp instead.
+    t           = IM_REGISTER_TEST(engine, "dialogs", "reset_settings_restores_the_chosen_groups");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        const char *const groups[] = {"Viewing preferences", "Theme", "Window layout", "Recently opened files"};
+        // the index in groups[] of the one holding \p key, as the dialog's tooltips describe them
+        const auto group_of = [](const std::string &key)
+        {
+            if (key == "/theme" || key == "/font size")
+                return 1;
+            if (key == "/status bar" || key.find("tool palette") != std::string::npos)
+                return 2;
+            return key == "/recent files" ? 3 : 0;
+        };
+        const char *const dialog = "//Reset settings";
+        const auto        reset  = [&](unsigned chosen)
+        {
+            ctx->SetRef("##MainMenuBar");
+            ctx->MenuClick("Windows/Reset settings...");
+            ctx->SetRef(dialog);
+            for (int g = 0; g < 4; ++g)
+                chosen & (1u << g) ? ctx->ItemCheck(groups[g]) : ctx->ItemUncheck(groups[g]);
+            ctx->ItemClick("Reset");
+            ctx->SetRef("");
+            wait_for_window_closed(ctx, dialog);
+        };
+        auto      &status_bar = HelloImGui::GetRunnerParams()->imGuiWindowParams.showStatusBar;
+        // the numbers and toggles by JSON pointer, and the theme, font size, recent files and status bar
+        const auto settings = [&]
+        {
+            const json j = hdrview()->user_settings(), flat = j.flatten();
+            json       kept = json::object();
+            for (auto it = flat.begin(); it != flat.end(); ++it)
+                if (it->is_number() || it->is_boolean())
+                    kept[it.key()] = *it;
+            kept["/theme"]        = j["theme"];
+            kept["/font size"]    = ImGui::GetStyle().FontSizeBase;
+            kept["/recent files"] = j["recent files"];
+            kept["/status bar"]   = status_bar;
+            return kept;
+        };
+
+        reset(~0u);
+        const json defaults = settings();
+
+        json j = defaults;
+        for (const char *by_hand : {"/theme", "/font size", "/recent files", "/status bar"}) j.erase(by_hand);
+        for (auto &v : j)
+            if (v.is_boolean())
+                v = !v.get<bool>();
+            else if (v.is_number_integer())
+                v = v.get<int>() == 0 ? 1 : v.get<int>() - 1; //< within the range of anything with two choices
+            else
+                v = v.get<double>() * 0.5 + 0.25;
+        j                 = j.unflatten();
+        j["recent files"] = json::array({"reset_settings_test.exr"});
+        const auto change = [&]
+        {
+            hdrview()->apply_user_settings(j);
+            status_bar = !defaults["/status bar"].get<bool>();
+            ctx->SetRef("##MainMenuBar");
+            ctx->MenuClick("Windows/Theme/HDRView light");
+            ctx->SetRef("");
+            // as the theme tweak window's font size does; a size set directly is overwritten within the frame
+            ImGui::GetStyle()._NextFrameFontSizeBase = defaults["/font size"].get<float>() + 3.f;
+            ctx->Yield(2);
+        };
+
+        change();
+        const json changed = settings();
+        for (auto it = defaults.begin(); it != defaults.end(); ++it)
+            if (changed[it.key()] == *it)
+                IM_ERRORF("%s kept its default", it.key().c_str());
+
+        for (int g = 0; g < 4; ++g)
+        {
+            change();
+            reset(1u << g);
+            const json now = settings();
+            for (auto it = defaults.begin(); it != defaults.end(); ++it)
+                if (now[it.key()] != (group_of(it.key()) == g ? *it : changed[it.key()]))
+                    IM_ERRORF("resetting %s left %s at %s", groups[g], it.key().c_str(), now[it.key()].dump().c_str());
+        }
+        reset(~0u); //< later tests start from the defaults
+    };
+
     // Every request that would discard unsaved edits asks first, and cancelling it leaves everything as it was:
     // closing the image, closing them all, the Quit command, and the window's close button, which GLFW reports to
     // Hello ImGui's ConfirmExit, as it does Cmd-Q and Alt-F4.

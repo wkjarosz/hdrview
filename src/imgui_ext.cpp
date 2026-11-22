@@ -128,9 +128,7 @@ void SpdLogWindow::draw(ImFont *console_font, float size)
                         .c_str(),
                     current_level == i))
             {
-                m_filter_sink->set_level(spdlog::level::level_enum(i));
-                m_ringbuffer_sink->set_level(spdlog::level::level_enum(i));
-                spdlog::set_level(spdlog::level::level_enum(i));
+                SetLogVerbosity(spdlog::level::level_enum(i));
                 spdlog::info("Setting verbosity threshold to level {:d}.", i);
             }
             ImGui::PopStyleColor();
@@ -265,6 +263,22 @@ void SpdLogWindow::draw(ImFont *console_font, float size)
 }
 
 void SpdLogWindow::clear() { m_ringbuffer_sink->clear_messages(); }
+
+void SpdLogWindow::set_level(spdlog::level::level_enum level)
+{
+    m_filter_sink->set_level(level);
+    m_ringbuffer_sink->set_level(level);
+}
+
+spdlog::level::level_enum LogVerbosity() { return GlobalSpdLogWindow().level(); }
+
+void SetLogVerbosity(spdlog::level::level_enum level)
+{
+    // the logger passes everything on, and each sink, the log window's among them, drops what is below its own level
+    for (auto &sink : spdlog::default_logger()->sinks())
+        sink->set_level(level);
+    GlobalSpdLogWindow().set_level(level);
+}
 
 void SpdLogWindow::set_level_color(spdlog::level::level_enum level, ImU32 color)
 {
@@ -1396,7 +1410,10 @@ DialogResult ConfirmDialog(const char *title, bool &open, const char *message, c
     DialogResult result = DialogResult::None;
     if (BeginModalDialog(title, open, position))
     {
+        // wrapped at a preferred width, which a short message falls short of and the window then shrinks to
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + HelloImGui::EmSize(30.f));
         ImGui::TextUnformatted(message);
+        ImGui::PopTextWrapPos();
         ImGui::Spacing();
 
         result = DialogButtons(confirm_label);

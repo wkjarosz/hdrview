@@ -228,7 +228,18 @@ static void apply(int theme)
     // otherwise, its a custom theme, and we keep the parameters that were read from the config file
 
     if (theme != Theme::CUSTOM_THEME)
-        ImGui::GetStyle().FontScaleDpi = dpi_scale;
+    {
+        ImGuiStyle &style  = ImGui::GetStyle();
+        style.FontScaleDpi = dpi_scale;
+
+        // The reset above cleared FontSizeBase, but within a frame Dear ImGui writes the current font size back
+        // into it on every font change. It takes a new base size only through _NextFrameFontSizeBase, as its style
+        // editor does, so ask for the size it starts with: the default font's.
+        const ImGuiIO &io   = ImGui::GetIO();
+        const ImFont  *font = io.FontDefault ? io.FontDefault : io.Fonts->Fonts.Size ? io.Fonts->Fonts[0] : nullptr;
+        if (font && font->LegacySize > 0.f)
+            style._NextFrameFontSizeBase = font->LegacySize;
+    }
 }
 
 void Theme::set(int t)

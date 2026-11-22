@@ -66,11 +66,10 @@ int main(int argc, char **argv)
     HelloImGui::AddAssetsSearchPath(HDRVIEW_BUILD_TREE_ASSETS_DIR);
 #endif
 
-    constexpr spdlog::level::level_enum default_verbosity = spdlog::level::info;
-    int                                 verbosity         = default_verbosity;
-
+    std::optional<int>   verbosity;
     std::optional<float> exposure, gamma;
     std::optional<bool>  dither, force_sdr, apple_keys;
+    bool                 reset_settings = false;
     string               url;
 
 #if HDRVIEW_ENABLE_IPC
@@ -140,9 +139,13 @@ severities are:
     err      = 4
     critical = 5
     off      = 6
-The default is 2 (info).)")
+The default is the saved threshold, or else 2 (info).)")
             ->check(CLI::Range(0, 6))
             ->option_text("INT in [0-6]")
+            ->group("Misc");
+
+        app.add_flag("--reset-settings", reset_settings,
+                     "Start from the default settings, deleting the saved ones.")
             ->group("Misc");
 
         app.add_flag("--apple-keys,--non-apple-keys{false}", apple_keys,
@@ -180,8 +183,8 @@ until another channel selector is encountered.)")
         CLI11_PARSE(app, argc, argv);
 #endif
 
-        spdlog::default_logger()->sinks().front()->set_level(spdlog::level::level_enum(verbosity));
-        ImGui::GlobalSpdLogWindow().sink()->set_level(spdlog::level::level_enum(verbosity));
+        // the saved threshold takes over once the settings load, unless the command line names one
+        ImGui::SetLogVerbosity(spdlog::level::level_enum(verbosity.value_or(ImGui::DefaultLogVerbosity)));
 
         if (argc > 1)
         {
@@ -199,7 +202,7 @@ until another channel selector is encountered.)")
         spdlog::info("Welcome to HDRView!");
         // Log the same string --version reports: bug reports usually arrive as a copy of this output.
         spdlog::info("{}", version_string);
-        spdlog::info("Verbosity threshold set to level {:d}.", verbosity);
+        spdlog::info("Verbosity threshold set to level {:d}.", int(ImGui::LogVerbosity()));
 
 #ifdef ASSETS_LOCATION
         spdlog::info("ASSETS_LOCATION = '{}'", ASSETS_LOCATION);
@@ -221,7 +224,7 @@ until another channel selector is encountered.)")
         if (apple_keys.has_value())
             spdlog::info("Turning Apple-style keyboard behavior {}.", *apple_keys ? "ON" : "OFF");
 
-        init_hdrview(exposure, gamma, dither, force_sdr, apple_keys, in_files);
+        init_hdrview(exposure, gamma, dither, force_sdr, apple_keys, verbosity, in_files);
 
 #if HDRVIEW_ENABLE_IPC
         hdrview()->ipc_port() = uint16_t(ipc_port);
@@ -232,7 +235,7 @@ until another channel selector is encountered.)")
 #endif
 
         hdrview()->load_url(url);
-        hdrview()->run();
+        hdrview()->run(reset_settings);
     }
     // Exceptions will only be thrown upon failed logger or sink construction (not during logging)
     catch (const spdlog::spdlog_ex &e)
