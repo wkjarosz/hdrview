@@ -357,6 +357,7 @@ TEST_CASE("Every edit that applies changes the image as one undo entry, and one 
     // The commands writing somewhere other than the image they are handed, which record nothing on it.
     const std::set<std::string> elsewhere = {
         "Copy",                // the clipboard
+        "Copy as SDR",         // likewise
         "Generate mipmaps...", // new images beside it
     };
 
@@ -419,7 +420,7 @@ TEST_CASE("Every edit that applies changes the image as one undo entry, and one 
                 CHECK(after == before);
 
                 // and it did write where it writes
-                if (enabled && pass != Pass_Live && name == "Copy")
+                if (enabled && pass != Pass_Live && (name == "Copy" || name == "Copy as SDR"))
                     CHECK(ctx.clipboard_image != clipboard);
                 if (enabled && pass != Pass_Live && name == "Generate mipmaps...")
                     CHECK_FALSE(ctx.added.empty());
@@ -1472,6 +1473,149 @@ TEST_CASE("Copy, cut and paste carry samples from where they were taken to where
                     CHECK(ctx.clipboard_image->channels[size_t(c)](x - taken.min.x, y - taken.min.y) ==
                           was(c, int2{x, y}));
             }
+
+    // Across kinds of channel group, Copy takes the visible group alone, under its own names and values, and Paste
+    // writes the visible group alone, whatever Apply to says, asking nothing of a group of the clipboard's own kind.
+    auto make_named = [](const std::vector<std::string> &names, float base)
+    {
+        auto im = std::make_shared<Image>(k_size, names);
+        for (size_t c = 0; c < im->channels.size(); ++c)
+            for (int y = 0; y < k_size.y; ++y)
+                for (int x = 0; x < k_size.x; ++x)
+                    im->channels[c](x, y) = base + 0.07f * float(c) + 0.005f * float(y * k_size.x + x);
+        im->rebuild_layers();
+        return im;
+    };
+    struct Group
+    {
+        const char *what;
+        ImagePtr    image;
+        const char *channel; ///< One of the group's channels, which picks it
+    };
+    // copying from inside a layered image, so a copy of more than the visible group shows
+    auto pick = [](ImagePtr im, const char *channel)
+    {
+        im->selected_group = group_of_channel(im, channel);
+        return im;
+    };
+    const Box2i from_box{{1, 1}, {4, 3}}, to_box{{3, 2}, {7, 5}};
+    auto        copied = [&](const ImagePtr &src)
+    {
+        TestEditContext sctx{src};
+        sctx.roi = from_box;
+        copy->apply(sctx);
+        return sctx.clipboard_image;
+    };
+    auto pasted = [&](const ImagePtr &clipped, const ImagePtr &dst)
+    {
+        TestEditContext dctx{dst};
+        dctx.clipboard_image = clipped;
+        dctx.roi             = to_box;
+        dctx.subject.scope   = EditSubject::Scope_AllChannels; // which Paste does not follow
+        paste->on_open(dctx);                                  // as its dialog does, where it asks
+        paste->apply(dctx);
+        return dst->history.undo_name() == "Paste";
+    };
+    const Group groups[] = {{"gray", make_named({"Y"}, 0.2f), "Y"},
+                            {"gray and alpha", make_named({"Y", "A"}, 0.1f), "Y"},
+                            {"RGBA", make_layered_image(), "R"},
+                            {"RGB, named as normals", make_layered_image(), "normal.R"},
+                            {"depth", make_layered_image(), "Z"}};
+    for (const auto &source : groups)
+        for (const auto &target : groups)
+        {
+            CAPTURE(source.what);
+            CAPTURE(target.what);
+            auto                src  = pick(source.image, source.channel);
+            auto                dst  = pick(target.image->duplicate(Box2i{}), target.channel);
+            const ChannelGroup &from = src->groups[size_t(src->selected_group)];
+            const ChannelGroup &to   = dst->groups[size_t(dst->selected_group)];
+
+            const auto clipped = copied(src);
+            REQUIRE(clipped);
+            REQUIRE(int(clipped->channels.size()) == from.num_channels);
+            for (int c = 0; c < from.num_channels; ++c)
+            {
+                CHECK(clipped->channels[size_t(c)].name == src->channels[size_t(from.channels[c])].name);
+                CHECK(clipped->channels[size_t(c)](int2{0}) == src->channels[size_t(from.channels[c])](from_box.min));
+            }
+
+            // a group of the same kind maps channel for channel, and leaves nothing to ask
+            {
+                TestEditContext actx{dst};
+                actx.clipboard_image = clipped;
+                if (std::string{source.what} == target.what)
+                    CHECK_FALSE(paste->asks(actx));
+                if (std::string{source.what} == "depth" && std::string{target.what} == "RGBA")
+                    CHECK(paste->asks(actx));
+            }
+
+            const std::vector<float> before = samples(dst);
+            const size_t             per    = size_t(k_size.x * k_size.y);
+            REQUIRE(pasted(clipped, dst));
+            for (int c = 0; c < int(dst->channels.size()); ++c)
+            {
+                bool visible = false;
+                for (int k = 0; k < to.num_channels; ++k) visible |= to.channels[k] == c;
+                if (visible)
+                    continue;
+                bool unchanged = true;
+                for (size_t i = 0; i < per; ++i)
+                    unchanged &= dst->channels[size_t(c)](int(i % size_t(k_size.x)), int(i / size_t(k_size.x))) ==
+                                 before[size_t(c) * per + i];
+                CHECK_MESSAGE(unchanged, "channel ", dst->channels[size_t(c)].name, " is outside the visible group");
+            }
+        }
+
+    // What lands, from what the source fixes. A one-channel source lands unchanged in every channel, opaque where the
+    // group has alpha; a gray pasted as color and back is the gray it was, as luminance weights sum to one, while a
+    // pure green lands as BT.709's luminance of it; and depth pasted into a gray and back is the depth it was.
+    auto value_at = [&](const ImagePtr &im, const char *channel, int2 p)
+    {
+        for (size_t c = 0; c < im->channels.size(); ++c)
+            if (im->channels[c].name == channel)
+                return im->channels[c](p);
+        return -1.f;
+    };
+    for (const char *one : {"Y", "Z"})
+    {
+        CAPTURE(one);
+        auto src = std::string{one} == "Y" ? pick(make_named({"Y"}, 0.2f), "Y") : pick(make_layered_image(), "Z");
+        auto rgba = pick(make_layered_image(), "R");
+        REQUIRE(pasted(copied(src), rgba));
+        for (const char *c : {"R", "G", "B"})
+            CHECK(value_at(rgba, c, to_box.min) == value_at(src, one, from_box.min));
+        CHECK(value_at(rgba, "A", to_box.min) == (std::string{one} == "Y" ? 1.f : value_at(src, one, from_box.min)));
+    }
+    {
+        auto gray = pick(make_named({"Y"}, 0.2f), "Y");
+        auto rgba = pick(make_layered_image(), "R");
+        REQUIRE(pasted(copied(gray), rgba));
+        auto back = pick(make_named({"Y"}, 0.6f), "Y");
+        TestEditContext sctx{rgba};
+        sctx.roi = to_box;
+        copy->apply(sctx);
+        REQUIRE(pasted(sctx.clipboard_image, back));
+        CHECK(value_at(back, "Y", to_box.min) == doctest::Approx(value_at(gray, "Y", from_box.min)));
+    }
+    {
+        auto green = pick(make_named({"R", "G", "B"}, 0.f), "R");
+        for (int c = 0; c < 3; ++c) green->channels[size_t(c)].reset(c == 1 ? 1.f : 0.f);
+        auto gray = pick(make_named({"Y"}, 0.6f), "Y");
+        REQUIRE(pasted(copied(green), gray));
+        CHECK(value_at(gray, "Y", to_box.min) == doctest::Approx(0.7152f).epsilon(1e-3));
+    }
+    {
+        auto depth = pick(make_layered_image(), "Z");
+        auto gray  = pick(make_named({"Y"}, 0.6f), "Y");
+        REQUIRE(pasted(copied(depth), gray));
+        auto again = pick(make_layered_image(), "Z");
+        TestEditContext sctx{gray};
+        sctx.roi = to_box;
+        copy->apply(sctx);
+        REQUIRE(pasted(sctx.clipboard_image, again));
+        CHECK(value_at(again, "Z", to_box.min) == value_at(depth, "Z", from_box.min));
+    }
 }
 
 TEST_CASE("Cropping is offered only for a selection that would change the image, and crops to what lands")

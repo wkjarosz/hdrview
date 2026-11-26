@@ -28,6 +28,14 @@ enum EditExtent : int
     Extent_StructureInView ///< As Extent_Structure, but the view stays where a preview has already framed the result
 };
 
+/// What a copy puts on the system clipboard, beside the full-precision copy in EditContext::clipboard.
+enum SystemCopy : int
+{
+    SystemCopy_None = 0, ///< Nothing
+    SystemCopy_Data,     ///< The image's own values, in encodings that keep HDR
+    SystemCopy_SDR       ///< An 8-bit sRGB rendition of the view, which HDRView's own paste then takes too
+};
+
 /// Produces a rectangle of one channel, in channel-local coordinates.
 /**
     Given the whole channel to read from, its index among those covered, and a share of the progress bar.
@@ -151,10 +159,12 @@ public:
         bool draws_subject_selector = true; ///< Whether "Apply to" means anything here, and so is shown.
         bool fans_out               = true; ///< Whether a multi-selection runs this once per image.
         bool needs_editable         = true; ///< Whether the image has to accept edits for this to be offered.
-        /// Whether this copies into EditContext::clipboard, which the application also puts on the system clipboard.
-        bool fills_clipboard = false;
+        /// What this puts on the system clipboard, when it copies into EditContext::clipboard.
+        SystemCopy system_copy = SystemCopy_None;
         /// Whether this reads EditContext::clipboard, which the application first fills from the system clipboard.
         bool reads_clipboard = false;
+        /// Whether this, though it edits at once, has a dialog to ask through first when asks() says to.
+        bool may_ask = false;
     };
 
     explicit EditCommand(Info info) : m_info(std::move(info)) {}
@@ -190,6 +200,8 @@ public:
 
     /// Whether the command can run at all, beyond the image accepting edits.
     virtual bool enabled(const EditContext &) const { return true; }
+    /// Whether invoking a command that may_ask opens its dialog this time, rather than editing at once.
+    virtual bool asks(const EditContext &) const { return false; }
 
     /// Called as the dialog opens, for anything that has to be read from the image each time.
     virtual void on_open(EditContext &) {}

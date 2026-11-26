@@ -76,6 +76,14 @@ bool modify_colors(const EditContext &ctx, const std::string &name,
                    const std::function<float4(const float4 &, int2, int)> &op,
                    const std::function<void(Image &)>                     &retag = {});
 
+/// Apply \p op to the image's visible channel group, whatever kind it is, whatever the subject's scope.
+/**
+    \p op is handed the group's values in order, with the slots past its last taken from (0, 0, 0, 1), and the
+    position in image coordinates. The selection still bounds it as the subject says.
+*/
+bool modify_group(const EditContext &ctx, const std::string &name,
+                  const std::function<float4(const float4 &, int2)> &op);
+
 /// Apply \p edit to the subject: a per-sample op through modify_pixels(), a color op through modify_colors().
 /**
     \p retag goes to modify_colors(), so it applies only with a color op.
@@ -84,3 +92,11 @@ bool apply_point_edit(const EditContext &ctx, const std::string &name, const Poi
                       const std::function<void(Image &)> &retag = {});
 
 ///@}
+
+/// \p img's visible channel group alone over \p region, or all of it, as a new image with its colors in \p to.
+/**
+    The samples stay as stored, premultiplied where they are, and the channels keep their names. Only an RGB or
+    RGBA group's samples are converted and retagged; any other group is copied as it is.
+*/
+ImagePtr selected_group_in(const Image &img, const Chromaticities &to, AdaptationMethod method,
+                           const Box2i &region = Box2i{});

@@ -889,7 +889,7 @@ void HDRViewApp::setup_dialogs(const vector<string> &in_files)
     // Every command that has one, so a dialog cannot be forgotten when a command is added, and all of
     // them wear the same shell, subject selector and footer; see draw_edit_command_dialog().
     for (auto &cmd : m_edit_commands)
-        if (cmd->info().has_dialog)
+        if (cmd->info().has_dialog || cmd->info().may_ask)
         {
             EditCommand *c = cmd.get();
             m_dialogs.push_back(make_unique<PopupDialog>(c->info().names.front(), [this, c](bool &open)

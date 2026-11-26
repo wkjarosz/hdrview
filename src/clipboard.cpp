@@ -35,23 +35,48 @@
 
 using namespace std;
 
-using ReadDone = function<void(optional<ClipboardFile>)>;
+using ReadDone = function<void(ClipboardRead)>;
 
 namespace
 {
 
-/// What set_clipboard_file() last wrote, to recognize it when it is read back.
+/// One of the encodings set_clipboard_files() last wrote, to recognize it when it is read back.
 struct OwnFile
 {
     string type;
     size_t size = 0;
     size_t hash = 0;
-} s_own;
+};
+vector<OwnFile> s_own;
 
 size_t hash_bytes(const string &bytes) { return std::hash<string_view>{}(string_view{bytes}); }
 
-bool          s_use_private = false;
-ClipboardFile s_private;
+bool                  s_use_private = false;
+vector<ClipboardFile> s_private;
+
+#if defined(__EMSCRIPTEN__) || defined(__linux__)
+/// The PNG among \p files, for a clipboard that holds one file per copy, or else the first.
+const ClipboardFile *single_file(const vector<ClipboardFile> &files)
+{
+    for (const auto &f : files)
+        if (f.type == "image/png")
+            return &f;
+    return files.empty() ? nullptr : &files.front();
+}
+#endif
+
+/// The file among \p files that a read takes: a TIFF, since it can hold floats, then a PNG, then any other.
+optional<ClipboardFile> preferred_file(const vector<ClipboardFile> &files)
+{
+    for (const char *type : {"image/tiff", "image/png"})
+        for (const auto &f : files)
+            if (f.type == type && !f.bytes.empty())
+                return f;
+    for (const auto &f : files)
+        if (!f.bytes.empty())
+            return f;
+    return nullopt;
+}
 
 bool s_holds_image = false; ///< See clipboard_holds_image()
 
@@ -84,8 +109,8 @@ EM_JS(void, hdrview_clipboard_listen, (), {
                 var bytes = new Uint8Array(buffer);
                 var ptr   = Module._malloc(Math.max(1, bytes.length));
                 Module.HEAPU8.set(bytes, ptr);
-                Module.ccall('hdrview_clipboard_delivered', null, [ 'string', 'number', 'number' ],
-                             [ file.type, ptr, bytes.length ]);
+                Module.ccall('hdrview_clipboard_delivered', null, [ 'string', 'number', 'number', 'string' ],
+                             [ file.type, ptr, bytes.length, '' ]);
                 Module._free(ptr);
             });
             return;
@@ -105,19 +130,23 @@ EM_JS(void, hdrview_clipboard_listen, (), {
     };
 });
 
+// only Chromium has navigator.userAgentData, and only its clipboard writes a PQ PNG unchanged
+EM_JS(int, hdrview_clipboard_keeps_hdr, (), { return navigator.userAgentData !== undefined ? 1 : 0; });
+
 EM_JS(void, hdrview_clipboard_read, (), {
-    function deliver(type, buffer)
+    // a failed read passes its reason too, which HDRView logs as an error
+    function deliver(type, buffer, error)
     {
         var bytes = new Uint8Array(buffer);
         var ptr   = Module._malloc(Math.max(1, bytes.length));
         Module.HEAPU8.set(bytes, ptr);
-        Module.ccall('hdrview_clipboard_delivered', null, [ 'string', 'number', 'number' ],
-                     [ type, ptr, bytes.length ]);
+        Module.ccall('hdrview_clipboard_delivered', null, [ 'string', 'number', 'number', 'string' ],
+                     [ type, ptr, bytes.length, error || '' ]);
         Module._free(ptr);
     }
     if (!navigator.clipboard || !navigator.clipboard.read)
     {
-        deliver('', new ArrayBuffer(0));
+        deliver('', new ArrayBuffer(0), 'This browser cannot read images from the clipboard.');
         return;
     }
     hdrview_clipboard_soon(function() {
@@ -133,19 +162,17 @@ EM_JS(void, hdrview_clipboard_read, (), {
                 }
                 deliver('', new ArrayBuffer(0));
             })
-            .catch(function(error) {
-                console.warn('Could not read the clipboard: ' + error);
-                deliver('', new ArrayBuffer(0));
-            });
+            .catch(function(error) { deliver('', new ArrayBuffer(0), 'Could not read the clipboard: ' + error); });
     });
 });
 
 EM_JS_DEPS(hdrview_clipboard, "$UTF8ToString");
 EM_JS(void, hdrview_clipboard_write, (const char *type, const char *bytes, size_t length), {
-    var mime = UTF8ToString(type);
+    var mime  = UTF8ToString(type);
+    var error = function(message) { Module.ccall('hdrview_clipboard_error', null, [ 'string' ], [ message ]); };
     if (!navigator.clipboard || !navigator.clipboard.write || typeof ClipboardItem == 'undefined')
     {
-        console.warn('This browser cannot write images to the clipboard.');
+        error('This browser cannot write images to the clipboard.');
         return;
     }
     // copied out of the module's memory now, since the write completes after this returns
@@ -153,8 +180,8 @@ EM_JS(void, hdrview_clipboard_write, (const char *type, const char *bytes, size_
     var item   = {};
     item[mime] = blob;
     hdrview_clipboard_soon(function() {
-        navigator.clipboard.write([new ClipboardItem(item)]).catch(function(error) {
-            console.warn('Could not write to the clipboard: ' + error);
+        navigator.clipboard.write([new ClipboardItem(item)]).catch(function(e) {
+            error('Could not write to the clipboard: ' + e);
         });
     });
 });
@@ -233,8 +260,8 @@ optional<ClipboardFile> bitmap_as_qoi(const clip::image &image)
 bool on_wayland() { return glfwGetPlatform() == GLFW_PLATFORM_WAYLAND; }
 #endif
 
-/// The image file on the system's own clipboard, or nothing when it holds none.
-optional<ClipboardFile> read_system_clipboard()
+/// The image file on the system's own clipboard, or nothing when it holds none or, setting \p failed, the read failed.
+optional<ClipboardFile> read_system_clipboard(bool &failed)
 {
 #if defined(__linux__)
     if (on_wayland())
@@ -275,38 +302,48 @@ optional<ClipboardFile> read_system_clipboard()
     catch (const exception &e)
     {
         spdlog::error("Could not read the system clipboard: {}", e.what());
+        failed = true;
     }
     return nullopt;
 }
 
 #endif // __EMSCRIPTEN__
 
-/// Put \p file on the system's own clipboard, returning whether that worked, or on the web, started.
-bool write_system_clipboard(const ClipboardFile &file)
+/// Put \p files on the system's own clipboard, returning whether that worked, or on the web, started.
+bool write_system_clipboard(const vector<ClipboardFile> &files)
 {
 #if defined(__EMSCRIPTEN__)
-    hdrview_clipboard_write(file.type.c_str(), file.bytes.data(), file.bytes.size());
+    // a page may write only a PNG
+    const ClipboardFile *file = single_file(files);
+    if (!file)
+        return false;
+    hdrview_clipboard_write(file->type.c_str(), file->bytes.data(), file->bytes.size());
     return true;
 #else
 #if defined(__linux__)
     if (on_wayland())
     {
-        // the fork offers one type, so only what other applications most expect
-        glfwSetWaylandClipboardData(file.bytes.data(), file.type.c_str(), file.bytes.size());
+        // the fork offers one type per copy
+        const ClipboardFile *file = single_file(files);
+        if (!file)
+            return false;
+        glfwSetWaylandClipboardData(file->bytes.data(), file->type.c_str(), file->bytes.size());
         return true;
     }
 #endif
-    const char *native = native_name(file.type);
-    if (!native)
-    {
-        spdlog::error("Cannot put a '{}' file on the system clipboard.", file.type);
-        return false;
-    }
     try
     {
         clip::lock lock;
-        return lock.locked() && lock.clear() &&
-               lock.set_data(clip::register_format(native), file.bytes.data(), file.bytes.size());
+        if (!lock.locked() || !lock.clear())
+            return false;
+        bool wrote = false;
+        for (const auto &file : files)
+        {
+            // a format the platform has no name for, such as TIFF on Windows, is left out
+            if (const char *native = native_name(file.type))
+                wrote |= lock.set_data(clip::register_format(native), file.bytes.data(), file.bytes.size());
+        }
+        return wrote;
     }
     catch (const exception &e)
     {
@@ -353,45 +390,54 @@ extern "C"
 {
     EMSCRIPTEN_KEEPALIVE void hdrview_clipboard_paste_started() { s_paste_in_flight = true; }
 
-    EMSCRIPTEN_KEEPALIVE void hdrview_clipboard_delivered(const char *type, const char *bytes, size_t length)
+    EMSCRIPTEN_KEEPALIVE void hdrview_clipboard_delivered(const char *type, const char *bytes, size_t length,
+                                                          const char *error)
     {
         s_paste_in_flight = false;
-        optional<ClipboardFile> file;
+        ClipboardRead read;
         if (bytes && length)
-            file = ClipboardFile{type ? type : "", string(bytes, length)};
+            read.file = ClipboardFile{type ? type : "", string(bytes, length)};
+        if (error && *error)
+        {
+            spdlog::error("{}", error);
+            read.failed = true;
+        }
 
         if (s_waiting)
         {
             auto done = std::move(s_waiting);
             s_waiting = nullptr;
-            done(std::move(file));
+            done(std::move(read));
         }
         else
         {
             // a paste event ahead of the Ctrl/Cmd+V shortcut it came with, or of no paste at all
-            s_pasted       = std::move(file);
+            s_pasted       = std::move(read.file);
             s_pasted_frame = ImGui::GetFrameCount();
         }
     }
+
+    EMSCRIPTEN_KEEPALIVE void hdrview_clipboard_error(const char *message) { spdlog::error("{}", message); }
 
     EMSCRIPTEN_KEEPALIVE void hdrview_clipboard_away() { s_own_since_focus = false; }
 }
 #endif
 
-ClipboardFile &use_private_clipboard()
+vector<ClipboardFile> &use_private_clipboard()
 {
     s_use_private = true;
     return s_private;
 }
 
-bool set_clipboard_file(const ClipboardFile &file)
+bool set_clipboard_files(const vector<ClipboardFile> &files)
 {
     if (s_use_private)
-        s_private = file;
-    else if (!write_system_clipboard(file))
+        s_private = files;
+    else if (!write_system_clipboard(files))
         return false;
 
-    s_own         = {file.type, file.bytes.size(), hash_bytes(file.bytes)};
+    s_own.clear();
+    for (const auto &f : files) s_own.push_back({f.type, f.bytes.size(), hash_bytes(f.bytes)});
     s_holds_image = true;
 #if defined(__EMSCRIPTEN__)
     s_own_since_focus = true;
@@ -402,7 +448,7 @@ bool set_clipboard_file(const ClipboardFile &file)
 void read_clipboard_image(ReadDone done)
 {
     if (s_use_private)
-        return done(s_private.bytes.empty() ? nullopt : optional<ClipboardFile>{s_private});
+        return done({preferred_file(s_private)});
 
 #if defined(__EMSCRIPTEN__)
     // a Ctrl/Cmd+V's own paste event, arriving or just arrived, which needs no permission
@@ -414,14 +460,15 @@ void read_clipboard_image(ReadDone done)
     if (ImGui::GetFrameCount() - s_pasted_frame <= 2)
     {
         s_pasted_frame = -1000;
-        return done(std::exchange(s_pasted, nullopt));
+        return done({std::exchange(s_pasted, nullopt)});
     }
     s_waiting = std::move(done);
     hdrview_clipboard_read();
 #else
-    auto file     = read_system_clipboard();
-    s_holds_image = file.has_value();
-    done(std::move(file));
+    ClipboardRead read;
+    read.file     = read_system_clipboard(read.failed);
+    s_holds_image = read.file.has_value();
+    done(std::move(read));
 #endif
 }
 
@@ -431,11 +478,37 @@ bool is_own_clipboard_file(const ClipboardFile &file)
     if (!s_use_private)
         return s_own_since_focus;
 #endif
-    return s_own.size && file.type == s_own.type && file.bytes.size() == s_own.size &&
-           hash_bytes(file.bytes) == s_own.hash;
+    for (const auto &own : s_own)
+        if (file.type == own.type && file.bytes.size() == own.size && hash_bytes(file.bytes) == own.hash)
+            return true;
+    return false;
 }
 
-bool clipboard_holds_image() { return s_use_private ? !s_private.bytes.empty() : s_holds_image; }
+bool clipboard_carries(const string &type)
+{
+    if (s_use_private)
+        return true;
+#if defined(__EMSCRIPTEN__)
+    return type == "image/png";
+#else
+#if defined(__linux__)
+    if (on_wayland())
+        return type == "image/png";
+#endif
+    return native_name(type) != nullptr;
+#endif
+}
+
+bool clipboard_keeps_hdr()
+{
+#if defined(__EMSCRIPTEN__)
+    return s_use_private || hdrview_clipboard_keeps_hdr();
+#else
+    return true;
+#endif
+}
+
+bool clipboard_holds_image() { return s_use_private ? preferred_file(s_private).has_value() : s_holds_image; }
 
 void watch_clipboard()
 {

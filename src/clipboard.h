@@ -15,6 +15,7 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <vector>
 
 /// An encoded file on the system clipboard.
 struct ClipboardFile
@@ -23,18 +24,43 @@ struct ClipboardFile
     std::string bytes; ///< The file's contents
 };
 
-/// Replace what the system clipboard holds with \p file, returning whether that worked or, on the web, started.
-bool set_clipboard_file(const ClipboardFile &file);
+/// Replace what the system clipboard holds with \p files, encodings of one image, returning whether that worked.
+/**
+    Other applications choose among the encodings; where a copy can hold only one, as on Wayland and the web, it holds
+    the PNG. On the web, the write has only started when this returns.
+*/
+bool set_clipboard_files(const std::vector<ClipboardFile> &files);
 
-/// Read the image file on the system clipboard, and pass it to \p done, or nothing when it holds none.
+/// Whether a copy can put a file of MIME type \p type on the system clipboard.
+/**
+    Windows has no name for TIFF that other applications read, and Wayland's GLFW fork and the browsers hold one file
+    per copy, the PNG.
+*/
+bool clipboard_carries(const std::string &type);
+
+/// Whether other applications get a PQ PNG on the system clipboard with its values intact.
+/**
+    Natively they do. Of the browsers, only Chromium's writes it as it is: Safari clips it to SDR, and Firefox
+    re-encodes it as darkly as it shows PQ, so another application pastes the darkened image.
+*/
+bool clipboard_keeps_hdr();
+
+/// What a read of the system clipboard found.
+struct ClipboardRead
+{
+    std::optional<ClipboardFile> file;           ///< The image file it held, or nothing
+    bool                         failed = false; ///< Whether the read itself failed, which is logged as an error
+};
+
+/// Read the image file on the system clipboard, and pass what the read found to \p done.
 /**
     Natively, \p done runs before this returns. On the web it runs once the browser has read the clipboard, outside
     any frame: from the page's paste event after Ctrl/Cmd+V, and otherwise from the browser's asynchronous read,
     which may first ask the user to allow it.
 */
-void read_clipboard_image(std::function<void(std::optional<ClipboardFile>)> done);
+void read_clipboard_image(std::function<void(ClipboardRead)> done);
 
-/// Whether \p file is what set_clipboard_file() last put on the system clipboard.
+/// Whether \p file is one of the encodings set_clipboard_files() last put on the system clipboard.
 /**
     Browsers re-encode the images a page writes, so on the web this asks instead whether this page copied last and
     has kept the focus since: another application can copy only while it has the focus.
@@ -57,9 +83,9 @@ bool clipboard_holds_image();
 */
 void watch_clipboard();
 
-/// Keep the clipboard in memory, apart from the system's, as the GUI tests do, returning it for them to fill.
+/// Keep the clipboard in memory, apart from the system's, as the GUI tests do, returning its encodings to fill.
 /**
-    Whatever a test writes there directly reads as another application's copy, since set_clipboard_file() did not
-    write it.
+    A read takes a TIFF before a PNG, as the system clipboard's does. Whatever a test writes there directly reads as
+    another application's copy, since set_clipboard_files() did not write it.
 */
-ClipboardFile &use_private_clipboard();
+std::vector<ClipboardFile> &use_private_clipboard();

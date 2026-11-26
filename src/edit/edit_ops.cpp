@@ -152,23 +152,14 @@ bool modify_pixels(const EditContext &ctx, const string &name, const function<fl
         { return std::make_unique<ChannelRectUndo>(image, channels, bounds, n); });
 }
 
-bool modify_colors(const EditContext &ctx, const string &name, const function<float4(const float4 &, int2, int)> &op,
+namespace
+{
+
+/// Apply \p op to each of \p groups' channels together; \p channels are all of theirs, for the undo entry.
+bool modify_groups(const EditContext &ctx, const string &name, const std::vector<int> &groups,
+                   const std::vector<int> &channels, const function<float4(const float4 &, int2, int)> &op,
                    const function<void(Image &)> &retag)
 {
-    if (!ctx.image)
-        return false;
-
-    // Named apart: C++17 cannot capture a structured binding in a lambda.
-    auto  color    = subject_color_groups(*ctx.image, ctx.subject);
-    auto &groups   = color.first;
-    auto &channels = color.second;
-    if (groups.empty())
-    {
-        // e.g. an ungrouped image or a depth pass: nothing here is color
-        spdlog::warn("'{}' covers no color channel group of '{}'.", name, ctx.image->file_and_partname());
-        return false;
-    }
-
     Box2i bounds = ctx.image->data_window;
     if (ctx.subject.selection_only && ctx.roi.has_volume())
         bounds.intersect(ctx.roi);
@@ -220,6 +211,36 @@ bool modify_colors(const EditContext &ctx, const string &name, const function<fl
         });
 }
 
+} // namespace
+
+bool modify_colors(const EditContext &ctx, const string &name, const function<float4(const float4 &, int2, int)> &op,
+                   const function<void(Image &)> &retag)
+{
+    if (!ctx.image)
+        return false;
+
+    const auto color = subject_color_groups(*ctx.image, ctx.subject);
+    if (color.first.empty())
+    {
+        // e.g. an ungrouped image or a depth pass: nothing here is color
+        spdlog::warn("'{}' covers no color channel group of '{}'.", name, ctx.image->file_and_partname());
+        return false;
+    }
+    return modify_groups(ctx, name, color.first, color.second, op, retag);
+}
+
+bool modify_group(const EditContext &ctx, const string &name, const function<float4(const float4 &, int2)> &op)
+{
+    if (!ctx.image || !ctx.image->is_valid_group(ctx.image->selected_group))
+        return false;
+
+    const int           g     = ctx.image->selected_group;
+    const ChannelGroup &group = ctx.image->groups[size_t(g)];
+    std::vector<int>    channels;
+    for (int c = 0; c < group.num_channels; ++c) channels.push_back(group.channels[c]);
+    return modify_groups(ctx, name, {g}, channels, [&op](const float4 &v, int2 p, int) { return op(v, p); }, {});
+}
+
 bool apply_point_edit(const EditContext &ctx, const string &name, const PointEdit &edit,
                       const function<void(Image &)> &retag)
 {
@@ -229,4 +250,66 @@ bool apply_point_edit(const EditContext &ctx, const string &name, const PointEdi
     return modify_colors(
         ctx, name, [edit](const float4 &c, int2, int)
         { return shader::edit_color(edit.op, c, edit.p0, edit.p1, edit.m0, edit.m1); }, retag);
+}
+
+ImagePtr selected_group_in(const Image &img, const Chromaticities &to, AdaptationMethod method, const Box2i &region)
+{
+    if (!img.is_valid_group(img.selected_group))
+        return nullptr;
+    Box2i clipped = region.has_volume() ? region : img.data_window;
+    clipped.intersect(img.data_window);
+    if (!clipped.has_volume())
+        return nullptr;
+
+    const ChannelGroup &group  = img.groups[size_t(img.selected_group)];
+    const int           n      = group.num_channels;
+    const int2          extent = clipped.size();
+    const int2          offset = clipped.min - img.data_window.min;
+    const bool          is_color =
+        group.type == ChannelGroup::RGB_Channels || group.type == ChannelGroup::RGBA_Channels;
+
+    float3x3   M{la::identity};
+    const bool convert =
+        is_color && color_conversion_matrix(M, img.chromaticities.value_or(Chromaticities{}), to, method);
+
+    // a fresh id and an empty history, as Image::duplicate() gives its copy
+    auto out                           = std::make_shared<Image>();
+    static_cast<ImageMetadata &>(*out) = img;
+    for (int c = 0; c < n; ++c)
+    {
+        const Channel &channel = img.channels[size_t(group.channels[c])];
+        Channel        copy{channel.name, extent};
+        copy.bits_per_sample = channel.bits_per_sample;
+        out->channels.push_back(std::move(copy));
+    }
+    parallel_for(blocked_range<int>(0, extent.y, std::max(1, 1024 * 1024 / std::max(1, extent.x))),
+                 [&](int begin_y, int end_y, int, int)
+                 {
+                     for (int y = begin_y; y < end_y; ++y)
+                         for (int x = 0; x < extent.x; ++x)
+                         {
+                             float4 v{0.f};
+                             for (int c = 0; c < n; ++c)
+                                 v[c] = img.channels[size_t(group.channels[c])](offset.x + x, offset.y + y);
+                             if (convert)
+                                 v.xyz() = mul(M, v.xyz());
+                             for (int c = 0; c < n; ++c) out->channels[size_t(c)](x, y) = v[c];
+                         }
+                 });
+
+    if (clipped != img.data_window)
+        out->data_window = out->display_window = clipped;
+    if (convert)
+    {
+        out->chromaticities    = to;
+        out->color_space       = named_color_gamut(to);
+        out->white_point       = named_white_point(to.white);
+        out->adaptation_method = method;
+        out->compute_color_transform();
+    }
+
+    // the layers and groups follow from the names; not finalize(), which would premultiply the samples again
+    out->rebuild_layers();
+    out->selected_group = 0;
+    return out;
 }

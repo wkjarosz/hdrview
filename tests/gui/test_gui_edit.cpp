@@ -10,6 +10,7 @@
 #include "clipboard.h"
 #include "colorspace.h"
 #include "edit/commands.h"
+#include "edit/edit_ops.h"
 #include "edit/envmap.h"
 #include "edit/preview.h"
 #include "fonts.h"
@@ -17,6 +18,7 @@
 #include "imageio/image_loader.h"
 #include "imageio/png.h"
 #include "imageio/streams.h"
+#include "imageio/tiff.h"
 #include "shared/edits.h"
 #include "test_gui_registry.h"
 #include "test_gui_support.h"
@@ -633,19 +635,20 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         reset_images(ctx);
     };
 
-    // Copy puts what the view shows on the system clipboard, in eight bits, and Paste and File > From clipboard bring
-    // in other applications' images: pasted into the image, or opened as a new one, which Paste also does when no
-    // image is open. HDRView's own copy pastes and opens at full precision. The tests keep the clipboard in memory,
-    // so writing to it directly stands in for another application.
+    // Copy puts the image's own values on the system clipboard, as a half-float TIFF and a PQ PNG, and Copy as SDR
+    // what the view shows, in eight bits; Paste and File > From clipboard bring in other applications' images: pasted
+    // into the image, or opened as a new one, which Paste also does when no image is open. HDRView's own copy pastes
+    // and opens at full precision. The tests keep the clipboard in memory, so writing to it directly stands in for
+    // another application.
     t           = IM_REGISTER_TEST(engine, "edit", "the system clipboard carries copies out and other images in");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
         if (!load_fixture(ctx))
             return;
-        auto          *app    = hdrview();
-        auto           img    = app->current_image();
-        ClipboardFile &system = use_private_clipboard();
-        OnExit         restore{[app, &system]
+        auto                       *app    = hdrview();
+        auto                        img    = app->current_image();
+        std::vector<ClipboardFile> &system = use_private_clipboard();
+        OnExit                      restore{[app, &system]
                        {
                            system = {};
                            app->set_clipboard(nullptr);
@@ -668,49 +671,140 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         app->set_selection(copied);
         app->exposure() = app->exposure_live() = 1.f; // so the view differs from the data
         ctx->Yield();
-        menu_click(ctx, "Edit/Copy");
 
-        // out, as a PNG of the selection as the view shows it, to within the dither
-        IM_CHECK_STR_EQ(system.type.c_str(), "image/png");
-        SpanIStream out_bytes{system.bytes};
-        const auto  out  = load_image(out_bytes, "copy.png");
-        const auto  view = app->image_to_save(HDRViewApp::SaveMode_Rendition, true, 0.f);
-        IM_CHECK_EQ_NO_RET(out.size(), size_t(1));
-        IM_CHECK_NO_RET(view != nullptr);
-        if (out.size() != 1 || !view)
+        const auto decode = [](const ClipboardFile &file) -> ImagePtr
+        {
+            SpanIStream in{file.bytes};
+            auto        images = load_image(in, "copy");
+            return images.size() == 1 ? images[0] : nullptr;
+        };
+
+        // out, as the selection's own values in each encoding, taken back to the image's primaries: within half's
+        // precision and PQ's, where the view, an exposure away, is off by double
+        menu_click(ctx, "Edit/Copy");
+        IM_CHECK_EQ(system.size(), size_t(2));
+        for (const auto &file : system)
+        {
+            const auto got = decode(file);
+            IM_CHECK_NO_RET(got != nullptr && got->size() == copied.size());
+            if (!got || got->size() != copied.size())
+                continue;
+            float3x3 M{la::identity};
+            color_conversion_matrix(M, got->chromaticities.value_or(Chromaticities{}),
+                                    img->chromaticities.value_or(Chromaticities{}));
+            float worst = 0.f;
+            for (int y = 0; y < copied.size().y; ++y)
+                for (int x = 0; x < copied.size().x; ++x)
+                {
+                    const float3 v = mul(M, float3{got->channels[0](x, y), got->channels[1](x, y),
+                                                   got->channels[2](x, y)});
+                    for (int c = 0; c < 3; ++c)
+                    {
+                        const float want = img->channels[c](copied.min - o + int2{x, y});
+                        worst            = std::max(worst, std::abs(v[c] - want) / std::max(want, 0.05f));
+                    }
+                }
+            IM_CHECK_LE(worst, 2e-3f);
+        }
+
+        // Copy as SDR: a PNG of the selection as the view shows it, an exposure of 1 doubling the data and SDR white
+        // clipping it, to within the dither
+        menu_click(ctx, "Edit/Copy as SDR");
+        IM_CHECK_EQ(system.size(), size_t(1));
+        IM_CHECK_STR_EQ(system[0].type.c_str(), "image/png");
+        const auto sdr = decode(system[0]);
+        IM_CHECK_NO_RET(sdr != nullptr);
+        if (!sdr)
             return;
-        IM_CHECK(out[0]->size() == copied.size());
+        IM_CHECK(sdr->size() == copied.size());
         float worst = 0.f;
         for (int c = 0; c < 3; ++c)
             for (int y = 0; y < copied.size().y; ++y)
                 for (int x = 0; x < copied.size().x; ++x)
                 {
-                    auto code = [](float v) { return 255.f * linear_to_sRGB(std::clamp(v, 0.f, 1.f)); };
-                    worst     = std::max(worst, std::abs(code(out[0]->channels[c](x, y)) -
-                                                         code(view->channels[c](x, y))));
+                    auto        code = [](float v) { return 255.f * linear_to_sRGB(std::clamp(v, 0.f, 1.f)); };
+                    const float view = 2.f * img->channels[c](copied.min - o + int2{x, y});
+                    worst            = std::max(worst, std::abs(code(sdr->channels[c](x, y)) - code(view)));
                 }
         IM_CHECK_LE(worst, 1.5f);
 
-        // HDRView's own copy, read back, pastes what was copied rather than the eight-bit file
+        // which HDRView's own paste then takes too, as other applications do
         const Box2i target{middle, middle + copied.size()};
         app->set_selection(target);
         ctx->Yield();
         menu_click(ctx, "Edit/Paste");
         IM_CHECK(wait_until(ctx, [img] { return img->history.undo_name() == "Paste"; }));
+        IM_CHECK_EQ(img->channels[0](target.min - o), sdr->channels[0](int2{0, 0}));
+
+        // while a copy's own values, read back, paste at full precision rather than as either file
+        app->set_selection(copied);
+        ctx->Yield();
+        menu_click(ctx, "Edit/Copy");
+        app->set_selection(target);
+        ctx->Yield();
+        menu_click(ctx, "Edit/Paste");
         IM_CHECK_EQ(img->channels[0](target.min - o), bright);
 
         // once another application copies an image, Paste pastes that one instead, and is offered even when HDRView
         // has copied nothing itself
+        // offered as a TIFF and a smaller PNG, of which a paste takes the TIFF, which can hold floats
         {
-            std::ostringstream png;
-            save_png_image(*img->duplicate(Box2i{o, o + int2{5, 4}}), png, "other.png", false);
-            system = {"image/png", png.str()};
+            std::ostringstream tiff, png;
+            save_tiff_image(*img->duplicate(Box2i{o, o + int2{5, 4}}), tiff, "other.tif", TransferFunction::Linear, 0,
+                            2);
+            save_png_image(*img->duplicate(Box2i{o, o + int2{3, 2}}), png, "other.png", false);
+            system = {{"image/png", png.str()}, {"image/tiff", tiff.str()}};
         }
         app->set_clipboard(nullptr);
         ctx->Yield();
         IM_CHECK_EQ(app->action("Paste").enabled(), true);
         menu_click(ctx, "Edit/Paste");
         IM_CHECK(app->clipboard() != nullptr && app->clipboard()->size() == int2(5, 4));
+
+        // one in another color space asks first: converted, it looks as it did; not converted, it keeps its numbers
+        {
+            const Box2i source{middle + int2{2, 2}, middle + int2{7, 6}};
+            const Box2i landing{middle + int2{0, 12}, middle + int2{5, 16}};
+            const auto  p3 = selected_group_in(*img->duplicate(source),
+                                               gamut_chromaticities(ColorGamut_Display_P3_SMPTE432),
+                                               AdaptationMethod_Bradford);
+            std::ostringstream png;
+            save_png_image(*p3, png, "p3.png", false, false, true);
+            system = {{"image/png", png.str()}};
+
+            // the worst relative difference of the landed colors from \p want's, over the clipboard's rectangle
+            auto off_by = [&](const std::function<float(int, int2)> &want)
+            {
+                float worst = 0.f;
+                for (int y = 0; y < source.size().y; ++y)
+                    for (int x = 0; x < source.size().x; ++x)
+                        for (int c = 0; c < 3; ++c)
+                        {
+                            const float w = want(c, int2{x, y});
+                            const float v = img->channels[c](landing.min - o + int2{x, y});
+                            worst         = std::max(worst, std::abs(v - w) / std::max(std::abs(w), 0.05f));
+                        }
+                return worst;
+            };
+            for (const bool convert : {true, false})
+            {
+                app->set_clipboard(nullptr);
+                app->set_selection(landing);
+                ctx->Yield();
+                menu_click(ctx, "Edit/Paste");
+                ctx->SetRef("//Paste");
+                IM_CHECK(ctx->ItemExists("Don't convert"));
+                if (!convert)
+                    ctx->ItemClick("Don't convert");
+                ctx->ItemClick("Paste");
+                ctx->SetRef("");
+                IM_CHECK(dialog_closed(ctx, "Paste"));
+                if (convert)
+                    IM_CHECK_LE(off_by([&](int c, int2 q) { return img->channels[c](source.min - o + q); }), 2e-3f);
+                else
+                    IM_CHECK_LE(off_by([&](int c, int2 q) { return p3->channels[c](q); }), 2e-3f);
+            }
+        }
 
         // with no image open, Paste opens the clipboard's image, as File > From clipboard does beside open images
         reset_images(ctx);

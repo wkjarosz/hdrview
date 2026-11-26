@@ -1001,8 +1001,10 @@ void save_png_image(const Image &img, ostream &os, string_view /*filename*/, boo
     if (is_hdr_encoding(tf))
     {
 #ifdef PNG_cLLI_SUPPORTED
-        const auto cll = measure_content_light_level(img, cicp_primaries < 0);
-        png_set_cLLI(png_ptr, info_ptr.get(), cll.max_cll, cll.max_fall);
+        // at most PQ's peak of 10,000 cd/m^2, which no HDR encoding exceeds, keeping them in libpng's fixed point
+        const auto cll  = measure_content_light_level(img, cicp_primaries < 0);
+        const auto peak = [](float nits) { return std::clamp(nits, 0.f, 10000.f); };
+        png_set_cLLI(png_ptr, info_ptr.get(), peak(cll.max_cll), peak(cll.max_fall));
 #endif
 #ifdef PNG_mDCV_SUPPORTED
         if (const auto md = mastering_display(img.metadata.value("header", json::object())))
