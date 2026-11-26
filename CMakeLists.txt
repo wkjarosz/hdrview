@@ -636,6 +636,9 @@ if(EMSCRIPTEN)
   target_include_directories(emscripten-browser-file INTERFACE "${emscripten-browser-file_SOURCE_DIR}")
   list(APPEND HDRVIEW_DEPENDENCIES "emscripten-browser-file")
 
+  # the browser's clipboard; see src/clipboard_platform.h
+  list(APPEND EXTRA_SOURCES src/clipboard_web.cpp)
+
 else()
 
   # The file dialogs run in HDRView's own process, so they take keyboard focus. On Linux they go through
@@ -684,6 +687,7 @@ else()
     message(FATAL_ERROR "Could not download the clip library.")
   endif()
   list(APPEND HDRVIEW_DEPENDENCIES "clip")
+  list(APPEND EXTRA_SOURCES src/clipboard_native.cpp)
 
 endif()
 
