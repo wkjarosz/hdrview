@@ -331,6 +331,7 @@ void HDRViewApp::draw_menus()
     if (ImGui::BeginMenu("File"))
     {
         MenuItem(action("Open image..."));
+        MenuItem(action("From clipboard"));
         MenuItem(action("Image loading options..."));
 #if defined(__EMSCRIPTEN__)
         MenuItem(action("Open URL..."));

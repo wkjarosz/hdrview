@@ -151,6 +151,10 @@ public:
         bool draws_subject_selector = true; ///< Whether "Apply to" means anything here, and so is shown.
         bool fans_out               = true; ///< Whether a multi-selection runs this once per image.
         bool needs_editable         = true; ///< Whether the image has to accept edits for this to be offered.
+        /// Whether this copies into EditContext::clipboard, which the application also puts on the system clipboard.
+        bool fills_clipboard = false;
+        /// Whether this reads EditContext::clipboard, which the application first fills from the system clipboard.
+        bool reads_clipboard = false;
     };
 
     explicit EditCommand(Info info) : m_info(std::move(info)) {}

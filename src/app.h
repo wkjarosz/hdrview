@@ -111,6 +111,11 @@ public:
         Not an undoable edit: the history belongs to an image, so closing the copy is what takes it back.
     */
     void duplicate_image();
+    /// Open the system clipboard's image beside the current one, or HDRView's own last copy at full precision.
+    /**
+        On the web, once the browser has read the clipboard.
+    */
+    void open_clipboard_image();
 
     /// Run \p action_name with \p group standing in for the selected one, then put the selection back.
     /**

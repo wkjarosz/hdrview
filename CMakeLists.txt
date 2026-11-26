@@ -667,6 +667,24 @@ else()
     list(APPEND HDRVIEW_DEPENDENCIES "PkgConfig::DBUS")
   endif()
 
+  # The system clipboard on Windows, macOS and X11; Wayland's goes through the GLFW fork. HDRView passes encoded
+  # files through clip's custom formats, and uses its image support only to read a Windows bitmap.
+  CPMAddPackage(
+    NAME clip
+    GITHUB_REPOSITORY dacap/clip
+    GIT_TAG 9cd472bbd8a97b115957fc5220f34e78fbac825e
+    OPTIONS "CLIP_EXAMPLES OFF" "CLIP_TESTS OFF" "CLIP_INSTALL OFF" "CLIP_ENABLE_IMAGE ON" "CLIP_X11_WITH_PNG OFF"
+    SYSTEM YES
+    EXCLUDE_FROM_ALL YES
+  )
+  if(clip_ADDED)
+    disable_target_warnings(clip)
+    mark_as_system_library(clip)
+  else()
+    message(FATAL_ERROR "Could not download the clip library.")
+  endif()
+  list(APPEND HDRVIEW_DEPENDENCIES "clip")
+
 endif()
 
 CPMAddPackage(
@@ -1814,6 +1832,7 @@ set(HDRVIEW_SOURCES
     src/app-zoom.cpp
     src/app.cpp
     src/chromaticity.cpp
+    src/clipboard.cpp
     src/colormap.cpp
     src/colorspace.cpp
     src/common.cpp

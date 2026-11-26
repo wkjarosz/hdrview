@@ -7,12 +7,16 @@
 */
 
 #include "app.h"
+#include "clipboard.h"
 #include "colorspace.h"
 #include "edit/commands.h"
 #include "edit/envmap.h"
 #include "edit/preview.h"
 #include "fonts.h"
 #include "image.h"
+#include "imageio/image_loader.h"
+#include "imageio/png.h"
+#include "imageio/streams.h"
 #include "shared/edits.h"
 #include "test_gui_registry.h"
 #include "test_gui_support.h"
@@ -27,6 +31,8 @@
 #include <functional>
 #include <limits>
 #include <map>
+#include <set>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -45,6 +51,7 @@ bool load_fixture(ImGuiTestContext *ctx)
     hdrview()->roi()          = Box2i{};
     hdrview()->edit_subject() = EditSubject{};
     hdrview()->set_clipboard(nullptr);
+    use_private_clipboard() = {};
     IM_CHECK_SILENT_RETV(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE_2}) == 1, false);
     IM_CHECK_SILENT_RETV(hdrview()->current_image() != nullptr, false);
     return true;
@@ -623,6 +630,117 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK_EQ(app->action("Paste").enabled(), false);
 
         app->set_clipboard(nullptr);
+        reset_images(ctx);
+    };
+
+    // Copy puts what the view shows on the system clipboard, in eight bits, and Paste and File > From clipboard bring
+    // in other applications' images: pasted into the image, or opened as a new one, which Paste also does when no
+    // image is open. HDRView's own copy pastes and opens at full precision. The tests keep the clipboard in memory,
+    // so writing to it directly stands in for another application.
+    t           = IM_REGISTER_TEST(engine, "edit", "the system clipboard carries copies out and other images in");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+        auto          *app    = hdrview();
+        auto           img    = app->current_image();
+        ClipboardFile &system = use_private_clipboard();
+        OnExit         restore{[app, &system]
+                       {
+                           system = {};
+                           app->set_clipboard(nullptr);
+                           app->set_selection(Box2i{});
+                           app->exposure() = app->exposure_live() = 0.f;
+                       }};
+
+        // odd and unequal sides, inside the fixture's opaque middle, with a value at its first pixel that no eight-bit
+        // file holds
+        const int2  o      = img->data_window.min;
+        const int2  middle = o + img->size() / 2;
+        const Box2i copied{middle - int2{20, 10}, middle - int2{7, 3}};
+        const float bright             = 4.f;
+        img->channels[0](copied.min - o) = bright;
+        // with nothing on either clipboard, neither is offered
+        ctx->Yield();
+        IM_CHECK_EQ(app->action("Paste").enabled(), false);
+        IM_CHECK_EQ(app->action("From clipboard").enabled(), false);
+
+        app->set_selection(copied);
+        app->exposure() = app->exposure_live() = 1.f; // so the view differs from the data
+        ctx->Yield();
+        menu_click(ctx, "Edit/Copy");
+
+        // out, as a PNG of the selection as the view shows it, to within the dither
+        IM_CHECK_STR_EQ(system.type.c_str(), "image/png");
+        SpanIStream out_bytes{system.bytes};
+        const auto  out  = load_image(out_bytes, "copy.png");
+        const auto  view = app->image_to_save(HDRViewApp::SaveMode_Rendition, true, 0.f);
+        IM_CHECK_EQ_NO_RET(out.size(), size_t(1));
+        IM_CHECK_NO_RET(view != nullptr);
+        if (out.size() != 1 || !view)
+            return;
+        IM_CHECK(out[0]->size() == copied.size());
+        float worst = 0.f;
+        for (int c = 0; c < 3; ++c)
+            for (int y = 0; y < copied.size().y; ++y)
+                for (int x = 0; x < copied.size().x; ++x)
+                {
+                    auto code = [](float v) { return 255.f * linear_to_sRGB(std::clamp(v, 0.f, 1.f)); };
+                    worst     = std::max(worst, std::abs(code(out[0]->channels[c](x, y)) -
+                                                         code(view->channels[c](x, y))));
+                }
+        IM_CHECK_LE(worst, 1.5f);
+
+        // HDRView's own copy, read back, pastes what was copied rather than the eight-bit file
+        const Box2i target{middle, middle + copied.size()};
+        app->set_selection(target);
+        ctx->Yield();
+        menu_click(ctx, "Edit/Paste");
+        IM_CHECK(wait_until(ctx, [img] { return img->history.undo_name() == "Paste"; }));
+        IM_CHECK_EQ(img->channels[0](target.min - o), bright);
+
+        // once another application copies an image, Paste pastes that one instead, and is offered even when HDRView
+        // has copied nothing itself
+        {
+            std::ostringstream png;
+            save_png_image(*img->duplicate(Box2i{o, o + int2{5, 4}}), png, "other.png", false);
+            system = {"image/png", png.str()};
+        }
+        app->set_clipboard(nullptr);
+        ctx->Yield();
+        IM_CHECK_EQ(app->action("Paste").enabled(), true);
+        menu_click(ctx, "Edit/Paste");
+        IM_CHECK(app->clipboard() != nullptr && app->clipboard()->size() == int2(5, 4));
+
+        // with no image open, Paste opens the clipboard's image, as File > From clipboard does beside open images
+        reset_images(ctx);
+        app->set_clipboard(nullptr);
+        ctx->Yield();
+        IM_CHECK_EQ(app->action("Paste").enabled(), true);
+        menu_click(ctx, "Edit/Paste");
+        IM_CHECK(wait_until(ctx, [app] { return app->num_images() == 1; }));
+        IM_CHECK(app->current_image() && app->current_image()->size() == int2(5, 4));
+        menu_click(ctx, "File/From clipboard");
+        IM_CHECK(wait_until(ctx, [app] { return app->num_images() == 2; }));
+
+        // and HDRView's own copy opens at full precision too
+        app->set_selection(Box2i{});
+        app->current_image()->channels[0](int2{0, 0}) = bright;
+        ctx->Yield();
+        menu_click(ctx, "Edit/Copy");
+        menu_click(ctx, "File/From clipboard");
+        IM_CHECK(wait_until(ctx, [app] { return app->num_images() == 3; }));
+        IM_CHECK(app->current_image() && app->current_image()->channels[0](int2{0, 0}) == bright);
+
+        // each image opened from the clipboard, of either kind, goes by a name of its own
+        std::set<std::string> names;
+        for (int i = 0; i < app->num_images(); ++i)
+        {
+            IM_CHECK(app->image(i)->filename.rfind("Pasted image (", 0) == 0);
+            names.insert(app->image(i)->filename);
+        }
+        IM_CHECK_EQ(int(names.size()), app->num_images());
+
         reset_images(ctx);
     };
 

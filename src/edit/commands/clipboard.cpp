@@ -7,8 +7,9 @@
 /** \file clipboard.cpp
     \author Wojciech Jarosz
 
-    Cut, copy and paste, over a clipboard that holds an image. A pasted region keeps its full precision
-    and its channels; the system clipboard would flatten an HDR selection to eight-bit RGBA.
+    Cut, copy and paste, over a clipboard that holds an image. A pasted region keeps its full precision and its
+    channels. The application also puts an eight-bit rendition of each copy on the system clipboard, and fills this
+    clipboard from the system's when another application has put an image there since.
 */
 
 #include "edit/commands.h"
@@ -42,8 +43,9 @@ class Copy final : public EditCommand
 public:
     Copy() : EditCommand({{"Copy", "Copy selection"}, ICON_MY_COPY, ImGuiMod_Ctrl | ImGuiKey_C})
     {
-        m_info.needs_editable = false; // copying a live image is fine
-        m_info.fans_out       = false; // one clipboard
+        m_info.needs_editable  = false; // copying a live image is fine
+        m_info.fans_out        = false; // one clipboard
+        m_info.fills_clipboard = true;
     }
 
     bool enabled(const EditContext &ctx) const override { return ctx.image && ctx.clipboard; }
@@ -61,7 +63,8 @@ public:
     Cut() : EditCommand({{"Cut", "Cut selection"}, ICON_MY_CUT, ImGuiMod_Ctrl | ImGuiKey_X})
     {
         // the copy half cannot fan out; see Copy
-        m_info.fans_out = false;
+        m_info.fans_out        = false;
+        m_info.fills_clipboard = true;
     }
 
     void apply(const EditContext &ctx) override
@@ -82,7 +85,7 @@ public:
 class Paste final : public EditCommand
 {
 public:
-    Paste() : EditCommand({{"Paste"}, ICON_MY_PASTE, ImGuiMod_Ctrl | ImGuiKey_V}) {}
+    Paste() : EditCommand({{"Paste"}, ICON_MY_PASTE, ImGuiMod_Ctrl | ImGuiKey_V}) { m_info.reads_clipboard = true; }
 
     bool enabled(const EditContext &ctx) const override { return ctx.clipboard && *ctx.clipboard; }
 
@@ -129,6 +132,7 @@ public:
                      true,
                      "Paste"})
     {
+        m_info.reads_clipboard = true;
     }
 
     bool enabled(const EditContext &ctx) const override { return ctx.clipboard && *ctx.clipboard; }

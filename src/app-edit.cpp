@@ -5,12 +5,17 @@
 //
 
 #include "app.h"
+#include "clipboard.h"
 #include "edit/envmap.h"
 #include "edit/filters.h"
 #include "fonts.h"
 #include "image.h"
+#include "imageio/image_loader.h"
+#include "imageio/png.h"
+#include "imageio/streams.h"
 #include "imgui_ext.h"
 #include "imgui_internal.h"
+#include "timer.h"
 
 #include <hello_imgui/hello_imgui.h>
 
@@ -19,6 +24,7 @@
 #include <numeric>
 #include <smallthreadpool.h>
 #include <spdlog/spdlog.h>
+#include <sstream>
 #include <thread>
 
 using std::function;
@@ -28,6 +34,8 @@ namespace
 {
 /// The preview frame of an edit confirmed and handed to a worker, whose preview stays up until its result lands.
 constexpr int k_preview_held = std::numeric_limits<int>::max();
+
+void copy_view_to_system_clipboard(HDRViewApp &app);
 } // namespace
 
 ImagePtr HDRViewApp::target_image() { return m_target_image_override ? m_target_image_override : current_image(); }
@@ -136,21 +144,154 @@ void HDRViewApp::apply_edit_command(EditCommand &cmd)
         m_roi = roi;
         cmd.apply(edit_context(img));
     }
+
+    if (cmd.info().fills_clipboard)
+        copy_view_to_system_clipboard(*this);
+}
+
+namespace
+{
+
+/// Put the view of what Copy or Cut just took on the system clipboard, as an sRGB PNG other applications read.
+void copy_view_to_system_clipboard(HDRViewApp &app)
+{
+    // Other applications read what the view shows, so this is an SDR rendition. HDRView's own paste recognizes it
+    // when it reads it back, and takes the full-precision copy in the app's clipboard instead.
+    const Chromaticities srgb{};
+    auto img = app.image_to_save(HDRViewApp::SaveMode_Rendition, app.edit_subject().selection_only, 0.f, &srgb);
+    if (!img)
+        return;
+
+    try
+    {
+        Timer              timer;
+        std::ostringstream os;
+        // zlib's fastest level, since a clipboard's file is short-lived: six times faster than its default, for a
+        // file an eighth larger
+        save_png_image(*img, os, "clipboard.png", true, false, false, TransferFunction::sRGB, 1);
+        if (set_clipboard_file({"image/png", os.str()}))
+            spdlog::info("Copied {}x{} pixels to the system clipboard in {:.0f} ms.", img->size().x, img->size().y,
+                         timer.elapsed());
+    }
+    catch (const std::exception &e)
+    {
+        spdlog::error("Could not copy to the system clipboard: {}", e.what());
+    }
+}
+
+/// Read the system clipboard's image and hand it to \p use at the start of a frame.
+/**
+    Natively that is the next frame; on the web, the first after the browser has read the clipboard.
+*/
+void read_clipboard_then(HDRViewApp &app, std::function<void(std::optional<ClipboardFile>)> use)
+{
+    read_clipboard_image(
+        [&app, use = std::move(use)](std::optional<ClipboardFile> file) mutable
+        {
+            app.post_to_main_thread([use = std::move(use), file = std::move(file)]() mutable { use(std::move(file)); });
+            app.wake_event_loop();
+        });
+}
+
+/// \p stem with the extension that \p file's type has.
+string clipboard_file_name(const string &stem, const ClipboardFile &file)
+{
+    const auto slash = file.type.find('/');
+    return slash == string::npos ? stem : stem + "." + file.type.substr(slash + 1);
+}
+
+/// The name of the next image opened from the clipboard, numbered from 1 within each run of HDRView.
+string next_pasted_image_name()
+{
+    static int count = 0;
+    return fmt::format("Pasted image ({})", ++count);
+}
+
+/// Take another application's image in \p file into the app's clipboard; HDRView's own copy is already there.
+void take_clipboard_file(HDRViewApp &app, const std::optional<ClipboardFile> &file)
+{
+    if (!file || is_own_clipboard_file(*file))
+    {
+        if (!app.clipboard())
+            spdlog::warn("The clipboard holds no image.");
+        return;
+    }
+
+    try
+    {
+        // decoded here and now, since the paste that asked for it runs next
+        SpanIStream in{file->bytes};
+        auto        images = load_image(in, clipboard_file_name("clipboard", *file));
+        if (!images.empty())
+            app.set_clipboard(images.front());
+    }
+    catch (const std::exception &e)
+    {
+        spdlog::error("Could not read the image on the system clipboard: {}", e.what());
+    }
+}
+
+/// Open another application's image in \p file, or else a copy of HDRView's own, beside the current image.
+void open_clipboard_file(HDRViewApp &app, const std::optional<ClipboardFile> &file)
+{
+    if (file && !is_own_clipboard_file(*file))
+        app.load_image(clipboard_file_name(next_pasted_image_name(), *file), file->bytes, true);
+    else if (auto clip = app.clipboard())
+    {
+        // a copy, since edits to the new image must not reach the clipboard; named without an extension, since no
+        // file format holds it
+        if (auto copy = clip->duplicate(Box2i{}))
+        {
+            copy->filename = next_pasted_image_name();
+            app.add_image_beside_current(copy, "");
+        }
+    }
+    else
+        spdlog::warn("The clipboard holds no image.");
+}
+
+} // namespace
+
+void HDRViewApp::open_clipboard_image()
+{
+    read_clipboard_then(*this, [this](std::optional<ClipboardFile> file) { open_clipboard_file(*this, file); });
 }
 
 void HDRViewApp::invoke_edit_command(EditCommand &cmd)
 {
-    if (cmd.info().has_dialog)
+    const auto run = [this, c = &cmd]
     {
-        dialog(cmd.info().names.front()).open = true;
-        return;
-    }
+        if (c->info().has_dialog)
+            dialog(c->info().names.front()).open = true;
+        else
+            apply_edit_command(*c);
+    };
+    if (!cmd.info().reads_clipboard)
+        return run();
 
-    apply_edit_command(cmd);
+    // read the system clipboard first, since another application may have copied an image since HDRView last did
+    read_clipboard_then(*this,
+                        [this, run](std::optional<ClipboardFile> file)
+                        {
+                            // with nothing to paste into, a paste opens what it would have pasted
+                            if (!target_image())
+                                return open_clipboard_file(*this, file);
+                            take_clipboard_file(*this, file);
+                            run();
+                        });
 }
 
 bool HDRViewApp::edit_command_enabled(const EditCommand &cmd)
 {
+    if (cmd.info().reads_clipboard)
+    {
+        // opening the clipboard's image instead; see invoke_edit_command()
+        if (!target_image())
+            return clipboard_holds_image() || m_clipboard;
+        // another application's image, which the command sees only once invoke_edit_command() has read it
+        if (clipboard_holds_image() && (!cmd.info().needs_editable || can_edit(target_image())))
+            return true;
+    }
     if (cmd.info().needs_editable && !can_edit(target_image()))
         return false;
     return cmd.enabled(edit_context());

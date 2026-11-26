@@ -1,4 +1,5 @@
 #include "app.h"
+#include "clipboard.h"
 
 #include <algorithm>
 
@@ -740,6 +741,7 @@ void HDRViewApp::setup_frame_callbacks()
     {
         drain_main_thread_queue();
         drain_running_filter();
+        watch_clipboard();
 
 #if HDRVIEW_ENABLE_IPC
         // See m_ipc_listen_requested: the toggle's Action needs a bool, but the socket is the truth.
@@ -1078,6 +1080,14 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
             m_actions[a.names[0]] = a;
         };
         add(Action{{"Open image..."}, ICON_MY_OPEN_IMAGE, ImGuiMod_Ctrl | ImGuiKey_O, 0, [this]() { open_image(); }});
+
+        // Paste does the same when no image is open
+        add(Action{{"From clipboard", "New image from clipboard", "Create image from clipboard", "Paste as new image"},
+                   ICON_MY_PASTE,
+                   ImGuiKey_None,
+                   0,
+                   [this]() { open_clipboard_image(); },
+                   [this]() { return clipboard_holds_image() || m_clipboard != nullptr; }});
 
         add(Action{{"Create gradient image..."}, ICON_MY_DITHER, ImGuiKey_None, 0, [this]() {
                        dialog("Create gradient image...").open = true;
