@@ -98,14 +98,13 @@ constexpr unsigned k_heif_levels = 0u;
 
 using Save   = void (*)(const Image &, std::ostream &, TransferFunction);
 using Offers = bool (*)(TransferFunction);
-using Sniff  = bool (*)(std::istream &);
 
 /// One setting of a format's options, and what it promises.
 struct Variant
 {
     const char *name;
     const char *ext;
-    const char *loader; ///< the default_loaders() entry that must claim the file
+    const char *loader; ///< how the loader that must read the file names itself in metadata["loader"]
     unsigned    caps;
     float       step;    ///< how far a code value may move: the quantization step, or the lossy codec's worst error
     Offers      offers;  ///< the transfer functions its dialog offers, each of which it must label
@@ -123,66 +122,16 @@ bool always(TransferFunction) { return true; }
 bool never(TransferFunction) { return false; }
 bool icc_labels(TransferFunction tf) { return ICCProfile::can_label(tf); }
 
-bool is_exr(std::istream &is) { return is_exr_image(is, "a.exr"); }
-
-/// Every loader's sniff, in the order default_loaders() in image_loader.cpp asks them.
-const std::pair<const char *, Sniff> k_sniffs[] = {
-    {"openexr", is_exr},
-#if HDRVIEW_ENABLE_LIBUHDR
-    {"libultrahdr", is_uhdr_image},
-#endif
-#if HDRVIEW_ENABLE_LIBJPEG
-    {"libjpg", is_jpg_image},
-#endif
-    {"qoi", is_qoi_image},
-#if HDRVIEW_ENABLE_LIBJXL
-    {"libjxl", is_jxl_image},
-#endif
-#if HDRVIEW_ENABLE_J2K
-    {"openjpeg", is_j2k_image},
-#endif
-    {"dds", is_dds_image},
-#if HDRVIEW_ENABLE_LIBHEIF
-    {"libheif", is_heif_image},
-#endif
-#if HDRVIEW_ENABLE_LIBPNG
-    {"libpng", is_png_image},
-#endif
-#if HDRVIEW_ENABLE_LIBWEBP
-    {"libwebp", is_webp_image},
-#endif
-#if HDRVIEW_ENABLE_LIBRAW
-    {"libraw", is_raw_image},
-#endif
-#if HDRVIEW_ENABLE_LIBTIFF
-    {"libtiff", is_tiff_image},
-#endif
-    {"stb", is_stb_image},
-    {"pfm", is_pfm_image},
-};
-
 #if HDRVIEW_ENABLE_LIBPNG
 constexpr const char *k_png_loader = "libpng";
 #else
-constexpr const char *k_png_loader = "stb";
+constexpr const char *k_png_loader = "stb_image";
 #endif
 #if HDRVIEW_ENABLE_LIBJPEG
-constexpr const char *k_jpg_loader = "libjpg";
+constexpr const char *k_jpg_loader = "libjpeg-turbo";
 #else
-constexpr const char *k_jpg_loader = "stb";
+constexpr const char *k_jpg_loader = "stb_image";
 #endif
-
-/// The loader load_image() hands \p bytes to: the first whose sniff claims them, or "" if none does.
-std::string claiming_loader(const std::string &bytes)
-{
-    for (const auto &[name, sniff] : k_sniffs)
-    {
-        SpanIStream is{bytes};
-        if (sniff(is))
-            return name;
-    }
-    return "";
-}
 
 template <int pixel_type, Imf::Compression compression>
 void save_exr(const Image &img, std::ostream &os, TransferFunction)
@@ -196,14 +145,14 @@ void save_exr(const Image &img, std::ostream &os, TransferFunction)
 // clang-format off
 const Variant k_variants[] = {
     // the default-argument form, which has to fall back to something sized for this image
-    {"exr", ".exr", "openexr", Cap_Default | Cap_Float | Cap_Alpha | Cap_White | Cap_Refuses_Cut, 1e-3f, offers_linear, always,
+    {"exr", ".exr", "OpenEXR", Cap_Default | Cap_Float | Cap_Alpha | Cap_White | Cap_Refuses_Cut, 1e-3f, offers_linear, always,
      [](const Image &i, std::ostream &o, TransferFunction) { save_exr_image(i, o, "a.exr"); }},
-    {"exr float zip", ".exr", "openexr", Cap_Float | Cap_Alpha | Cap_White, 1e-6f, offers_linear, always, save_exr<0, Imf::ZIP_COMPRESSION>},
-    {"exr half rle", ".exr", "openexr", Cap_Float | Cap_Alpha | Cap_White, 1e-3f, offers_linear, always, save_exr<1, Imf::RLE_COMPRESSION>},
-    {"exr half dwaa", ".exr", "openexr", Cap_Float | Cap_Alpha | Cap_White | Cap_Lossy, 0.02f, offers_linear, always, save_exr<1, Imf::DWAA_COMPRESSION>},
+    {"exr float zip", ".exr", "OpenEXR", Cap_Float | Cap_Alpha | Cap_White, 1e-6f, offers_linear, always, save_exr<0, Imf::ZIP_COMPRESSION>},
+    {"exr half rle", ".exr", "OpenEXR", Cap_Float | Cap_Alpha | Cap_White, 1e-3f, offers_linear, always, save_exr<1, Imf::RLE_COMPRESSION>},
+    {"exr half dwaa", ".exr", "OpenEXR", Cap_Float | Cap_Alpha | Cap_White | Cap_Lossy, 0.02f, offers_linear, always, save_exr<1, Imf::DWAA_COMPRESSION>},
     {"pfm", ".pfm", "pfm", Cap_Default | Cap_Float, 1e-6f, pfm_offers_tf, never,
      [](const Image &i, std::ostream &o, TransferFunction) { save_pfm_image(i, o, "a.pfm"); }},
-    {"hdr_stb", ".hdr", "stb", Cap_Default | Cap_Float, 0.008f, [](TransferFunction t) { return stb_offers_tf(t, true); }, never,
+    {"hdr_stb", ".hdr", "stb_image", Cap_Default | Cap_Float, 0.008f, [](TransferFunction t) { return stb_offers_tf(t, true); }, never,
      [](const Image &i, std::ostream &o, TransferFunction) { save_stb_hdr(i, o, "a.hdr"); }},
     {"png8", ".png", k_png_loader, Cap_Default | Cap_Alpha | k_png_levels, k_8bit, png_offers_tf, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_png_image(i, o, "a.png", false, false, false, t); }},
@@ -213,9 +162,9 @@ const Variant k_variants[] = {
      [](const Image &i, std::ostream &o, TransferFunction t) { save_png_image(i, o, "a.png", false, false, true, t); }},
     {"png_stb", ".png", k_png_loader, Cap_Default | Cap_Alpha, k_8bit, [](TransferFunction t) { return stb_offers_tf(t, false); }, never,
      [](const Image &i, std::ostream &o, TransferFunction) { save_stb_png(i, o, "a.png", false); }},
-    {"tga_stb", ".tga", "stb", Cap_Default | Cap_Alpha, k_8bit, [](TransferFunction t) { return stb_offers_tf(t, false); }, never,
+    {"tga_stb", ".tga", "stb_image", Cap_Default | Cap_Alpha, k_8bit, [](TransferFunction t) { return stb_offers_tf(t, false); }, never,
      [](const Image &i, std::ostream &o, TransferFunction) { save_stb_tga(i, o, "a.tga", false); }},
-    {"bmp_stb", ".bmp", "stb", Cap_Default, k_8bit, [](TransferFunction t) { return stb_offers_tf(t, false); }, never,
+    {"bmp_stb", ".bmp", "stb_image", Cap_Default, k_8bit, [](TransferFunction t) { return stb_offers_tf(t, false); }, never,
      [](const Image &i, std::ostream &o, TransferFunction) { save_stb_bmp(i, o, "a.bmp", false); }},
     {"jpg_stb", ".jpg", k_jpg_loader, Cap_Default | Cap_Lossy, 0.03f, [](TransferFunction t) { return stb_offers_tf(t, false); }, never,
      [](const Image &i, std::ostream &o, TransferFunction) { save_stb_jpg(i, o, "a.jpg", false); }},
@@ -239,10 +188,10 @@ const Variant k_variants[] = {
      { save_qoi_image(i, o, "a.qoi", t.type == TransferFunction::sRGB, false); }},
 #if HDRVIEW_ENABLE_LIBJPEG
     // libjpeg subsamples chroma 4:2:0, which moves the image's corner furthest
-    {"jpg q95", ".jpg", "libjpg", Cap_Default | Cap_Lossy, 0.07f, jpg_offers_tf, never,
+    {"jpg q95", ".jpg", "libjpeg-turbo", Cap_Default | Cap_Lossy, 0.07f, jpg_offers_tf, never,
      [](const Image &i, std::ostream &o, TransferFunction)
      { save_jpg_image(i, o, "a.jpg", false, 95, false); }},
-    {"jpg q60 progressive", ".jpg", "libjpg", Cap_Lossy, 0.1f, jpg_offers_tf, never,
+    {"jpg q60 progressive", ".jpg", "libjpeg-turbo", Cap_Lossy, 0.1f, jpg_offers_tf, never,
      [](const Image &i, std::ostream &o, TransferFunction)
      { save_jpg_image(i, o, "a.jpg", false, 60, true); }},
 #endif
@@ -595,14 +544,14 @@ TEST_CASE("every setting of every writer round-trips each transfer function its 
             if (!bytes)
                 continue;
 
-            // the file is its own format's, and no loader load_image() asks first mistakes it for one of theirs
-            CHECK(claiming_loader(*bytes) == variant.loader);
-
             const auto reloaded = load(variant, *bytes);
             CHECK(reloaded.size() == 1);
             if (reloaded.size() != 1)
                 continue;
             const auto &back = reloaded[0];
+
+            // read by its own format's loader, which no loader load_image() asks first mistook it for one of theirs
+            CHECK(back->metadata.value("loader", std::string{}).rfind(variant.loader, 0) == 0);
 
             // Compared in code values, where the setting's step is a step whatever the level, and in the primaries the
             // samples were quantized in: the image's own when the file kept and recorded them, sRGB's when it
