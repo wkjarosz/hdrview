@@ -939,7 +939,7 @@ Color4 tonemap(Color4 color, float gamma, Tonemap_ tonemap_mode, Colormap_ color
     return shader::tonemap(color, tonemap_mode, gamma, colormap_sRGB);
 }
 
-float2 blend(float2 top, float2 bottom, BlendMode_ blend_mode)
+float2 blend(float2 top, float2 bottom, BlendMode blend_mode)
 {
     float diff  = top.x - bottom.x;
     float alpha = top.y + bottom.y * (1.f - top.y);

@@ -318,7 +318,7 @@ float distance_to_segment(float2 p, float2 a, float2 b)
 /**
     The inverse of what aligned_text_pos() subtracts, so an anchor can be recovered from a box.
 */
-float2 text_anchor_offset(int align, float2 extent)
+float2 text_anchor_offset(VgCommand::TextAlign align, float2 extent)
 {
     float x = 0.f;
     if (align & VgCommand::TextAlign_Center)

@@ -52,7 +52,7 @@ SHARED_FN vec4 choose_channel(vec4 rgba, Channels_ channel, bool straight_alpha)
 }
 
 /// The current image composited with the reference under one of the comparison modes.
-SHARED_FN vec4 blend(vec4 top, vec4 bottom, BlendMode_ mode)
+SHARED_FN vec4 blend(vec4 top, vec4 bottom, BlendMode mode)
 {
     vec3  t     = rgb_of(top);
     vec3  b     = rgb_of(bottom);

@@ -494,10 +494,9 @@ TEST_CASE("blend() gives each blend mode's value, and its overloads agree on eve
     // (src/shared/pipeline.h); its channels differ, so one that reads another's value is caught too.
     const float4 top{0.6f, 0.15f, 1.3f, 0.75f}, bottom{0.25f, 0.8f, 0.05f, 0.5f};
 
-    for (int m = 0; m < BlendMode_COUNT; ++m)
+    for (BlendMode mode = 0; mode < BlendMode_COUNT; ++mode)
     {
-        auto mode = (BlendMode_)m;
-        CAPTURE(blend_mode_names()[m]);
+        CAPTURE(blend_mode_names()[mode]);
 
         float4 v4 = blend(top, bottom, mode);
         for (int c = 0; c < 3; ++c)

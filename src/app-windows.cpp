@@ -975,7 +975,7 @@ void HDRViewApp::draw_file_window()
             const bool is_selected = (m_blend_mode == n);
             if (ImGui::Selectable(blend_mode_names()[n].c_str(), is_selected))
             {
-                m_blend_mode = (BlendMode_)n;
+                m_blend_mode = n;
                 spdlog::debug("Switching to blend mode {}.", n);
             }
 

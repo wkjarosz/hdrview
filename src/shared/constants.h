@@ -20,10 +20,9 @@
 
 #define SHARED_ENUM_VALUE(name, value) const int name = value;
 
-#define Channels_       int
-#define Tonemap_        int
-#define BlendMode_      int
-#define BackgroundMode_ int
+#define Channels_ int
+#define Tonemap_  int
+#define BlendMode int
 
 #endif
 

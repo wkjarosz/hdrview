@@ -122,7 +122,7 @@ float text_baked_size(float size);
 /**
     Drawing and hit testing both read this, so they cannot disagree about where a string sits.
 */
-float2 aligned_text_pos(float2 anchor, float2 size, int align);
+float2 aligned_text_pos(float2 anchor, float2 size, VgCommand::TextAlign align);
 
 /**
     Execute \p commands into \p draw_list. Unsupported commands are skipped, not approximated.

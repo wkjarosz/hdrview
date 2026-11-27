@@ -388,11 +388,11 @@ void convert_primaries(float *pixels, int3 size, const Chromaticities &src, cons
 /// The image shader's tonemap step, with the colormap read through Colormap::sample() instead of a texture.
 Color4 tonemap(Color4 color, float gamma, Tonemap_ tonemap_mode, Colormap_ colormap, bool reverse_colormap);
 
-float2 blend(float2 top, float2 bottom, BlendMode_ blend_mode);
+float2 blend(float2 top, float2 bottom, BlendMode blend_mode);
 
 // inline, unlike its float2 sibling: called per pixel from PixelStats::calculate(), in another translation
 // unit, and the project builds without LTO.
-inline float blend(float top, float bottom, BlendMode_ blend_mode)
+inline float blend(float top, float bottom, BlendMode blend_mode)
 {
     using std::abs; // ::abs is the integer one on libstdc++, and would truncate
 

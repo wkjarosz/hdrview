@@ -749,10 +749,10 @@ void Image::draw_channel_stats()
 
     // Persisted per-row display mode. Module-static, so shared across all images, which only one image's
     // stats being shown at a time makes safe.
-    static int mode_min = ImGui::ChannelDisplayMode_Raw, mode_avg = ImGui::ChannelDisplayMode_Raw,
-               mode_max = ImGui::ChannelDisplayMode_Raw, mode_stddev = ImGui::ChannelDisplayMode_Raw,
-               mode_nan = ImGui::ChannelDisplayMode_Raw, mode_inf = ImGui::ChannelDisplayMode_Raw,
-               mode_huge = ImGui::ChannelDisplayMode_Raw;
+    constexpr auto                   raw_mode = ImGui::ChannelDisplayMode_Raw;
+    static ImGui::ChannelDisplayMode mode_min = raw_mode, mode_avg = raw_mode, mode_max = raw_mode,
+                                     mode_stddev = raw_mode, mode_nan = raw_mode, mode_inf = raw_mode,
+                                     mode_huge = raw_mode;
 
     auto stat_row = [&](auto &&accessor, ImGuiDataType data_type, const char *format, bool show_swatch,
                         ImGui::ChannelDisplayModeMask enabled_modes, int *mode, const string &label,

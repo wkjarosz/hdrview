@@ -1014,8 +1014,7 @@ void HDRViewApp::draw_command_palette(bool &open)
                      else
                      {
                          // Set predefined background mode
-                         m_bg_mode = (BackgroundMode_)clamp(selected_option, (int)BackgroundMode_Black,
-                                                            (int)BackgroundMode_COUNT - 1);
+                         m_bg_mode = clamp(selected_option, 0, BackgroundMode_COUNT - 1);
                      }
                  },
                  nullptr,

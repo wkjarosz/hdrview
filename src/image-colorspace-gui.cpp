@@ -634,11 +634,10 @@ void Image::draw_colorspace()
                 {
                     for (AdaptationMethod n = 0; n < AdaptationMethod_COUNT; ++n)
                     {
-                        auto       am          = (AdaptationMethod)n;
-                        const bool is_selected = (adaptation_method == am);
-                        if (ImGui::Selectable(adaptation_method_name(am), is_selected))
+                        const bool is_selected = (adaptation_method == n);
+                        if (ImGui::Selectable(adaptation_method_name(n), is_selected))
                         {
-                            adaptation_method = am;
+                            adaptation_method = n;
                             spdlog::debug("Switching to adaptation method {}.", n);
                             compute_color_transform();
                             modified = true;

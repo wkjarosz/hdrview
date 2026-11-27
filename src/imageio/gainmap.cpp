@@ -387,8 +387,8 @@ IsoGainmapParams parse_iso_gainmap(const uint8_t *data, size_t size)
     IsoGainmapParams p;
     p.version = fmt::format("ISO 21496-1 v{} (writer v{})", minimum_version, writer_version);
 
-    const uint8_t flags    = r.u8();
-    const int     channels = (flags & IsoFlags_IsMultiChannel) ? 3 : 1;
+    const IsoFlags flags    = r.u8();
+    const int      channels = (flags & IsoFlags_IsMultiChannel) ? 3 : 1;
 
     p.use_base_color_space = (flags & IsoFlags_UseBaseColorSpace) != 0;
 

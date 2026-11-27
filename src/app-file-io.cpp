@@ -77,7 +77,7 @@ Enum id_to_enum(const json &j, const char *key, const char *const (&ids)[N], Enu
 // The alpha override an image entry asks for, empty when it uses the file's own interpretation.
 optional<TransparencyType> transparency_override_from_id(const json &j)
 {
-    auto at = id_to_enum(j, "transparency_override", g_transparency_type_ids, (TransparencyType)TransparencyType_COUNT);
+    auto at = id_to_enum(j, "transparency_override", g_transparency_type_ids, TransparencyType_COUNT);
     return at == TransparencyType_COUNT ? optional<TransparencyType>{} : at;
 }
 
@@ -123,8 +123,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
     if (begin_navigable_dialog(rendition ? "Export rendition..." : "Save as...", open, folded))
     {
         // Define enum for save formats
-        using Format = int;
-        enum Format_ : Format
+        enum Format_
         {
             Format_BMP_STB = 0,
             Format_HDR_STB,
@@ -1338,7 +1337,7 @@ struct HDRViewApp::LoadingSession
     };
     vector<Entry> entries;                                  ///< One per saved "images" entry, in file order
     int           current_index = -1, reference_index = -1; ///< Index into entries, or -1 if unset
-    BlendMode_    blend_mode;
+    BlendMode     blend_mode;
     json          view; ///< The session file's "view" sub-object, applied verbatim once loading completes
 
     // An arrival fills the earliest entry sharing its load options. Entries sharing a key ask for identical

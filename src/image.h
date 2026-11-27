@@ -113,13 +113,13 @@ struct PixelStats
 
     struct Settings
     {
-        float      exposure   = 0.f;
-        AxisScale  x_scale    = AxisScale_Linear;
-        AxisScale  y_scale    = AxisScale_Linear;
-        Box2i      roi        = Box2i{int2{0}};
-        BlendMode_ blend_mode = BlendMode_Normal;
-        int        ref_id     = -1;
-        int        ref_group  = -1;
+        float     exposure   = 0.f;
+        AxisScale x_scale    = AxisScale_Linear;
+        AxisScale y_scale    = AxisScale_Linear;
+        Box2i     roi        = Box2i{int2{0}};
+        BlendMode blend_mode = BlendMode_Normal;
+        int       ref_id     = -1;
+        int       ref_group  = -1;
 
         /// Image::content_version of the measured image, and of the reference when one is blended in.
         /**

@@ -191,10 +191,10 @@ public:
         if (differ)
         {
             ImGui::BeginDisabled(!m_convert);
-            if (ImGui::BeginCombo("Adaptation", adaptation_method_name(AdaptationMethod(m_method))))
+            if (ImGui::BeginCombo("Adaptation", adaptation_method_name(m_method)))
             {
-                for (int n = 0; n < AdaptationMethod_COUNT; ++n)
-                    if (ImGui::Selectable(adaptation_method_name(AdaptationMethod(n)), m_method == n))
+                for (AdaptationMethod n = 0; n < AdaptationMethod_COUNT; ++n)
+                    if (ImGui::Selectable(adaptation_method_name(n), m_method == n))
                         m_method = n;
                 ImGui::EndCombo();
             }
@@ -218,9 +218,9 @@ public:
         out->alpha = Array2Df{size};
 
         float3x3     M{la::identity};
-        const bool   convert = m_convert && p->spaces_differ() &&
-                             color_conversion_matrix(M, chromaticities_of(*p->clip), chromaticities_of(*p->image),
-                                                     AdaptationMethod(m_method));
+        const bool   convert =
+            m_convert && p->spaces_differ() &&
+            color_conversion_matrix(M, chromaticities_of(*p->clip), chromaticities_of(*p->image), m_method);
         const float3 Yw      = p->image->luminance_weights;
 
         for (int y = 0; y < size.y; ++y)
@@ -263,7 +263,7 @@ private:
     static constexpr int k_zero = -1, k_one = -2; ///< A constant in place of one of the clipboard's channels
 
     bool               m_convert = true;
-    int                m_method  = AdaptationMethod_Bradford;
+    AdaptationMethod   m_method  = AdaptationMethod_Bradford;
     /// Unless both groups are colors, the clipboard channel each of the image's takes.
     std::array<int, 4> m_sources{0, 1, 2, 3};
 };

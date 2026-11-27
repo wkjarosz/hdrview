@@ -26,8 +26,7 @@ enum EditExtent_ : EditExtent
 {
     EditExtent_Pixels = 0,     ///< Pixels within the channels the image already had
     EditExtent_Structure,      ///< The channel list or the windows: the layer tree is rebuilt and the view refit
-    EditExtent_StructureInView ///< As EditExtent_Structure, but the view stays where a preview has already framed the
-                               ///< result
+    EditExtent_StructureInView ///< As EditExtent_Structure, but the view keeps a preview's framing
 };
 
 /// Produces a rectangle of one channel, in channel-local coordinates.

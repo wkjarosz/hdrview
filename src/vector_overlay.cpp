@@ -61,14 +61,14 @@ namespace
 /// The mutable drawing state, as NanoVG defines it. Save/Restore push and pop this whole struct.
 struct VgState
 {
-    ImU32 fill_color;
-    ImU32 stroke_color;
-    float stroke_width          = 3.f; // tev's default
-    bool  stroke_width_relative = false;
-    float font_size             = 20.f; // tev's default
-    bool  font_size_relative    = false;
-    int   text_align            = VgCommand::TextAlign_Left | VgCommand::TextAlign_Baseline;
-    void *font                  = nullptr;
+    ImU32                fill_color;
+    ImU32                stroke_color;
+    float                stroke_width          = 3.f; // tev's default
+    bool                 stroke_width_relative = false;
+    float                font_size             = 20.f; // tev's default
+    bool                 font_size_relative    = false;
+    VgCommand::TextAlign text_align            = VgCommand::TextAlign_Left | VgCommand::TextAlign_Baseline;
+    void                *font                  = nullptr;
 };
 
 /// One run of points; a path is a list of these, as NanoVG accumulates them between MoveTo calls.
@@ -166,7 +166,7 @@ float text_baked_size(float size)
 /**
     ImGui has no notion of a baseline, so Baseline is approximated as a fraction of the line height.
 */
-float2 aligned_text_pos(float2 anchor, float2 size, int align)
+float2 aligned_text_pos(float2 anchor, float2 size, VgCommand::TextAlign align)
 {
     float x = anchor.x;
     if (align & VgCommand::TextAlign_Center)

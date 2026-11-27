@@ -89,10 +89,10 @@ public:
         gamut_combo("Primaries##to", &m_dst_gamut);
         white_combo("White point##to", &m_dst_white);
 
-        if (ImGui::BeginCombo("Adaptation", adaptation_method_name(AdaptationMethod(m_method))))
+        if (ImGui::BeginCombo("Adaptation", adaptation_method_name(m_method)))
         {
-            for (int n = 0; n < AdaptationMethod_COUNT; ++n)
-                if (ImGui::Selectable(adaptation_method_name(AdaptationMethod(n)), m_method == n))
+            for (AdaptationMethod n = 0; n < AdaptationMethod_COUNT; ++n)
+                if (ImGui::Selectable(adaptation_method_name(n), m_method == n))
                     m_method = n;
             ImGui::EndCombo();
         }
@@ -100,7 +100,7 @@ public:
                        "identity transform leaves the primaries to do it alone, which shifts neutrals.");
 
         float3x3 M;
-        if (!color_conversion_matrix(M, from(), to(), AdaptationMethod(m_method)))
+        if (!color_conversion_matrix(M, from(), to(), m_method))
             ImGui::TextWrappedToWidth(
                 "These describe the same color space, so this would leave the samples as they are.");
     }
@@ -108,7 +108,7 @@ public:
     std::optional<PointEdit> point_edit(const EditContext &) const override
     {
         PointEdit e{shader::EDIT_MATRIX};
-        color_conversion_matrix(e.m0, from(), to(), AdaptationMethod(m_method));
+        color_conversion_matrix(e.m0, from(), to(), m_method);
         return e;
     }
 
@@ -116,7 +116,7 @@ public:
     std::optional<float3x3> M_to_sRGB_after(const EditContext &) const override
     {
         float3x3 M;
-        color_conversion_matrix(M, to(), Chromaticities{}, AdaptationMethod(m_method));
+        color_conversion_matrix(M, to(), Chromaticities{}, m_method);
         return M;
     }
 
@@ -130,7 +130,7 @@ public:
                          {
                              image.chromaticities    = tagged;
                              image.adopted_neutral   = std::nullopt;
-                             image.adaptation_method = AdaptationMethod(m);
+                             image.adaptation_method = m;
                              image.compute_color_transform();
 
                              // compute_color_transform() names the space from the chromaticities; these only matter
@@ -159,9 +159,9 @@ private:
         return c;
     }
 
-    int m_src_gamut = ColorGamut_sRGB_BT709, m_dst_gamut = ColorGamut_sRGB_BT709;
-    int m_src_white = WhitePoint_D65, m_dst_white = WhitePoint_D65;
-    int m_method = AdaptationMethod_Bradford;
+    int              m_src_gamut = ColorGamut_sRGB_BT709, m_dst_gamut = ColorGamut_sRGB_BT709;
+    int              m_src_white = WhitePoint_D65, m_dst_white = WhitePoint_D65;
+    AdaptationMethod m_method = AdaptationMethod_Bradford;
 };
 
 class ChannelMixer final : public EditCommand
@@ -208,8 +208,8 @@ public:
             ImGui::TableNextColumn();
             ImGui::TextDisabled("Total");
 
-            for (int r = m_monochrome ? int(Output_Monochrome) : int(Output_Red);
-                 r < (m_monochrome ? int(Output_COUNT) : int(Output_Monochrome)); ++r)
+            for (Output r = m_monochrome ? Output_Monochrome : Output_Red;
+                 r < (m_monochrome ? Output_COUNT : Output_Monochrome); ++r)
             {
                 float3 &w = m_rows[r];
                 ImGui::TableNextRow();
@@ -443,11 +443,11 @@ public:
         // radio-height text, so the label sits on the same line as the buttons beside it
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted("Adjust");
-        const char *names[] = {"RGB", "Lightness", "Chromaticity"};
+        const char *names[CurveMode_COUNT] = {"RGB", "Lightness", "Chromaticity"};
         for (int i = 0; i < CurveMode_COUNT; ++i)
         {
             ImGui::SameLine();
-            ImGui::RadioButton(names[i], &m_channel, i);
+            ImGui::RadioButton(names[i], &m_mode, i);
         }
         ImGui::Tooltip("RGB moves the three channels alike, which shifts saturation along with everything "
                        "else. The other two work in L*a*b*, where lightness and color are separate: one "
@@ -459,14 +459,14 @@ public:
         PointEdit e{shader::EDIT_BRIGHTNESS_CONTRAST};
         const int shape = (m_linear ? shader::SHAPE_LINE : shader::SHAPE_RATIONAL) + (m_clip ? shader::SHAPE_CLIP : 0);
         e.p0 = float4{slope_of(m_contrast), (1.f - m_brightness) / 2.f, (m_brightness + 1.f) / 2.f, float(shape)};
-        e.p1 = float4{float(m_channel), 0.f, 0.f, 0.f};
+        e.p1            = float4{float(m_mode), 0.f, 0.f, 0.f};
         // through the image's own primaries: L*a*b* is defined from XYZ, and what the samples mean in XYZ is what
         // the image says they do
-        if (m_channel != CurveMode_RGB && ctx.image)
+        if (m_mode != CurveMode_RGB && ctx.image)
         {
             const auto  &img   = *ctx.image;
             const float3 white = img.chromaticities ? XYZ_from_xy(img.chromaticities->white) : Lab_reference_white();
-            e.p1               = float4{float(m_channel), white.x, white.y, white.z};
+            e.p1               = float4{float(m_mode), white.x, white.y, white.z};
             e.m0               = img.M_RGB_to_XYZ;
             e.m1               = img.M_XYZ_to_RGB;
         }
@@ -600,7 +600,7 @@ private:
 
     float m_brightness = 0.f, m_contrast = 0.f;
     bool  m_linear = false, m_clip = false;
-    CurveMode m_channel = CurveMode_RGB;
+    CurveMode m_mode = CurveMode_RGB;
     /// Which of the two things the drag in progress is doing; unset between drags.
     std::optional<bool> m_dragging_pivot;
 };

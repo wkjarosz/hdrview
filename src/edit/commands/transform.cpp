@@ -104,7 +104,7 @@ enum SizeUnits_ : SizeUnits
     \p lower is the smallest value a field may take: one ordinarily, but a size given as a change to the
     current one may be negative, which is how a canvas is trimmed.
 */
-void size_fields(int2 *size, int *units, bool *locked, int2 original, int lower)
+void size_fields(int2 *size, SizeUnits *units, bool *locked, int2 original, int lower)
 {
     // one width for every control in the column, so the labels line up
     const float field  = 9.f * HelloImGui::EmSize();
@@ -222,10 +222,10 @@ public:
     }
 
 private:
-    int2 m_size{0, 0};
-    bool m_have_size = false;
-    int  m_units     = SizeUnits_Pixels;
-    bool m_locked    = true;
+    int2      m_size{0, 0};
+    bool      m_have_size = false;
+    SizeUnits m_units     = SizeUnits_Pixels;
+    bool      m_locked    = true;
 };
 
 class CanvasSize final : public EditCommand
@@ -316,7 +316,7 @@ public:
 private:
     int2                m_size{0, 0};
     bool                m_have_size = false;
-    int                 m_units     = SizeUnits_Pixels;
+    SizeUnits           m_units     = SizeUnits_Pixels;
     bool                m_locked    = false;
     bool                m_relative  = false;
     Image::CanvasAnchor m_anchor    = Image::CanvasAnchor_MiddleCenter;
