@@ -23,9 +23,6 @@
 
 using namespace hdrview_test;
 
-#ifndef HDRVIEW_GUI_TEST_IMAGE
-#error "HDRVIEW_GUI_TEST_IMAGE must be defined by CMake to a small fixture image path"
-#endif
 void RegisterTests_Lifetime(ImGuiTestEngine *engine)
 {
     ImGuiTest *t = IM_REGISTER_TEST(engine, "lifetime", "close_reference_during_stats");

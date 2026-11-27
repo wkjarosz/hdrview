@@ -29,8 +29,8 @@
 #include <string>
 #include <vector>
 
-#ifndef HDRVIEW_GUI_TEST_IMAGE_2
-#error "HDRVIEW_GUI_TEST_IMAGE_2 must be defined by CMake to a small fixture image path"
+#if !defined(HDRVIEW_GUI_TEST_IMAGE) || !defined(HDRVIEW_GUI_TEST_IMAGE_2)
+#error "HDRVIEW_GUI_TEST_IMAGE and _2 must be defined by CMake to small fixture image paths"
 #endif
 
 namespace hdrview_test

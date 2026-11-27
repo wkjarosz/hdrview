@@ -16,9 +16,6 @@
 
 using namespace hdrview_test;
 
-#ifndef HDRVIEW_GUI_TEST_IMAGE
-#error "HDRVIEW_GUI_TEST_IMAGE must be defined by CMake to a small fixture image path"
-#endif
 static void load_both_fixtures(ImGuiTestContext *ctx)
 {
     // clear any file filter a prior test left active

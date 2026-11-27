@@ -18,9 +18,6 @@ using namespace hdrview_test;
 
 #include <cmath>
 
-#ifndef HDRVIEW_GUI_TEST_IMAGE
-#error "HDRVIEW_GUI_TEST_IMAGE must be defined by CMake to a small fixture image path"
-#endif
 namespace
 {
 
