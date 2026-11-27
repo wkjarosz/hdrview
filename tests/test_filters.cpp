@@ -390,25 +390,25 @@ TEST_CASE("A fast Gaussian approaches the real one as it iterates")
 namespace
 {
 
-/// Where a coordinate lands under one border mode, written independently of the filter's own version.
+/// Where a coordinate lands under one border mode, by stepping it back into the image as the mode is defined.
+/**
+    Repeat moves it a whole image at a time, and Mirror reflects it across whichever edge it is past, again and
+    again: a different route than the filter's modular arithmetic to the same place.
+*/
 int expected_wrap(int p, int extent, int mode)
 {
     if (p >= 0 && p < extent)
         return p;
-
-    switch (mode)
-    {
-    case BorderMode_Edge: return std::clamp(p, 0, extent - 1);
-    case BorderMode_Repeat: return ((p % extent) + extent) % extent;
-    case BorderMode_Mirror:
-    {
-        // reflected at each repeat: the period is twice the extent and folds in the middle
-        const int period = 2 * extent;
-        int       q      = ((p % period) + period) % period;
-        return q < extent ? q : period - 1 - q;
-    }
-    default: return -1; // BorderMode_Black: nothing there
-    }
+    if (mode == BorderMode_Black)
+        return -1; // nothing there
+    if (mode == BorderMode_Edge)
+        return p < 0 ? 0 : extent - 1;
+    while (p < 0 || p >= extent)
+        if (mode == BorderMode_Repeat)
+            p += p < 0 ? extent : -extent;
+        else // BorderMode_Mirror, about the outer edge of the first and the last sample
+            p = p < 0 ? -1 - p : 2 * extent - 1 - p;
+    return p;
 }
 
 } // namespace
