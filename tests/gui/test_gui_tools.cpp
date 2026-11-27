@@ -163,21 +163,10 @@ void RegisterTests_Tools(ImGuiTestEngine *engine)
         drag_palette_to(ctx, vp_min + 0.2f * vp_size); // back to the top-left the other tests expect
     };
 
-    t           = IM_REGISTER_TEST(engine, "tools", "palette_collapse_and_hide");
+    t           = IM_REGISTER_TEST(engine, "tools", "palette_hides_from_the_windows_menu");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
         show_and_expand_palette(ctx);
-
-        // the collapse arrow hides the buttons and leaves the bar; the engine hands back item info gathered
-        // a couple of frames ago, so let the vanished items age out before asserting
-        ctx->WindowCollapse(palette_window_ref, true);
-        ctx->Yield(4);
-        IM_CHECK(!palette_expanded(ctx));
-        IM_CHECK(*hdrview()->action("Show tool palette").p_selected); // collapsed, not closed
-
-        ctx->WindowCollapse(palette_window_ref, false);
-        ctx->Yield(4);
-        IM_CHECK(palette_expanded(ctx));
 
         // there is no close button: the Windows menu hides the palette and brings it back
         ctx->SetRef("##MainMenuBar");

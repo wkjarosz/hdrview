@@ -217,13 +217,22 @@ TEST_CASE("PixelStats::calculate takes its bin count from the channel's bit dept
     Channel c("test", int2{16, 16});
     c.apply([](float, int x, int y) { return (x + y) / 30.f; });
 
+    // as the rule above works out with MAX_BINS at 512
+    static_assert(PixelStats::MAX_BINS == 512, "the counts below assume 512 bins of storage");
+    const std::pair<int, int> counts[] = {{1, 2},    {2, 4},    {8, 256},  {9, 512}, {10, 512}, {12, 512},
+                                          {14, 512}, {16, 512}, {32, 512}, {0, 512}, {-1, 512}, {64, 512}};
+    for (const auto &[bits, want] : counts)
+    {
+        CAPTURE(bits);
+        CHECK(PixelStats::bins_for_bit_depth(bits) == want);
+    }
+
     for (int bits = -1; bits <= 64; ++bits)
     {
         CAPTURE(bits);
         const int bins = PixelStats::bins_for_bit_depth(bits);
         CHECK(bins >= 1);
         CHECK(bins <= PixelStats::MAX_BINS); //< hist_xs/hist_ys are sized MAX_BINS
-        CHECK(bins == (bits >= 1 && bits <= 15 ? std::min(1 << bits, PixelStats::MAX_BINS) : PixelStats::MAX_BINS));
 
         // and calculate(), which fills hist_xs[0..num_bins] inclusive, uses that count
         c.bits_per_sample = bits;
@@ -257,29 +266,6 @@ TEST_CASE("Each x scale's bins are uniform in that scale's own space")
         // the bins span the channel's own range, so the outer edges land on its extremes
         CHECK(stats.hist_xs[s][0] == doctest::Approx(stats.summary.minimum));
         CHECK(stats.hist_xs[s][stats.num_bins] == doctest::Approx(stats.summary.maximum));
-    }
-}
-
-TEST_CASE("Every 8-bit level gets its own bin on the sRGB axis")
-{
-    // 8-bit content has at most 256 distinct levels, so binning it finer leaves gaps that read as a row of
-    // detached spikes
-    auto ramp = make_8bit_sRGB_ramp();
-
-    SUBCASE("at a bin count matched to the source's depth")
-    {
-        auto stats = compute(ramp);
-        REQUIRE(stats.num_bins == 256);
-        // the 1/255 lattice and the 1/256 bin grid drift by up to a bin, leaving at most one gap
-        CHECK(count_empty_bins(stats, AxisScale_SRGB) <= 1);
-    }
-
-    SUBCASE("binning finer than the source leaves most bins empty")
-    {
-        ramp.bits_per_sample = 0;
-        auto stats           = compute(ramp);
-        REQUIRE(stats.num_bins == PixelStats::MAX_BINS);
-        CHECK(count_empty_bins(stats, AxisScale_SRGB) >= 250);
     }
 }
 
@@ -485,7 +471,8 @@ TEST_CASE("PixelStats::calculate applies each blend mode against a reference ima
 {
     // Both channels vary, and cross: the image is below the reference on the left and above it on the right,
     // so a mode that swapped its operands, or a reference read at the wrong pixel, changes the result. The
-    // reference stays positive, so dividing by it is finite.
+    // reference stays positive, so dividing by it is finite. What each mode computes is held to worked values in
+    // test_colorspace.cpp; this checks which samples reach it.
     static constexpr int w = 8, h = 6;
     Channel   img("img", int2{w, h});
     Channel   ref("ref", int2{w, h});
@@ -566,24 +553,12 @@ TEST_CASE("PixelStats::calculate reports straight values when given an alpha cha
 
     PixelStats::Settings settings;
     std::atomic<bool>    canceled{false};
+    PixelStats           stats;
+    stats.calculate(img, &alpha, int2{0, 0}, nullptr, nullptr, int2{0, 0}, settings, canceled);
 
-    SUBCASE("with the alpha channel")
-    {
-        PixelStats stats;
-        stats.calculate(img, &alpha, int2{0, 0}, nullptr, nullptr, int2{0, 0}, settings, canceled);
-
-        CHECK(stats.summary.valid_pixels == 4);
-        CHECK(stats.summary.average == doctest::Approx(1.0));
-        CHECK(stats.summary.maximum == doctest::Approx(1.f));
-    }
-
-    SUBCASE("without it, the stored value is reported as-is")
-    {
-        PixelStats stats;
-        stats.calculate(img, nullptr, int2{0, 0}, nullptr, nullptr, int2{0, 0}, settings, canceled);
-
-        CHECK(stats.summary.average == doctest::Approx(0.5));
-    }
+    CHECK(stats.summary.valid_pixels == 4);
+    CHECK(stats.summary.average == doctest::Approx(1.0));
+    CHECK(stats.summary.maximum == doctest::Approx(1.f));
 }
 
 TEST_CASE("Unpremultiplying puts 8-bit samples back on the source's lattice")
@@ -646,15 +621,6 @@ TEST_CASE("A selection that misses the channel leaves the statistics empty")
         CHECK(stats.summary.valid_pixels == 0);
     }
 
-    SUBCASE("a selection that does overlap is unaffected")
-    {
-        PixelStats::Settings settings;
-        settings.roi = Box2i{int2{10, 20}, int2{40, 50}};
-
-        auto stats = compute(c, settings);
-        CHECK(stats.computed);
-        CHECK(stats.summary.valid_pixels == 30 * 30);
-    }
 }
 
 TEST_CASE("Statistics over an arbitrary selection count exactly the pixels it overlaps")

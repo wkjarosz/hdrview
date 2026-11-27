@@ -376,7 +376,6 @@ TEST_CASE("Malformed IPC packets are refused rather than believed")
         {
             const IpcPacket &whole = c.packet;
             CAPTURE(int(whole.type()));
-            REQUIRE_NOTHROW(read_payload(whole));
 
             const auto &bytes = whole.bytes();
             for (size_t n = sizeof(uint32_t) + 1; n < bytes.size(); ++n)

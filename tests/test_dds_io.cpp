@@ -81,9 +81,8 @@ ImagePtr load_dds(const std::string &bytes, const char *name)
 // FourCC records that in a DX9 file.
 TEST_CASE("DDS premultiplied-alpha formats are not premultiplied a second time")
 {
-    // the alpha has to be well away from 0 and 1 for the comparison below to mean anything
-    REQUIRE(k_alpha > 0.1f);
-    REQUIRE(k_alpha < 0.9f);
+    static_assert(k_alpha > 0.1f && k_alpha < 0.9f,
+                  "well away from 0 and 1, for the comparison below to mean anything");
 
     // BC2's pair and BC3's, each the same bits under two FourCCs
     for (auto fourccs : {std::pair{"DXT2", "DXT3"}, std::pair{"DXT4", "DXT5"}})
@@ -94,10 +93,6 @@ TEST_CASE("DDS premultiplied-alpha formats are not premultiplied a second time")
         CAPTURE(premultiplied_cc);
         auto straight_bytes      = make_one_block_dds(straight_cc);
         auto premultiplied_bytes = make_one_block_dds(premultiplied_cc);
-
-        // the same payload under both tags, so any difference is the alpha handling alone
-        REQUIRE(straight_bytes.size() == premultiplied_bytes.size());
-        REQUIRE(straight_bytes.substr(128) == premultiplied_bytes.substr(128));
 
         auto straight      = load_dds(straight_bytes, "straight.dds");
         auto premultiplied = load_dds(premultiplied_bytes, "premultiplied.dds");

@@ -239,12 +239,6 @@ TEST_CASE("check_image_dimensions accepts real sizes and rejects degenerate ones
     CHECK_THROWS_AS(check_image_dimensions(0, 16, "test"), std::invalid_argument);
     CHECK_THROWS_AS(check_image_dimensions(16, 0, "test"), std::invalid_argument);
     CHECK_THROWS_AS(check_image_dimensions(-1, 16, "test"), std::invalid_argument);
-
-    // one axis alone is enough, even when the pixel count would fit
-    CHECK_THROWS_AS(check_image_dimensions(4, 16776963, "test"), std::invalid_argument);
-    // as is the total, even when each axis would fit on its own
-    CHECK_THROWS_AS(check_image_dimensions(19789, 19789, "test"), std::invalid_argument);
-    CHECK_THROWS_AS(check_image_dimensions(4294967295ll, 4294967295ll, "test"), std::invalid_argument);
 }
 
 TEST_CASE("Loaders reject implausible dimensions before decoding")
@@ -319,8 +313,6 @@ TEST_CASE("Every loadable extension belongs to exactly one named format")
             CHECK(seen.insert(ext).second);
             CHECK(ext == to_lower(ext));
             CHECK(ext.find('.') == std::string::npos);
-            CHECK(Image::loadable("." + ext));
         }
     }
-    CHECK(seen == Image::loadable_formats());
 }

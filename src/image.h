@@ -412,6 +412,19 @@ inline bool group_is_rgb(ChannelGroup::Type type)
 inline bool group_is_gray(ChannelGroup::Type type)
 { return type == ChannelGroup::Single_Channel || type == ChannelGroup::YA_Channels; }
 
+/// Whether slot \p c of a group of \p type, \p num_channels wide, holds a color its alpha premultiplies.
+/**
+    Not the alpha itself, and not a luminance-chroma group's RY and BY: OpenEXR defines them as (R - Y) / Y and
+    (B - Y) / Y, ratios that are the same whether the color is premultiplied or straight. Its Y is premultiplied like
+    any other color.
+*/
+inline bool group_slot_premultiplied(ChannelGroup::Type type, int num_channels, int c)
+{
+    if (!group_has_alpha(type) || c >= num_channels - 1)
+        return false;
+    return type != ChannelGroup::YCA_Channels || c == 1;
+}
+
 /// The color a group's samples stand for, in the image's own primaries.
 /**
     \p raw holds the group's channels in order. A single channel is gray, as is Y with its alpha, the YC types

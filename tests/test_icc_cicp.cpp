@@ -18,7 +18,6 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <map>
 #include <string>
 #include <utility>
@@ -396,9 +395,7 @@ TEST_CASE("Profiles encoding the same color space agree on its primaries")
         const std::string name = path.filename().string();
         CAPTURE(name);
 
-        std::ifstream in(path, std::ios::binary);
-        REQUIRE(in.good());
-        const std::string bytes{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+        const std::string bytes = file_bytes(path.string());
         REQUIRE(bytes.size() > 128);
         ++read;
 
@@ -426,14 +423,7 @@ TEST_CASE("Profiles encoding the same color space agree on its primaries")
             const Chromaticities &got  = profile.second;
             CAPTURE(first_name);
             CAPTURE(name);
-            CHECK(got.red.x == doctest::Approx(want.red.x).epsilon(1e-3));
-            CHECK(got.red.y == doctest::Approx(want.red.y).epsilon(1e-3));
-            CHECK(got.green.x == doctest::Approx(want.green.x).epsilon(1e-3));
-            CHECK(got.green.y == doctest::Approx(want.green.y).epsilon(1e-3));
-            CHECK(got.blue.x == doctest::Approx(want.blue.x).epsilon(1e-3));
-            CHECK(got.blue.y == doctest::Approx(want.blue.y).epsilon(1e-3));
-            CHECK(got.white.x == doctest::Approx(want.white.x).epsilon(1e-3));
-            CHECK(got.white.y == doctest::Approx(want.white.y).epsilon(1e-3));
+            CHECK(approx_equal(got, want, 1e-4f));
         }
     }
 
@@ -446,14 +436,8 @@ TEST_CASE("Profiles encoding the same color space agree on its primaries")
         const std::string    &name = profile.first;
         const Chromaticities &got  = profile.second;
         CAPTURE(name);
-        CHECK(got.red.x == doctest::Approx(0.64f).epsilon(1e-3));
-        CHECK(got.red.y == doctest::Approx(0.33f).epsilon(1e-3));
-        CHECK(got.green.x == doctest::Approx(0.30f).epsilon(1e-3));
-        CHECK(got.green.y == doctest::Approx(0.60f).epsilon(1e-3));
-        CHECK(got.blue.x == doctest::Approx(0.15f).epsilon(1e-3));
-        CHECK(got.blue.y == doctest::Approx(0.06f).epsilon(1e-3));
-        CHECK(got.white.x == doctest::Approx(0.3127f).epsilon(1e-3));
-        CHECK(got.white.y == doctest::Approx(0.3290f).epsilon(1e-3));
+        CHECK(approx_equal(got, Chromaticities{{0.64f, 0.33f}, {0.30f, 0.60f}, {0.15f, 0.06f}, {0.3127f, 0.3290f}},
+                           1e-4f));
     }
 }
 
@@ -479,9 +463,8 @@ TEST_CASE("Profiles lcms cannot use are not mistaken for ones it can")
         const std::string name = path.filename().string();
         CAPTURE(name);
 
-        std::ifstream in(path, std::ios::binary);
-        REQUIRE(in.good());
-        const std::string bytes{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+        const std::string bytes = file_bytes(path.string());
+        REQUIRE_FALSE(bytes.empty());
 
         // constructing from bytes must not throw, whatever they hold: the loaders do this inside a decode,
         // and one exception would lose an image whose pixels are perfectly good
@@ -534,14 +517,7 @@ TEST_CASE("Profiles lcms cannot use are not mistaken for ones it can")
 
         Chromaticities got;
         REQUIRE(linear.extract_chromaticities(&got));
-        CHECK(got.red.x == doctest::Approx(want.red.x).epsilon(1e-3));
-        CHECK(got.red.y == doctest::Approx(want.red.y).epsilon(1e-3));
-        CHECK(got.green.x == doctest::Approx(want.green.x).epsilon(1e-3));
-        CHECK(got.green.y == doctest::Approx(want.green.y).epsilon(1e-3));
-        CHECK(got.blue.x == doctest::Approx(want.blue.x).epsilon(1e-3));
-        CHECK(got.blue.y == doctest::Approx(want.blue.y).epsilon(1e-3));
-        CHECK(got.white.x == doctest::Approx(want.white.x).epsilon(1e-3));
-        CHECK(got.white.y == doctest::Approx(want.white.y).epsilon(1e-3));
+        CHECK(approx_equal(got, want, 1e-4f));
     }
 
     CHECK(broken == 3);
@@ -553,11 +529,7 @@ TEST_CASE("Profiles lcms cannot use are not mistaken for ones it can")
 
 TEST_CASE("a CMYK ICC profile converts ink to color, and only inverts it when told to")
 {
-    // lcms's own CMYK printer profile. It says of itself that it is not suitable for real use, which is
-    // beside the point: its color space is CMYK, and that is the property the conversion turns on.
-    std::ifstream in(std::string(HDRVIEW_TEST_LCMS_TESTBED_DIR) + "/test1.icc", std::ios::binary);
-    REQUIRE(in.good());
-    const std::string bytes{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+    const std::string bytes = cmyk_profile();
     ICCProfile        profile{reinterpret_cast<const uint8_t *>(bytes.data()), bytes.size()};
     REQUIRE(profile.valid());
     REQUIRE(profile.is_CMYK());

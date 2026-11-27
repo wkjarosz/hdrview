@@ -323,23 +323,6 @@ TEST_CASE("A fourth component is alpha or ink depending on what the color space 
             CHECK(cmyk->channels[c](i) == doctest::Approx(comps[c].samples[i] / 255.).epsilon(1e-5));
 }
 
-TEST_CASE("Both JPEG 2000 syntaxes decode to the same pixels")
-{
-    std::vector<int32_t> wrote;
-    const auto           jp2 = ramp_codestream(12, false, 8, 4, wrote, OPJ_CODEC_JP2);
-    const auto           j2k = ramp_codestream(12, false, 8, 4, wrote, OPJ_CODEC_J2K);
-
-    const auto from_jp2 = load_bytes(load_j2k_image, jp2, "ramp.jp2", raw_load_options());
-    const auto from_j2k = load_bytes(load_j2k_image, j2k, "ramp.j2k", raw_load_options());
-    REQUIRE(from_jp2);
-    REQUIRE(from_j2k);
-    CHECK(samples(from_jp2) == samples(from_j2k));
-
-    // only the boxed syntax records a brand, and only it can carry a color space or metadata
-    CHECK(from_jp2->metadata["header"].contains("Brand"));
-    CHECK_FALSE(from_j2k->metadata["header"].contains("Brand"));
-}
-
 TEST_CASE("A bit depth the writer does not offer is refused, not quietly changed")
 {
     // the depths the dialog does offer are each a setting of test_export_roundtrip.cpp's sweeps
@@ -392,15 +375,21 @@ TEST_CASE("The sniff accepts both JPEG 2000 syntaxes and nothing else")
         CHECK(in.tellg() == std::streampos(0));
     }
 
-    // a JPEG SOI, a PNG signature, an ISOBMFF ftyp and an empty file are all near misses
-    for (const std::string &other : {std::string("\xFF\xD8\xFF\xE0", 4), std::string("\x89PNG\r\n\x1A\n", 8),
-                                     std::string("\0\0\0\x18"
-                                                 "ftypavif",
-                                                 12),
-                                     std::string()})
+    // a JPEG SOI and an empty file are near misses; the export round trip's loader check shows it turning down the
+    // formats whose loaders it runs ahead of
+    for (const std::string &other : {std::string("\xFF\xD8\xFF\xE0", 4), std::string()})
     {
         std::istringstream in(other, std::ios::binary);
         CHECK_FALSE(is_j2k_image(in));
+    }
+
+    // only the boxed syntax records a brand, and only it can carry a color space or metadata; the export round trip
+    // holds both syntaxes' pixels
+    for (const auto codec : {OPJ_CODEC_JP2, OPJ_CODEC_J2K})
+    {
+        const auto img = load_bytes(load_j2k_image, ramp_codestream(8, false, 4, 4, wrote, codec), "ramp");
+        REQUIRE(img);
+        CHECK(img->metadata["header"].contains("Brand") == (codec == OPJ_CODEC_JP2));
     }
 }
 
@@ -466,27 +455,21 @@ TEST_CASE("A codestream declaring impossible dimensions is refused before it is 
     std::vector<int32_t> wrote;
     auto                 j2k = ramp_codestream(8, false, 4, 4, wrote, OPJ_CODEC_J2K);
 
-    // SIZ follows SOC: FF4F FF51 Lsiz(2) Rsiz(2) Xsiz(4) Ysiz(4)
-    REQUIRE(j2k.size() > 16);
-    for (int i = 0; i < 4; ++i)
-    {
-        j2k[8 + i]  = (char)0x7F;
-        j2k[12 + i] = (char)0x7F;
-    }
+    // 70000 samples across, in one tile as wide: a header OpenJPEG reads, so the refusal is HDRView's own.
+    // SIZ follows SOC: FF4F FF51 Lsiz(2) Rsiz(2) Xsiz(4) Ysiz(4) XOsiz(4) YOsiz(4) XTsiz(4), big-endian.
+    REQUIRE(j2k.size() > 28);
+    for (const size_t at : {size_t(8), size_t(24)})
+        write_as((unsigned char *)j2k.data() + at, uint32_t(70000), Endian::Big);
 
-    CHECK_THROWS_AS(load_bytes(load_j2k_image, j2k, "huge.j2k"), std::exception);
+    CHECK_THROWS_WITH_AS(load_bytes(load_j2k_image, j2k, "huge.j2k"), doctest::Contains("implausibly large"),
+                         std::invalid_argument);
 }
 
 #ifdef HDRVIEW_TEST_LCMS_TESTBED_DIR
 
-// lcms's own CMYK printer profile, which is a real one with real tables and says of itself that it is not
-// suitable for real use. That is all this needs: a profile whose color space is CMYK, so the conversion has
-// something to run through.
 TEST_CASE("CMYK ink decodes through the file's profile, and the right way up")
 {
-    std::ifstream in(std::string(HDRVIEW_TEST_LCMS_TESTBED_DIR) + "/test1.icc", std::ios::binary);
-    REQUIRE(in.good());
-    const std::string icc{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+    const std::string icc = cmyk_profile();
     REQUIRE(icc.size() > 128);
 
     // two pixels of known ink: bare paper, and a solid hit of black

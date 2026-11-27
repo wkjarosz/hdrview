@@ -7,9 +7,12 @@
 #pragma once
 
 #include "app.h"
+#include "clipboard.h"
 #include "edit/commands.h"
 #include "image.h"
 #include "imageio/image_loader.h"
+#include "json.h"
+#include "version.h"
 
 #include "../test_log_capture.h"
 #include "../test_zip.h"
@@ -22,11 +25,16 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <initializer_list>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
+
+#if !defined(HDRVIEW_GUI_TEST_IMAGE) || !defined(HDRVIEW_GUI_TEST_IMAGE_2)
+#error "HDRVIEW_GUI_TEST_IMAGE and _2 must be defined by CMake to small fixture image paths"
+#endif
 
 namespace hdrview_test
 {
@@ -94,6 +102,32 @@ inline void reset_images(ImGuiTestContext *ctx)
     hdrview()->set_zoom(1.f);
 }
 
+/// Starts from the small fixture alone, loaded \p copies times, whatever an earlier test left loaded or selected.
+/**
+    Edits are selection-only by default, so a selection left behind would narrow the next test's; the edit subject
+    and both clipboards, HDRView's and the private stand-in for the system's, are cleared for the same reason.
+*/
+inline bool load_fixture(ImGuiTestContext *ctx, int copies = 1)
+{
+    reset_images(ctx);
+    hdrview()->roi()          = Box2i{};
+    hdrview()->edit_subject() = EditSubject{};
+    hdrview()->set_clipboard(nullptr);
+    use_private_clipboard() = {};
+    IM_CHECK_SILENT_RETV(load_and_wait(ctx, std::vector<std::string>(copies, HDRVIEW_GUI_TEST_IMAGE_2)) == copies,
+                         false);
+    IM_CHECK_SILENT_RETV(hdrview()->current_image() != nullptr, false);
+    return true;
+}
+
+/// Whether the window titled \p name, a dialog say, has closed, as a save dialog does only once it has written.
+inline bool window_closed(ImGuiTestContext *ctx, const std::string &name)
+{
+    ctx->SetRef("");
+    const std::string ref = "//" + escaped(name);
+    return wait_until(ctx, [&] { return ctx->WindowInfo(ref.c_str(), ImGuiTestOpFlags_NoError).Window == nullptr; });
+}
+
 /// Puts the view controls back where a person would leave them, since nothing else resets them between tests.
 inline void reset_view_controls(ImGuiTestContext *ctx)
 {
@@ -137,6 +171,18 @@ inline fs::path write_file(const fs::path &path, const std::string &bytes)
     return path;
 }
 
+/// A session file's contents, showing the first of \p images against \p reference, with \p view's settings.
+inline json session_manifest(std::initializer_list<json> images, int reference = -1, const json &view = json::object())
+{
+    return {{"type", "HDRView session"},
+            {"version", fmt::format("{}.{}.{}", version_major(), version_minor(), version_patch())},
+            {"images", std::vector<json>(images)},
+            {"current", 0},
+            {"reference", reference},
+            {"blend_mode", "normal"},
+            {"view", view}};
+}
+
 /// A fresh, empty directory under the system temp dir, canonicalized the way the loader stores paths.
 inline fs::path make_temp_dir(const char *stem)
 {
@@ -156,6 +202,18 @@ struct OnExit
     OnExit(const OnExit &)            = delete;
     OnExit &operator=(const OnExit &) = delete;
     F       f;
+};
+
+/// Puts the view's zoom and pan back as they were when it was made, however the test ends.
+struct KeepView
+{
+    float  zoom = hdrview()->zoom();
+    float2 at   = hdrview()->vp_pos_at_pixel(float2{0.f});
+    ~KeepView()
+    {
+        hdrview()->set_zoom(zoom);
+        hdrview()->reposition_pixel_to_vp_pos(at, float2{0.f});
+    }
 };
 
 /// A left-button drag from \p from by \p by, both in app coordinates, with \p mods held throughout.

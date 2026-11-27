@@ -8,7 +8,8 @@
 // Defines HDRVIEW_TEST_ASAN in an AddressSanitizer build, where the tests write no JPEG XL.
 // ASan reports spurious stack-use-after-scope errors inside libjxl's encoder, in SizeHeader::Set ->
 // FixedAspectRatios (lib/jxl/headers.cc) and in QuantizeRoundtripYBlockAC: in-bounds reads of function-local
-// constexpr arrays the optimizer emitted into .rodata. No suppressions file can filter that class.
+// constexpr arrays the optimizer emitted into .rodata. No suppressions file can filter that class. Decoding
+// libjxl's own codestreams, which test_jxl_io.cpp reads, trips the same table in JxlDecoderGetBasicInfo.
 #if defined(__SANITIZE_ADDRESS__)
 #define HDRVIEW_TEST_ASAN 1
 #elif defined(__has_feature)

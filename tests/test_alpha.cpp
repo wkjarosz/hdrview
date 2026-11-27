@@ -14,7 +14,6 @@
 #include "imageio/png.h"
 #include "imageio/qoi.h"
 #include "imageio/stb.h"
-#include "imageio/tiff.h"
 
 #include "test_support.h"
 
@@ -191,11 +190,6 @@ TEST_CASE("Every loader reports the alpha kind its format settles")
          TransparencyType_Straight},
         {"a.tga", [](const Image &i, std::ostream &o) { save_stb_tga(i, o, "a.tga", false); },
          TransparencyType_Straight},
-#if HDRVIEW_ENABLE_LIBTIFF
-        // written with an EXTRASAMPLES tag, so the file itself carries the signal
-        {"a.tif", [](const Image &i, std::ostream &o) { save_tiff_image(i, o, "a.tif", TransferFunction::sRGB, 0, 0); },
-         TransparencyType_PremultipliedNonLinear},
-#endif
     };
 
     auto img = rgba_pixel_image(0.25f, 0.5f);

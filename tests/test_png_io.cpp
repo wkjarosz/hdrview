@@ -58,9 +58,15 @@ TEST_CASE("PNG save records the transfer function in gAMA, sRGB or an ICC profil
             auto reloaded = load_bytes(load_png_image, out.str(), "test.png");
             REQUIRE(reloaded);
 
+            // every one gAMA and the sRGB chunk cannot state gets a profile, in a build with LCMS to write one
             const bool stated = tf.type == TransferFunction::Linear || tf.type == TransferFunction::Gamma ||
                                 tf.type == TransferFunction::sRGB || tf.type == TransferFunction::ITU;
-            if (stated || !ICCProfile::can_describe(tf))
+#if HDRVIEW_ENABLE_LCMS2
+            constexpr bool writes_profiles = true;
+#else
+            constexpr bool writes_profiles = false;
+#endif
+            if (stated || !writes_profiles)
             {
                 CHECK(reloaded->icc_data.empty());
                 continue;

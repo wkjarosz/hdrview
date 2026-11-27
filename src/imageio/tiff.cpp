@@ -19,7 +19,7 @@ using namespace std;
 
 struct TIFFSaveOptions
 {
-    TransferFunction tf              = TransferFunction::Linear;
+    TransferFunction tf              = TransferFunction::sRGB; // for 8-bit samples, which linear ones would band
     TIFFCompression  compression     = TIFFCompression_LZW;
     TIFFSampleType   data_type_index = TIFFSampleType_UInt8;
 };

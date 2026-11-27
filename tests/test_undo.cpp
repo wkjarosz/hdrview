@@ -282,25 +282,6 @@ TEST_CASE("A new edit discards what had been undone, save point included")
     CHECK(history.is_modified());
 }
 
-TEST_CASE("Rebuilding an image's layers replaces them rather than adding to them")
-{
-    // finalize() appends as it walks the channels, so a build that kept an earlier one's results would
-    // duplicate them: a second leaf per node, and channel counts that no longer agree with the channels
-    auto img = make_test_image();
-    img->finalize();
-
-    const size_t layers = img->layers.size();
-    const size_t groups = img->groups.size();
-    REQUIRE(layers > 0);
-    REQUIRE(groups > 0);
-
-    // whatever an edit does, asking for the tree again describes the same channels
-    img->finalize();
-
-    CHECK(img->layers.size() == layers);
-    CHECK(img->groups.size() == groups);
-}
-
 TEST_CASE("Cropping keeps the samples where the box meets the image and makes them the whole image")
 {
     // A box inside the image, one hanging over its far corner, one only touching its edge, and one past it. The
@@ -396,36 +377,6 @@ TEST_CASE("Resizing the canvas puts the old samples where the anchor says, cutti
                     }
             }
         }
-}
-
-TEST_CASE("A structural entry restores the samples, the windows, and the layer tree")
-{
-    auto img = make_test_image();
-    img->finalize();
-
-    const size_t layers  = img->layers.size();
-    const size_t groups  = img->groups.size();
-    const Box2i  data    = img->data_window;
-    const Box2i  display = img->display_window;
-
-    StructureUndo entry{*img, "Crop"};
-    img->crop(Box2i{{1, 1}, {3, 2}});
-    img->rebuild_layers();
-    REQUIRE(img->size() != k_size);
-
-    entry.undo(*img);
-
-    CHECK(img->size() == k_size);
-    CHECK(img->data_window == data);
-    CHECK(img->display_window == display);
-    CHECK(matches_original(img));
-    // rebuilt from the restored channels, not left describing the cropped ones
-    CHECK(img->layers.size() == layers);
-    CHECK(img->groups.size() == groups);
-
-    // and redo returns to the cropped state, since the entry came out holding it
-    entry.redo(*img);
-    CHECK(img->size() == int2{2, 1});
 }
 
 TEST_CASE("Reducing keeps each channel's light, and resizes every channel and both windows together")

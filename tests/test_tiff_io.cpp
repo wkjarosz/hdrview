@@ -16,7 +16,6 @@
 #include <array>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <half.h>
 #include <optional>
 #include <sstream>
@@ -106,13 +105,6 @@ std::string cmyk_tiff(const std::string &icc)
     return tiff_bytes(Endian::Little, entries, {0, 0, 0, 0, 0, 0, 0, 0xff});
 }
 
-/// lcms's own CMYK printer profile, which libjxl carries in-tree.
-std::string cmyk_profile()
-{
-    std::ifstream in(std::string(HDRVIEW_TEST_LCMS_TESTBED_DIR) + "/test1.icc", std::ios::binary);
-    REQUIRE(in.good());
-    return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
-}
 #endif
 
 ImagePtr load_tiff(const std::string &bytes)
@@ -166,7 +158,6 @@ TEST_CASE("What a TIFF declares about its fourth sample, and what an override do
         CHECK(img->transparency == used);
         CHECK(img->transparency_from_file == c.from_file);
         CHECK(img->transparency_assumed == c.assumed);
-        CHECK(img->alpha_is_transparency() == (used != TransparencyType_None));
 
         // a fourth sample that is not transparency stands on its own instead of joining an RGBA group
         REQUIRE(img->groups.size() == (used == TransparencyType_None ? 2u : 1u));
@@ -225,9 +216,8 @@ TEST_CASE("A TIFF's alpha kind decides how many times its samples are multiplied
         CHECK(img->channels[3](1, 0) == doctest::Approx(k_half).epsilon(0.001));
 
         // dividing alpha out before the inverse transfer recovers straight 1.0, and multiplying back gives
-        // linear 1.0 times alpha; the transfer applied to the stored value would give EOTF(0.502) = 0.216
+        // linear 1.0 times alpha, where the transfer applied to the stored value would give EOTF(0.502) = 0.216
         CHECK(img->channels[0](1, 0) == doctest::Approx(k_half).epsilon(0.005));
-        CHECK(img->channels[0](1, 0) != doctest::Approx(0.216f).epsilon(0.01));
 
         // the opaque pixel is the control, unaffected by any of this
         CHECK(img->channels[0](0, 0) == doctest::Approx(1.f).epsilon(0.001));
@@ -275,18 +265,12 @@ TEST_CASE("A saved TIFF multiplies alpha into its encoded samples")
 
     const unsigned char alpha = samples[3];
     CHECK(int(alpha) == doctest::Approx(127).epsilon(0.02)); // 0.5 quantized over 8 bits
-    // a*OETF(C) == 0.5 * 1.0
+    // a*OETF(C) == 0.5 * 1.0, not OETF(a*C) == 0.735, which leaving the premultiply in place across the transfer would
+    // give
     CHECK(int(samples[0]) == doctest::Approx(127).epsilon(0.02));
-    // not OETF(a*C) == 0.735, which leaving the premultiply in place across the transfer would give
-    CHECK(int(samples[0]) != doctest::Approx(188).epsilon(0.02));
 
     // a stored color can never exceed its alpha, being that alpha times an encoded value of at most one
     for (int c = 0; c < 3; ++c) CHECK(samples[c] <= alpha);
-
-    // and it reads back as what it started as
-    auto reloaded = load_tiff(out.str());
-    CHECK(reloaded->transparency == TransparencyType_PremultipliedNonLinear);
-    CHECK(reloaded->channels[0](0, 0) == doctest::Approx(0.5f).epsilon(0.02));
 }
 
 namespace
@@ -493,9 +477,8 @@ TEST_CASE("libtiff's test images decode as their names say, or are refused")
         const std::string name = path.filename().string();
         CAPTURE(name);
 
-        std::ifstream in(path, std::ios::binary);
-        REQUIRE(in.good());
-        const std::string bytes{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+        const std::string bytes = file_bytes(path.string());
+        REQUIRE_FALSE(bytes.empty());
 
         // the loader is called directly rather than through load_bytes(), which keeps only a lone image: the
         // files with several directories are the ones worth reaching here, and they decode to one apiece

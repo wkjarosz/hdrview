@@ -680,14 +680,15 @@ void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
                                           img2 ? img2->content_version : 0};
 
     // The group's alpha channel, when this channel needs dividing by it to report the file's values; null
-    // for the alpha channel itself, which is stored as the file had it.
+    // for the alpha channel itself, which is stored as the file had it, and for a ratio never premultiplied.
     auto alpha_of = [c](const ConstImagePtr &img, int group_idx) -> const Channel *
     {
         if (!img || !img->is_valid_group(group_idx))
             return nullptr;
         const ChannelGroup &g = img->groups[group_idx];
-        return img->unpremultiplies(g) && c != g.num_channels - 1 ? &img->channels[g.channels[g.num_channels - 1]]
-                                                                  : nullptr;
+        return img->unpremultiplies(g) && group_slot_premultiplied(g.type, g.num_channels, c)
+                   ? &img->channels[g.channels[g.num_channels - 1]]
+                   : nullptr;
     };
 
     // img2 is captured so the reference image outlives the task: the raw Channel pointers below point into
@@ -1561,6 +1562,8 @@ void Image::finalize()
 
             for (int c = 0; c < g.num_channels - 1; ++c)
             {
+                if (!group_slot_premultiplied(g.type, g.num_channels, c))
+                    continue;
                 spdlog::debug("Premultiplying channel {}", g.channels[c]);
                 channels[g.channels[c]].apply([&alpha = channels[g.channels[g.num_channels - 1]]](float v, int x, int y)
                                               { return std::max(k_small_alpha, alpha(x, y)) * v; });
@@ -1695,7 +1698,9 @@ float4 Image::raw_pixel(int2 p, Target_ target) const
     if (unpremultiplies(group))
     {
         float a = std::max(k_small_alpha, value[group.num_channels - 1]);
-        for (int c = 0; c < group.num_channels - 1; ++c) value[c] /= a;
+        for (int c = 0; c < group.num_channels - 1; ++c)
+            if (group_slot_premultiplied(group.type, group.num_channels, c))
+                value[c] /= a;
     }
 
     return value;

@@ -125,6 +125,39 @@ constantly, and a slow one stops being run.
   `tests/test_edit_commands.cpp`. Reserve `hdrview_gui_tests` for what only the GUI can show: menus and
   shortcuts, dialog wiring, progress and cancellation, undo through the app.
 
+Where a test's expected values come from decides whether it can fail. **Never test HDRView's code against a
+copy of itself**: an expected value taken from the function under test, from a function it calls to do the
+work, or from the same logic written again in the test (the same formula, a switch mirroring its cases, a
+hand copy of a table such as the loader list) agrees with the code whatever the code does. Take expected
+values from one of these instead:
+- **a round trip or an inverse:** what is written reads back, what is converted converts back;
+- **an invariant or a relation between outputs:** what must stay the same (nothing outside the selection
+  changes; a shift by a whole period changes nothing) or how two outputs must relate (the mix at 0.5 lies
+  halfway between those at 0 and 1);
+- **values the input fixes:** a one-channel source lands unchanged in every channel; a gray converted to
+  color and back is the same gray;
+- **a published reference or a value worked out by hand:** colour-science's tables, a standard's matrix,
+  a blend computed on paper, written into the test as numbers;
+- **an independent implementation:** macOS's ImageIO, or a library reading what HDRView wrote.
+
+A helper that is itself held to one of these elsewhere may build expected values; say where in a comment.
+
+Every test and every assertion has to be able to fail on its own, so the suite stays as small as its
+coverage allows:
+- **No check that cannot fail.** One that asserts a literal, a compile-time constant (make it a
+  `static_assert`), a library's own arithmetic, or something an earlier assertion already implies adds
+  length and nothing else.
+- **Test HDRView, not its libraries.** Check what HDRView hands a library and what it makes of the answer,
+  not the library's own behavior, such as half-float rounding or deinterlacing.
+- **Every case in a sweep must reach different HDRView code.** Settings that differ only inside a library
+  (a compression option, interlacing), or a second identical click, cost time for no coverage; cover them
+  once.
+- **A failure belongs to one test.** When two tests catch exactly the same breakages, keep the cheaper or
+  broader one; fold what is unique to the other into it.
+- **Share how inputs are built, not what is expected.** Fixtures and builders live in `tests/test_support.h`
+  and `tests/gui/test_gui_support.h` rather than copied per file; the expected values stay visible in each
+  test.
+
 #### GUI regression tests (Dear ImGui Test Engine)
 `HDRVIEW_BUILD_GUI_TESTS=ON` builds `hdrview_gui_tests`, which drives a real `HDRViewApp` instance (menus,
 dialogs, dockable windows, viewport widgets) via [Dear ImGui Test

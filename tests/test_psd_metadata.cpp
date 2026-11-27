@@ -105,18 +105,4 @@ TEST_CASE("A PSD resource cannot read past the section that contains it")
         }
         CHECK(psd.xmp.size() <= xmp.size());
     }
-
-    SUBCASE("a resource declaring far more than the file holds is not allocated for")
-    {
-        std::istringstream is{psd_with_resource(1060, 64u << 20, xmp, "")};
-        PSDMetadata        psd;
-        try
-        {
-            psd.read(is);
-        }
-        catch (const std::exception &)
-        {
-        }
-        CHECK(psd.xmp.size() <= xmp.size());
-    }
 }

@@ -489,29 +489,6 @@ inline float dequantize_narrow<float>(float v)
     return v;
 }
 
-#define HDRVIEW_COL32_R_SHIFT 24
-#define HDRVIEW_COL32_G_SHIFT 16
-#define HDRVIEW_COL32_B_SHIFT 8
-#define HDRVIEW_COL32_A_SHIFT 0
-#define HDRVIEW_COL32_A_MASK  0x000000FF
-
-inline float4 color_u32_to_f128(uint32_t in)
-{
-    float s = 1.0f / 255.0f;
-    return float4(((in >> HDRVIEW_COL32_R_SHIFT) & 0xFF) * s, ((in >> HDRVIEW_COL32_G_SHIFT) & 0xFF) * s,
-                  ((in >> HDRVIEW_COL32_B_SHIFT) & 0xFF) * s, ((in >> HDRVIEW_COL32_A_SHIFT) & 0xFF) * s);
-}
-
-inline uint32_t color_f128_to_u32(const float4 &in)
-{
-    uint32_t out;
-    out = ((uint32_t)(saturate(in.x) * 255.f + 0.5f)) << HDRVIEW_COL32_R_SHIFT;
-    out |= ((uint32_t)(saturate(in.y) * 255.f + 0.5f)) << HDRVIEW_COL32_G_SHIFT;
-    out |= ((uint32_t)(saturate(in.z) * 255.f + 0.5f)) << HDRVIEW_COL32_B_SHIFT;
-    out |= ((uint32_t)(saturate(in.w) * 255.f + 0.5f)) << HDRVIEW_COL32_A_SHIFT;
-    return out;
-}
-
 // /**\brief Applies the transfer function as defined in Table 3 of ITU-T H.273 for the given TransferCharacteristics
 //  * value.
 //  *

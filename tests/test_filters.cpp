@@ -8,6 +8,7 @@
 
 #include "edit/filters.h"
 #include "edit/poisson.h"
+#include "test_support.h"
 
 #include <algorithm>
 #include <cmath>
@@ -19,15 +20,10 @@
 /// The whole of \p a, for the cases that are about the filter and not the region.
 static Box2i whole(const Array2Df &a) { return Box2i{int2{0}, a.size()}; }
 
+using namespace hdrview_test;
+
 namespace
 {
-
-Array2Df constant(int2 size, float v)
-{
-    Array2Df a{size};
-    for (int i = 0; i < a.num_elements(); ++i) a(i) = v;
-    return a;
-}
 
 Array2Df ramp(int2 size)
 {
@@ -45,13 +41,6 @@ Array2Df noise(int2 size)
     return a;
 }
 
-float max_difference(const Array2Df &a, const Array2Df &b)
-{
-    float worst = 0.f;
-    for (int i = 0; i < a.num_elements(); ++i) worst = std::max(worst, std::abs(a(i) - b(i)));
-    return worst;
-}
-
 } // namespace
 
 TEST_CASE("Every filter leaves a constant image alone")
@@ -59,7 +48,7 @@ TEST_CASE("Every filter leaves a constant image alone")
     // Clamping at the border makes this hold at the edges too, which filtering against black would not. A
     // filter whose weights do not sum to one drifts off the constant, and a resampling one that reconstructs
     // between samples has to keep it there as well.
-    const Array2Df flat = constant(int2{16, 12}, 0.37f);
+    const Array2Df flat = filled(int2{16, 12}, 0.37f);
     const Box2i    all  = whole(flat);
 
     auto is_flat = [](const char *what, const Array2Df &out)
@@ -390,25 +379,25 @@ TEST_CASE("A fast Gaussian approaches the real one as it iterates")
 namespace
 {
 
-/// Where a coordinate lands under one border mode, written independently of the filter's own version.
+/// Where a coordinate lands under one border mode, by stepping it back into the image as the mode is defined.
+/**
+    Repeat moves it a whole image at a time, and Mirror reflects it across whichever edge it is past, again and
+    again: a different route than the filter's modular arithmetic to the same place.
+*/
 int expected_wrap(int p, int extent, int mode)
 {
     if (p >= 0 && p < extent)
         return p;
-
-    switch (mode)
-    {
-    case BorderMode_Edge: return std::clamp(p, 0, extent - 1);
-    case BorderMode_Repeat: return ((p % extent) + extent) % extent;
-    case BorderMode_Mirror:
-    {
-        // reflected at each repeat: the period is twice the extent and folds in the middle
-        const int period = 2 * extent;
-        int       q      = ((p % period) + period) % period;
-        return q < extent ? q : period - 1 - q;
-    }
-    default: return -1; // BorderMode_Black: nothing there
-    }
+    if (mode == BorderMode_Black)
+        return -1; // nothing there
+    if (mode == BorderMode_Edge)
+        return p < 0 ? 0 : extent - 1;
+    while (p < 0 || p >= extent)
+        if (mode == BorderMode_Repeat)
+            p += p < 0 ? extent : -extent;
+        else // BorderMode_Mirror, about the outer edge of the first and the last sample
+            p = p < 0 ? -1 - p : 2 * extent - 1 - p;
+    return p;
 }
 
 } // namespace
@@ -591,7 +580,7 @@ TEST_CASE("Every filter that reports progress runs it to the end, and stops earl
     Array2Df mask{size};
     for (int y = 2; y < size.y - 2; ++y)
         for (int x = 2; x < size.x - 2; ++x) mask(x, y) = 1.f;
-    const Array2Df flat = constant(size, 0.5f);
+    const Array2Df flat = filled(size, 0.5f);
 
     using Filter = std::function<Array2Df(AtomicProgress)>;
     const struct
@@ -636,7 +625,7 @@ TEST_CASE("Zapping replaces exactly the non-finite samples, each with the median
     constexpr float inf  = std::numeric_limits<float>::infinity();
     constexpr float base = 0.4f, replacement = -1.f;
 
-    Array2Df src = constant(int2{12, 10}, base);
+    Array2Df src = filled(int2{12, 10}, base);
     src(2, 2)    = nan;
     src(6, 2)    = inf;
     src(7, 2)    = 1000.f;

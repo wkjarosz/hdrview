@@ -15,6 +15,8 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <fstream>
+#include <iterator>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -22,6 +24,31 @@
 
 namespace hdrview_test
 {
+
+/// An array of \p size holding \p v throughout.
+inline Array2Df filled(int2 size, float v)
+{
+    Array2Df a{size};
+    for (int i = 0; i < a.num_elements(); ++i) a(i) = v;
+    return a;
+}
+
+/// The largest absolute difference between the samples of two arrays of the same size.
+inline float max_difference(const Array2Df &a, const Array2Df &b)
+{
+    float worst = 0.f;
+    for (int i = 0; i < a.num_elements(); ++i) worst = std::max(worst, std::abs(a(i) - b(i)));
+    return worst;
+}
+
+/// The index of \p img's channel named \p name, or -1.
+inline int channel_index(const Image &img, const std::string &name)
+{
+    for (size_t c = 0; c < img.channels.size(); ++c)
+        if (img.channels[c].name == name)
+            return int(c);
+    return -1;
+}
 
 /// Appends `value` in `endian` byte order to a container of `char` or `uint8_t`.
 template <typename T, typename Bytes>
@@ -188,5 +215,21 @@ inline std::string png_chunk(const char *type, const std::string &data)
     put<uint32_t>(out, ~crc, Endian::Big);
     return out;
 }
+
+/// The bytes of the file at \p path, or nothing if it cannot be read.
+inline std::string file_bytes(const std::string &path)
+{
+    std::ifstream in(path, std::ios::binary);
+    return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+}
+
+#ifdef HDRVIEW_TEST_LCMS_TESTBED_DIR
+/// lcms's own CMYK printer profile, from its testbed, which libjxl carries in-tree.
+/**
+    It says of itself that it is not suitable for real use, which is beside the point: it is a real profile with
+    real tables whose color space is CMYK, the property every conversion of ink turns on.
+*/
+inline std::string cmyk_profile() { return file_bytes(std::string(HDRVIEW_TEST_LCMS_TESTBED_DIR) + "/test1.icc"); }
+#endif
 
 } // namespace hdrview_test

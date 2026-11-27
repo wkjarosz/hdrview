@@ -275,9 +275,12 @@ TEST_CASE("Remapping carries a value with the direction it belongs to")
 
 TEST_CASE("A remap's rotation is the yaw, pitch and roll it is given, and a drag's turns one direction onto another")
 {
-    // yaw turns about the up axis, carrying +x toward -z, as it carries a lat-long's horizon sideways
-    const float3 turned = mul(envmap_rotation(0.3f, 0.f, 0.f), float3{1.f, 0.f, 0.f});
-    CHECK(la::length(turned - float3{std::cos(0.3f), 0.f, -std::sin(0.3f)}) < 1e-6f);
+    // each a right-handed turn about its axis: yaw about +y carries +z toward +x, pitch about +x carries +y toward +z,
+    // and roll about +z carries +x toward +y
+    const float c = std::cos(0.3f), s = std::sin(0.3f);
+    CHECK(la::length(mul(envmap_rotation(0.3f, 0.f, 0.f), float3{1.f, 0.f, 0.f}) - float3{c, 0.f, -s}) < 1e-6f);
+    CHECK(la::length(mul(envmap_rotation(0.f, 0.3f, 0.f), float3{0.f, 1.f, 0.f}) - float3{0.f, c, s}) < 1e-6f);
+    CHECK(la::length(mul(envmap_rotation(0.f, 0.f, 0.3f), float3{1.f, 0.f, 0.f}) - float3{c, s, 0.f}) < 1e-6f);
 
     // the angles come back from the rotation they make, which is a rotation
     for (float yaw : {-2.5f, -0.3f, 0.f, 1.2f, 3.f})
@@ -470,15 +473,17 @@ TEST_CASE("A cube map's faces join up, so a read at a face edge continues onto t
 
 TEST_CASE("Every edge of a mapping's image is read as the sphere continues past it")
 {
-    // An output sample moved within its own chart, the image or a cube face, lands where the mapping puts the point it
-    // was moved to; moved past the chart, it continues onto the sphere, which the reconstruction below holds the
-    // output's edges to as it holds the source's.
+    // A cube layout's sample moved within its face, across the plane of the face, lands where the layout puts the
+    // point it was moved to. The other mappings move a sample across the image itself, which inside it is the
+    // mapping's own function by definition; what they do past an edge is held below, by the reconstruction.
     for (int m = 0; m < EnvMapping_COUNT; ++m)
     {
+        if (!shader::envmap_is_cube(m))
+            continue;
         CAPTURE(std::string(name_of(m)));
         const int2 size  = size_for(m, 72);
-        const int  face  = shader::envmap_is_cube(m) ? shader::envmap_face_size(m, size) : 0;
-        const auto chart = [&](float2 q) { return face ? int2(la::floor(q / float(face))) : int2{0}; };
+        const int  face  = shader::envmap_face_size(m, size);
+        const auto chart = [&](float2 q) { return int2(la::floor(q / float(face))); };
         float      worst = 0.f;
         for (int y = 0; y < size.y; y += 3)
             for (int x = 0; x < size.x; x += 3)

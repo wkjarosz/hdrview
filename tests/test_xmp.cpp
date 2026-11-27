@@ -67,20 +67,10 @@ TEST_CASE("An ordinary XMP packet parses into its schemas")
 
 TEST_CASE("A default namespace declaration does not take the image down with it")
 {
-    // xmlns= has no colon, so read as an ordinary attribute it is a plain string, which xmlns:dc= then
-    // addresses as an object
-    const std::string with_default_ns = packet(R"(<rdf:Description rdf:about=""
-        xmlns="http://purl.org/dc/elements/1.1/"
-        xmlns:dc="http://purl.org/dc/elements/1.1/">
-        <dc:title>ok</dc:title>
-      </rdf:Description>)");
-
-    // and what the packet says survives the collision
-    json j;
-    CHECK_NOTHROW(j = parse(with_default_ns));
-    CHECK(j.value("dc", json::object()).value("title", std::string{}) == "ok");
-
-    // the same collision reached through an element's own attributes
+    // xmlns= has no colon, so read as an ordinary attribute it is a plain string, which xmlns:dc= then addresses as
+    // an object; the PNG test below reaches that through finalize(), and this the same collision through an element's
+    // own attributes
+    json              j;
     const std::string prefix_used_twice = packet(R"(<rdf:Description rdf:about=""
         xmlns:dc="http://purl.org/dc/elements/1.1/"
         dc="plain"
@@ -144,13 +134,6 @@ TEST_CASE("An image whose XMP the parser dislikes still loads its pixels")
         xmlns:dc="http://purl.org/dc/elements/1.1/">
         <dc:title>ok</dc:title>
       </rdf:Description>)");
-
-    // first the control, so a broken fixture cannot pass for the XMP's doing
-    std::istringstream    plain{png_with_xmp("")};
-    std::vector<ImagePtr> plain_images;
-    CHECK_NOTHROW(plain_images = load_image(plain, "plain.png"));
-    REQUIRE(plain_images.size() == 1);
-    CHECK(plain_images[0]->size() == int2{1, 1});
 
     std::istringstream    is{png_with_xmp(xmp)};
     std::vector<ImagePtr> images;

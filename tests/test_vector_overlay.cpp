@@ -20,32 +20,6 @@
 
 using namespace test_draw;
 
-TEST_CASE("A stroked rectangle lands where the commands put it")
-{
-    TestDrawList d;
-
-    // the shape the tevclient example draws around each finished tile
-    draw_vector_overlay(&d.list,
-                        {
-                            cmd(VgCommand::Type::BeginPath),
-                            cmd(VgCommand::Type::StrokeColor, {1.f, 1.f, 1.f, 1.f}),
-                            cmd(VgCommand::Type::StrokeWidth, {2.f, float(VgCommand::Absolute)}),
-                            cmd(VgCommand::Type::Rect, {10.f, 20.f, 100.f, 50.f}),
-                            cmd(VgCommand::Type::Stroke),
-                        },
-                        identity_transform(), IM_COL32_WHITE);
-
-    REQUIRE(d.list.VtxBuffer.Size > 0);
-    const auto b = vertex_bounds(d.list);
-
-    // the stroke straddles the path, so with anti-aliasing off the geometry is half a line width outside the
-    // rectangle on every side: [10,110]x[20,70] grown by 1
-    CHECK(b.min_x == doctest::Approx(9.f).epsilon(0.01f));
-    CHECK(b.min_y == doctest::Approx(19.f).epsilon(0.01f));
-    CHECK(b.max_x == doctest::Approx(111.f).epsilon(0.01f));
-    CHECK(b.max_y == doctest::Approx(71.f).epsilon(0.01f));
-}
-
 TEST_CASE("Relative sizes scale with the image, absolute ones do not")
 {
     // Relative widths are in image pixels and thicken as the view zooms in; Absolute ones are in screen

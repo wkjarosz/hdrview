@@ -46,14 +46,6 @@ using namespace hdrview_test;
 namespace
 {
 
-int channel_index(const Image &img, const std::string &name)
-{
-    for (int i = 0; i < (int)img.channels.size(); ++i)
-        if (img.channels[i].name == name)
-            return i;
-    return -1;
-}
-
 /// An RGBA image whose four channels each ramp their own way, so a step that mixes them up or skips one shows.
 ImagePtr make_ramp_image(int2 size)
 {
@@ -334,7 +326,7 @@ TEST_CASE("An ISO gain map applies its log2 gain in proportion to how far the ta
 }
 
 #if HDRVIEW_ENABLE_LIBHEIF
-TEST_CASE("An Apple HEIC's gain map is found and applied" * doctest::skip(false))
+TEST_CASE("An Apple HEIC's gain map is found and applied")
 {
     // The aux-image plumbing, the maker-note read and the map itself all have to line up, which no
     // synthetic file this suite could build reaches.
@@ -815,9 +807,8 @@ TEST_CASE("A HEIF tmap item's leading version byte is the caller's to strip, not
         "\x00\x00\x00\x01\x00\xb2\x6b\xb5\x00\x40\x00\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\xd1\xb7\x20\x00"
         "\x00\x00\x00\x00\xd1\xb7\x20\x00\x00\x00";
 
+    static_assert(sizeof(tmap) - 1 == 62, "the tmap item as transcribed");
     const auto *bytes = (const uint8_t *)tmap;
-    REQUIRE(sizeof(tmap) - 1 == 62);
-    CHECK(bytes[0] == 0); // ToneMapImage version
 
     SUBCASE("the metadata parses once the container's version byte is past")
     {

@@ -214,15 +214,6 @@ TEST_CASE("a display shows its panel's gamut only through a frame that reaches p
     }
 }
 
-TEST_CASE("color_u32_to_f128/color_f128_to_u32 round-trip exactly")
-{
-    for (uint32_t packed : {0x00000000u, 0xFFFFFFFFu, 0xFF0000FFu, 0x00FF00FFu, 0x0000FFFFu, 0x7F3C9AFFu})
-    {
-        INFO("packed = ", packed);
-        CHECK(color_f128_to_u32(color_u32_to_f128(packed)) == packed);
-    }
-}
-
 TEST_CASE("a gamut converts to itself as the identity, and the shader's sRGB luminance weights are the derived ones")
 {
     // converting a gamut to itself is reported as unnecessary, so the colorpass keeps an identity matrix in the
@@ -380,7 +371,8 @@ TEST_CASE("the image shader's per-pixel steps do what the viewer's controls say"
         }
         else
         {
-            CHECK(approx_equal(got.xyz(), sRGB_to_linear(colormap_sRGB) * c.w, 1e-6f));
+            // the colormap's color decoded from sRGB, worked out by hand, and premultiplied
+            CHECK(approx_equal(got.xyz(), float3{0.7874123f, 0.1328683f, 0.0100228f} * c.w, 1e-6f));
             CHECK(shader::tonemap(float4{5.f, -1.f, 0.f, c.w}, Tonemap_(m), 2.2f, colormap_sRGB) == got);
         }
     }
@@ -451,15 +443,18 @@ TEST_CASE("the image shader's per-pixel steps do what the viewer's controls say"
                 CHECK(rolled.w == alpha);
                 CHECK(la::maxelem(rolled.xyz()) / alpha == doctest::Approx(curve(6.f)));
                 CHECK(la::maxelem(rolled.xyz()) / alpha <= std::exp2(ceiling));
-                for (int i = 0; i < 3; ++i)
-                {
-                    const float each     = curve(straight_hot[i]);
-                    const float together = straight_hot[i] * curve(6.f) / 6.f;
-                    CHECK(rolled[i] / alpha == doctest::Approx(each + (together - each) * preserve_hue));
-                }
-                if (preserve_hue == 1.f)
+                if (preserve_hue == 0.f)
+                    for (int i = 0; i < 3; ++i) CHECK(rolled[i] / alpha == doctest::Approx(curve(straight_hot[i])));
+                else if (preserve_hue == 1.f)
                     for (int i = 0; i < 3; ++i)
                         CHECK(rolled[i] / rolled[(i + 1) % 3] == doctest::Approx(hot[i] / hot[(i + 1) % 3]));
+                else
+                {
+                    // as far between the two as preserve_hue says
+                    const float4 apart = roll(hot, 0.f), together = roll(hot, 1.f);
+                    for (int i = 0; i < 3; ++i)
+                        CHECK(rolled[i] == doctest::Approx(apart[i] + (together[i] - apart[i]) * preserve_hue));
+                }
 
                 const float4 gray{float3{6.f * alpha}, alpha};
                 CHECK(approx_equal(roll(gray, preserve_hue), roll(gray, 1.f - preserve_hue), 1e-6f));
@@ -472,8 +467,28 @@ TEST_CASE("the image shader's per-pixel steps do what the viewer's controls say"
             }
 }
 
-TEST_CASE("blend()'s overloads agree on every blend mode")
+TEST_CASE("blend() gives each blend mode's value, and its overloads agree on every mode")
 {
+    // Worked out by hand for two pairs, the top above the bottom and below it, so a mode that swaps its operands
+    // or drops a sign is off. The relative modes divide by the bottom plus 0.01.
+    struct Case
+    {
+        float top, bottom;
+        float want[BlendMode_COUNT]; ///< In BlendMode_ order
+    };
+    const Case cases[] = {
+        {0.6f, 0.25f, {0.6f, 0.15f, 2.4f, 0.85f, 0.425f, 0.35f, 0.35f / 0.26f, 0.35f, 0.35f / 0.26f}},
+        {0.15f, 0.8f, {0.15f, 0.12f, 0.1875f, 0.95f, 0.475f, -0.65f, -0.65f / 0.81f, 0.65f, 0.65f / 0.81f}},
+    };
+    static_assert(BlendMode_COUNT == 9, "a new blend mode needs its values worked out above");
+    for (const auto &c : cases)
+        for (int m = 0; m < BlendMode_COUNT; ++m)
+        {
+            CAPTURE(blend_mode_names()[m]);
+            CAPTURE(c.top);
+            CHECK(blend(c.top, c.bottom, BlendMode_(m)) == doctest::Approx(c.want[m]));
+        }
+
     // the three overloads are separate switches over the same enum, so a mode present in one and missing
     // from another blends as whatever its `default:` is. The RGBA one is the image shader's own
     // (src/shared/pipeline.h); its channels differ, so one that reads another's value is caught too.
@@ -499,15 +514,6 @@ TEST_CASE("blend()'s overloads agree on every blend mode")
             // statistics pass wants; every other mode is per-channel arithmetic and must match
             if (mode != BlendMode_Normal)
                 CHECK(v4[c] == doctest::Approx(s));
-
-            // colorspace.h is a header, where only a qualified std::abs is sure to reach the floating-point
-            // overloads: libstdc++ leaves only <stdlib.h>'s integer ::abs at global scope, which would truncate
-            // these differences, of either sign and two of them below 1
-            const float diff = std::fabs(top[c] - bottom[c]);
-            if (mode == BlendMode_Difference)
-                CHECK(s == doctest::Approx(diff));
-            else if (mode == BlendMode_Relative_Difference)
-                CHECK(s == doctest::Approx(diff / (bottom[c] + 0.01f)));
         }
     }
 }
@@ -761,8 +767,16 @@ TEST_CASE("brightness/contrast curves the RGB channels, L* alone, or a* and b* a
     { float slope, midpoint, bias; };
     // a brighter, steeper curve and a darker, flatter one
     const Setting settings[] = {{1.376f, 0.3f, 0.7f}, {0.51f, 0.65f, 0.35f}};
-    const int     shapes[]   = {shader::SHAPE_RATIONAL, shader::SHAPE_LINE, shader::SHAPE_RATIONAL + shader::SHAPE_CLIP,
-                                shader::SHAPE_LINE + shader::SHAPE_CLIP};
+    // each shape the command offers, and the curve and clip it means; the curves themselves are held above
+    struct Shape
+    {
+        int  shape;
+        bool line, clipped;
+    };
+    const Shape shapes[] = {{shader::SHAPE_RATIONAL, false, false},
+                            {shader::SHAPE_LINE, true, false},
+                            {shader::SHAPE_RATIONAL + shader::SHAPE_CLIP, false, true},
+                            {shader::SHAPE_LINE + shader::SHAPE_CLIP, true, true}};
 
     std::vector<float3> colors;
     for (float r : {0.05f, 0.3f, 0.6f, 0.9f})
@@ -778,24 +792,23 @@ TEST_CASE("brightness/contrast curves the RGB channels, L* alone, or a* and b* a
         auto                 lab_of = [&](float3 rgb) { return XYZ_to_Lab(mul(M, rgb), white); };
 
         for (const Setting &set : settings)
-            for (int shape : shapes)
+            for (const Shape &shape : shapes)
             {
-                INFO("gamut = ", color_gamut_name(gamut), ", slope = ", set.slope, ", shape = ", shape);
+                INFO("gamut = ", color_gamut_name(gamut), ", slope = ", set.slope, ", shape = ", shape.shape);
                 auto curve = [&](float v)
                 {
-                    const float y = shape % shader::SHAPE_CLIP == shader::SHAPE_LINE
-                                        ? brightness_contrast_linear(v, set.slope, set.midpoint)
-                                        : brightness_contrast_rational(v, set.slope, set.bias);
-                    return shape >= shader::SHAPE_CLIP ? std::clamp(y, 0.f, 1.f) : y;
+                    const float y = shape.line ? brightness_contrast_linear(v, set.slope, set.midpoint)
+                                               : brightness_contrast_rational(v, set.slope, set.bias);
+                    return shape.clipped ? std::clamp(y, 0.f, 1.f) : y;
                 };
-                const float4 p0{set.slope, set.midpoint, set.bias, float(shape)};
+                const float4 p0{set.slope, set.midpoint, set.bias, float(shape.shape)};
 
                 float rgb_moves_lightness = 0.f, rgb_moves_color = 0.f;
                 for (const float3 &rgb : colors)
                 {
                     INFO("rgb = ", rgb);
                     const float4 c{rgb, 0.7f};
-                    const float3 lab = lab_of(rgb), n = normalize_Lab(lab);
+                    const float3 lab = lab_of(rgb);
                     for (int mode : {shader::CURVE_RGB, shader::CURVE_LIGHTNESS, shader::CURVE_CHROMATICITY})
                     {
                         INFO("mode = ", mode);
@@ -811,11 +824,12 @@ TEST_CASE("brightness/contrast curves the RGB channels, L* alone, or a* and b* a
                             rgb_moves_color     = std::max({rgb_moves_color, std::fabs(moved.y), std::fabs(moved.z)});
                             continue;
                         }
-                        // the moved components follow the curve, and the others stay, to within the trip out to
-                        // RGB and back
-                        const float3 want =
-                            unnormalize_Lab(mode == shader::CURVE_LIGHTNESS ? float3{curve(n.x), n.y, n.z}
-                                                                            : float3{n.x, curve(n.y), curve(n.z)});
+                        // The moved components follow the curve, L* over [0, 100] and a* and b* over [-128, 128] mapped
+                        // onto [0, 1], and the others stay, to within the trip out to RGB and back.
+                        auto         opponent = [&](float v) { return 256.f * curve((v + 128.f) / 256.f) - 128.f; };
+                        const float3 want     = mode == shader::CURVE_LIGHTNESS
+                                                    ? float3{100.f * curve(lab.x / 100.f), lab.y, lab.z}
+                                                    : float3{lab.x, opponent(lab.y), opponent(lab.z)};
                         const float3 got_lab = lab_of(got.xyz());
                         INFO("L*a*b* = ", lab, " -> ", got_lab, ", want ", want);
                         CHECK(approx_equal(got_lab, want, 2e-3f));

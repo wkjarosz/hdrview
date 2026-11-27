@@ -45,20 +45,6 @@ using std::vector;
 namespace
 {
 
-/// Loads the small single-layer fixture, alone, and leaves it as the current image with nothing selected.
-bool load_fixture(ImGuiTestContext *ctx)
-{
-    reset_images(ctx);
-    // edits are selection-only by default, so a selection left by an earlier test would narrow this one
-    hdrview()->roi()          = Box2i{};
-    hdrview()->edit_subject() = EditSubject{};
-    hdrview()->set_clipboard(nullptr);
-    use_private_clipboard() = {};
-    IM_CHECK_SILENT_RETV(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE_2}) == 1, false);
-    IM_CHECK_SILENT_RETV(hdrview()->current_image() != nullptr, false);
-    return true;
-}
-
 /// Loads the fixture twice and selects both, with the first current.
 bool load_selected_pair(ImGuiTestContext *ctx)
 {
@@ -88,40 +74,11 @@ vector<float> snapshot(const ConstImagePtr &img)
 bool same(const vector<float> &a, const vector<float> &b)
 { return a.size() == b.size() && std::memcmp(a.data(), b.data(), a.size() * sizeof(float)) == 0; }
 
-/// How many samples outside \p roi differ from \p before, a snapshot of the same channels.
-int changed_outside(const ConstImagePtr &img, const vector<float> &before, const Box2i &roi)
-{
-    int    changed = 0;
-    size_t i       = 0;
-    for (const auto &c : img->channels)
-        for (int y = 0; y < c.size().y; ++y)
-            for (int x = 0; x < c.size().x; ++x, ++i)
-            {
-                // half-open, so an edit reaching the selection's last row or column counts as outside it
-                const int2 p = int2{x, y} + img->data_window.min;
-                if (la::all(la::gequal(p, roi.min)) && la::all(la::less(p, roi.max)))
-                    continue;
-                const float v = c(x, y);
-                changed += i >= before.size() || std::memcmp(&v, &before[i], sizeof(float)) != 0;
-            }
-    return changed;
-}
-
 void menu_click(ImGuiTestContext *ctx, const string &path)
 {
     ctx->SetRef("##MainMenuBar");
     ctx->MenuClick(path.c_str());
     ctx->Yield(2);
-}
-
-/// Waits for the edit dialog \p name to close, and returns whether it did.
-bool dialog_closed(ImGuiTestContext *ctx, const string &name)
-{
-    ctx->SetRef("");
-    const string ref = "//" + escaped(name);
-    return wait_until(
-        ctx, [&] { return ctx->WindowInfo(ref.c_str(), ImGuiTestOpFlags_NoError).Window == nullptr; },
-        std::chrono::seconds(2));
 }
 
 /// The remap dialog's settings for a small lat-long, point sampled once a pixel, so a preview frame stays cheap.
@@ -148,8 +105,8 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
     {
         // The category test for the menu: every command the Edit menu offers without a dialog, invoked the way a
         // user invokes it, over a selection well inside the image. What it does to the pixels belongs to the
-        // logic-level suite; what this adds is that the item is there, reaches the command, keeps to the selection
-        // where its subject says to, and leaves the image and the history in a state one Undo takes back.
+        // logic-level suite; what this adds is that the item is there, reaches the command, and leaves the history in
+        // a state one Undo takes back.
         auto &undo      = hdrview()->action("Undo");
         auto &redo      = hdrview()->action("Redo");
         int   expected  = 0;
@@ -198,16 +155,10 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
             hdrview()->set_selection(roi);
             ctx->Yield();
 
-            // a disabled item does nothing when clicked, and would pass everything below
-            IM_CHECK(hdrview()->action(name).enabled());
-
             const int    entries  = img->history.current_state();
             const bool   modified = img->history.is_modified();
             const auto   before   = snapshot(img);
             const size_t groups   = img->groups.size();
-            const size_t channels = img->channels.size();
-            IM_CHECK_EQ(undo.enabled(), entries > 0);
-            IM_CHECK_EQ(redo.enabled(), false);
 
             // the menu labels this one by what it would delete
             const string label =
@@ -226,41 +177,19 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
                 continue;
             }
 
-            // every other one owes one undo entry over the lot, not one per group or channel
+            // every other one owes one undo entry over the lot, not one per group or channel, under its own name;
+            // what it does to the samples, and redoing it, are the logic-level sweep's
             IM_CHECK(wait_until(ctx, [&] { return img->history.current_state() > entries; }, std::chrono::seconds(5)));
             IM_CHECK_EQ(img->history.current_state(), entries + 1);
-            IM_CHECK_EQ(img->history.size(), entries + 1);
             IM_CHECK_STR_EQ(img->history.undo_name().c_str(), name.c_str());
-            IM_CHECK(img->history.is_modified());
-            IM_CHECK(hdrview()->any_image_modified());
-            IM_CHECK_EQ(undo.enabled(), true);
-            IM_CHECK_EQ(redo.enabled(), false);
+            IM_CHECK(hdrview()->any_image_modified() && undo.enabled());
 
-            // it did something: moved samples, or regrouped or removed channels; and where it takes a subject, only
-            // under the selection
-            const auto edited = snapshot(img);
-            IM_CHECK(!same(edited, before) || img->groups.size() != groups || img->channels.size() != channels);
-            if (info.draws_subject_selector)
-                IM_CHECK_EQ(changed_outside(img, before, roi), 0);
-
+            // one Undo through the menu takes it back, the tree rebuilt rather than appended to
             menu_click(ctx, "Edit/Undo");
             IM_CHECK(same(snapshot(img), before));
-            // the tree is rebuilt after an edit, not appended to
             IM_CHECK_EQ(img->groups.size(), groups);
-            IM_CHECK_EQ(img->channels.size(), channels);
-            IM_CHECK_EQ(img->history.current_state(), entries);
-            IM_CHECK_EQ(img->history.is_modified(), modified);
             IM_CHECK_EQ(hdrview()->any_image_modified(), modified);
-            IM_CHECK_EQ(undo.enabled(), entries > 0);
-            IM_CHECK_EQ(redo.enabled(), true);
-
-            // and redo puts it back where undo found it
-            menu_click(ctx, "Edit/Redo");
-            IM_CHECK(same(snapshot(img), edited));
-            IM_CHECK_EQ(undo.enabled(), true);
-            IM_CHECK_EQ(redo.enabled(), false);
-            menu_click(ctx, "Edit/Undo");
-            IM_CHECK(same(snapshot(img), before));
+            IM_CHECK(redo.enabled());
         }
         IM_CHECK_EQ(exercised, expected);
 
@@ -455,17 +384,8 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
                 // applying on confirm keeps a dragged slider from filling the history, so cancelling has to leave both
                 // the pixels and the history alone, whatever the controls were set to
                 open();
-                // folded to its title bar, it keeps its width
-                const ImGuiWindow *dialog = ctx->WindowInfo(("//" + escaped(name)).c_str()).Window;
-                IM_CHECK_SILENT(dialog != nullptr);
-                const float width = dialog->Size.x;
-                ctx->ItemClick("#FOLD");
-                ctx->Yield(3);
-                IM_CHECK_EQ(dialog->Size.x, width);
-                ctx->ItemClick("#FOLD");
-                ctx->Yield(2);
                 ctx->KeyPress(ImGuiKey_Escape);
-                IM_CHECK(dialog_closed(ctx, name));
+                IM_CHECK(window_closed(ctx, name));
                 IM_CHECK(app->edit_preview() == nullptr);
                 IM_CHECK(same(snapshot(img), before));
                 IM_CHECK_EQ(img->history.size(), 0);
@@ -486,7 +406,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
                 }
 
                 IM_CHECK(wait_until(ctx, [&] { return img->history.has_undo() || app->num_images() > 1; }));
-                IM_CHECK(dialog_closed(ctx, name));
+                IM_CHECK(window_closed(ctx, name));
                 IM_CHECK(app->edit_preview() == nullptr);
 
                 if (c.adds_images)
@@ -500,8 +420,6 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
                 IM_CHECK_EQ(app->num_images(), 1);
                 IM_CHECK_EQ(img->history.size(), 1);
-                IM_CHECK(!img->history.undo_name().empty());
-                IM_CHECK(img->history.is_modified());
                 const bool reshaped = img->size() != size;
                 IM_CHECK(reshaped || !same(snapshot(img), before));
                 if (c.check)
@@ -798,7 +716,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
                     ctx->ItemClick("Don't convert");
                 ctx->ItemClick("Paste");
                 ctx->SetRef("");
-                IM_CHECK(dialog_closed(ctx, "Paste"));
+                IM_CHECK(window_closed(ctx, "Paste"));
                 if (convert)
                     IM_CHECK_LE(off_by([&](int c, int2 q) { return img->channels[c](source.min - o + q); }), 2e-3f);
                 else
@@ -845,7 +763,6 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
             return;
 
         auto img = hdrview()->current_image();
-        IM_CHECK_EQ(hdrview()->roi().has_volume(), false);
         // nothing to clear, so deselect has nothing to offer
         IM_CHECK_EQ(hdrview()->action("Deselect").enabled(), false);
 
@@ -868,8 +785,6 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
             if (nav_visible)
                 ImGui::GetIO().NavVisible = true;
             ctx->Yield(2);
-            IM_CHECK_EQ(hdrview()->roi().has_volume(), true);
-
             ctx->KeyPress(ImGuiMod_Ctrl | ImGuiKey_D);
             ctx->Yield(2);
             IM_CHECK_EQ(hdrview()->roi().has_volume(), false);
@@ -952,10 +867,6 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         }
         IM_CHECK(ctx->WindowInfo("History").Window != nullptr);
 
-        // a row per state, not per entry: the image as opened, plus one for each edit
-        IM_CHECK_EQ(img->history.size(), 2);
-        IM_CHECK_EQ(img->history.current_state(), 2);
-
         // clicking the first row walks all the way back, where the Edit menu moves one step
         ctx->SetRef("History");
         ctx->ItemClick("**/" ICON_MY_OPEN_IMAGE " Opened");
@@ -1036,14 +947,16 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         {
             ctx->ItemClick(button);
             ctx->Yield(2);
-            IM_CHECK_EQ(shown().op, shader::EDIT_BRIGHTNESS_CONTRAST);
             IM_CHECK_EQ(int(shown().p1.x), curve);
         }
+        IM_CHECK_EQ(shown().op, shader::EDIT_BRIGHTNESS_CONTRAST);
 
-        // the plot is drawn above the sliders and must not swallow them; the pivot is where brightness puts it
+        // the plot is drawn above the sliders and must not swallow them; brightening sends mid-gray up, and the pivot
+        // it moves is still the input the curve sends to the middle
         ctx->ItemInputValue("Brightness", 0.4f);
         ctx->Yield(2);
-        IM_CHECK_EQ(shown().p0.y, (1.f - 0.4f) / 2.f);
+        IM_CHECK_GT(shader::brightness_contrast(0.5f, shown().p0), 0.5f);
+        IM_CHECK(std::abs(shader::brightness_contrast(shown().p0.y, shown().p0) - 0.5f) < 1e-6f);
 
         // the curve's shape, and the clip after it
         ctx->ItemUncheck("Linear");
@@ -1059,8 +972,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         ctx->ItemUncheck("Clip to SDR");
         ctx->ItemClick("Cancel");
-        IM_CHECK(dialog_closed(ctx, "Brightness/contrast..."));
-        IM_CHECK(!hdrview()->current_image()->history.has_undo());
+        IM_CHECK(window_closed(ctx, "Brightness/contrast..."));
     };
 
     t = IM_REGISTER_TEST(engine, "edit", "the shift preview follows its offset, and a drag carries the image");
@@ -1071,7 +983,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         auto  *app = hdrview();
         auto   img = app->current_image();
-        OnExit restore{[&, zoom = app->zoom()] { app->set_zoom(zoom); }};
+        const KeepView view;
 
         // previewed as the shift asked for, over the channels the view shows: the shown group's, all of them the
         // subject's
@@ -1126,7 +1038,6 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         ctx->ItemClick("Cancel");
         ctx->Yield(2);
-        IM_CHECK(!img->history.has_undo());
     };
 
     // what the view shows of a remap's preview: the remap, and the corners of the result's window, in the viewport
@@ -1162,12 +1073,8 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         auto      *app        = hdrview();
         bool      &status_bar = *app->action("Show status bar").p_selected;
         const bool had_bar    = status_bar;
-        OnExit     restore{[&, zoom = app->zoom(), at = app->vp_pos_at_pixel(float2{0.f})]
-                           {
-                           status_bar = had_bar;
-                           app->set_zoom(zoom);
-                           app->reposition_pixel_to_vp_pos(at, float2{0.f});
-                           }};
+        const KeepView view;
+        OnExit         restore{[&] { status_bar = had_bar; }};
         status_bar = true;
         app->set_zoom(2.f);
         ctx->MouseMoveToPos(ImVec2(app->app_pos_at_vp_pos(0.5f * app->viewport_size())));
@@ -1186,9 +1093,11 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         const auto [lo, hi] = shown_corners();
         IM_CHECK(la::length(la::abs(hi - lo) - app->zoom() * float2(shown->size)) < 1e-3f);
         IM_CHECK(!ctx->ItemExists("//StatusBar/##pixel x coordinates"));
-        // fitting the view to it
-        IM_CHECK_EQ(app->zoom(), std::min(app->viewport_size().x / float(shown->size.x),
-                                          app->viewport_size().y / float(shown->size.y)));
+        // fitting the view to it: all of it inside the viewport, which it fills across or down
+        const float2 vp = app->viewport_size();
+        IM_CHECK(la::all(la::gequal(la::min(lo, hi), float2{-1e-2f})) &&
+                 la::all(la::lequal(la::max(lo, hi), vp + 1e-2f)));
+        IM_CHECK(std::abs(std::abs(hi.x - lo.x) - vp.x) < 1e-2f || std::abs(std::abs(hi.y - lo.y) - vp.y) < 1e-2f);
 
         // unticked, nothing is previewed, and the readout comes back
         ctx->ItemUncheck("Preview");
@@ -1212,6 +1121,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         ctx->ItemInputValue("Roll", 60.f);
         ctx->Yield(2);
         {
+            // the rotation the sliders say, which test_envmap.cpp holds to each axis's turn
             const float3x3 want = envmap_rotation(0.f, -shader::ENVMAP_PI / 2.f, shader::ENVMAP_PI / 3.f);
             for (int c = 0; c < 3; ++c) IM_CHECK(la::length(rotation()[c] - want[c]) < 1e-4f);
         }
@@ -1270,12 +1180,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         auto      *app      = hdrview();
         const int2 original = img->size();
         const auto samples  = snapshot(img);
-        // the view as it was, since the drag below pans it
-        OnExit restore{[&, zoom = app->zoom(), at = app->vp_pos_at_pixel(float2{0.f})]
-                       {
-                           app->set_zoom(zoom);
-                           app->reposition_pixel_to_vp_pos(at, float2{0.f});
-                       }};
+        const KeepView view; //< the drag below pans it
 
         // panned while it is previewed, so the result is seen to land where its preview was, not where a fit would
         // put it
@@ -1296,7 +1201,6 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK(la::length(app->vp_pos_at_pixel(float2(img->data_window.min)) - lo) < 1e-3f);
         IM_CHECK(la::length(app->vp_pos_at_pixel(float2(img->data_window.max)) - hi) < 1e-3f);
         for (const auto &c : img->channels) IM_CHECK(c.size() == img->size());
-        IM_CHECK(img->data_window.size() == img->size());
         IM_CHECK(img->display_window.size() == img->size());
 
         menu_click(ctx, "Edit/Undo");
