@@ -289,9 +289,12 @@ enum Tonemap_ : Tonemap
 };
 ```
 Variables and parameters use the alias, which keeps an ImGui combo's `int *` and a stored setting free of casts.
+The exception is a value that a `switch` without a `default` covers: typed as the enum, it gets the compiler's
+warning for any value the switch leaves out, which an `int` does not, though a `_COUNT` then needs a case too.
 An `enum class` suits a type never used as an integer, such as the renderer's, and its values need no prefix.
-Some older enums predate this (a reversed alias, a prefix that is not the enum's name); rename one when touching
-it, without reordering its values, since settings store them as integers.
+A few older enums predate this: the nested `TransferFunction::Type_` and `ChannelGroup::Type`, `EColormap`, whose
+alias would take the `Colormap` class's name, and those mirroring an outside code set (Wayland's, PSD's). Rename
+one when touching it, without reordering its values, since settings store them as integers.
 
 ### Spelling
 Use American English: **color** not colour, **behavior** not behaviour, **normalize**/**initialize**/
