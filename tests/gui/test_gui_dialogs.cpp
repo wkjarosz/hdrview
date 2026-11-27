@@ -342,35 +342,46 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         roll_off             = false;
         ctx->Yield(2); //< for update_rolloff() to see it
 
-        auto check = [&](float target_ceiling, const Chromaticities *primaries = nullptr)
+        // Each check compares with the image's own stored samples: two stops up is four times them, in the image's
+        // own primaries, or converted by \p M into those chosen for it; clipped, each channel stops at the pixel's
+        // alpha, the premultiplied form of SDR white.
+        auto check = [&](float target_ceiling, const Chromaticities *primaries = nullptr,
+                         const float3x3 &M = float3x3{la::identity})
         {
             auto view = app->image_to_save(HDRViewApp::SaveMode_Rendition, false, target_ceiling, primaries);
             IM_CHECK(view != nullptr && view->size() == img->size());
-            // in the image's own primaries, or those chosen for it, so what they convert back to is what the view
-            // computes
             const auto want = primaries ? *primaries : img->chromaticities.value_or(Chromaticities{});
             IM_CHECK(view->chromaticities && view->chromaticities->red == want.red &&
                      view->chromaticities->green == want.green && view->chromaticities->blue == want.blue &&
                      view->chromaticities->white == want.white);
             // the worst error over the image, checked once: the engine logs every check, passing ones too
-            const float limit = app->clamp_to_LDR() ? 1.f : std::numeric_limits<float>::infinity();
-            float       worst = 0.f;
+            const bool clipped = app->clamp_to_LDR();
+            float      worst   = 0.f;
             for (int y = 0; y < view->size().y; ++y)
                 for (int x = 0; x < view->size().x; ++x)
                 {
-                    const float4 raw   = app->pixel_value(int2{x, y} + img->data_window.min, true, 2);
-                    const float  alpha = raw.w > 0.f ? raw.w : 1.f;
-                    const float3 shown = mul(view->M_to_sRGB, float3{view->channels[0](x, y), view->channels[1](x, y),
-                                                                     view->channels[2](x, y)});
+                    const float alpha = img->channels[3](x, y);
+                    float3      v;
                     for (int c = 0; c < 3; ++c)
-                        worst = std::max(worst, std::abs(shown[c] - std::min(raw[c] * 4.f, limit * alpha)));
+                    {
+                        v[c] = 4.f * img->channels[size_t(c)](x, y);
+                        if (clipped)
+                            v[c] = std::min(v[c], alpha);
+                    }
+                    v = mul(M, v);
+                    for (int c = 0; c < 3; ++c)
+                        worst = std::max(worst, std::abs(view->channels[size_t(c)](x, y) - v[c]));
                 }
             IM_CHECK_LE(worst, 1e-4f);
         };
         check(0.f);
         check(1.f); //< the target sets the metadata, not a clip
-        const auto bt2020 = gamut_chromaticities(ColorGamut_BT2020_2100);
-        check(1.f, &bt2020); //< in the primaries chosen for it
+        // in the primaries chosen for it, by the BT.709-to-BT.2020 matrix BT.2087 publishes
+        const auto     bt2020 = gamut_chromaticities(ColorGamut_BT2020_2100);
+        const float3x3 bt709_to_bt2020{{0.6274040f, 0.0690970f, 0.0163916f},
+                                       {0.3292820f, 0.9195400f, 0.0880132f},
+                                       {0.0433136f, 0.0113612f, 0.8955950f}};
+        check(1.f, &bt2020, bt709_to_bt2020);
         app->clamp_to_LDR() = true;
         ctx->Yield(2);
         check(1.f); //< clipped at SDR white, whatever the target
@@ -497,22 +508,21 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             const auto none = decode(0.f), full = decode(k_full_gainmap_headroom);
             IM_CHECK(none && full && full->size() == img->size());
 
-            // The full decode against the view's own rendition, and the no-headroom one against it clipped at SDR
-            // white, in the image's primaries, which the file was written in and an SDR base clips in, at the
-            // fixture's opaque pixels: in stops where the view is bright and in sRGB code values where it is dim. The
-            // 99th percentile, since a lossy codec always leaves some outliers (JPEG's 4:2:0 chroma most, on saturated
-            // colors); a missing or one-sided map is off by the two stops the view was raised across all the
-            // highlights.
-            const auto         view = app->image_to_save(HDRViewApp::SaveMode_Rendition, false, 0.f);
+            // The full decode against the view two stops up, four times the stored samples, and the no-headroom one
+            // against that clipped at SDR white, in the image's primaries, which the file was written in and an SDR
+            // base clips in, at the fixture's opaque pixels: in stops where the view is bright and in sRGB code values
+            // where it is dim. The 99th percentile, since a lossy codec always leaves some outliers (JPEG's 4:2:0
+            // chroma most, on saturated colors); a missing or one-sided map is off by the two stops the view was raised
+            // across all the highlights.
             std::vector<float> stops, codes;
             for (int y = 0; y < img->size().y; ++y)
                 for (int x = 0; x < img->size().x; ++x)
                 {
-                    if (view->channels.size() > 3 && view->channels[3](x, y) < 1.f)
+                    if (img->channels.size() > 3 && img->channels[3](x, y) < 1.f)
                         continue;
                     for (int c = 0; c < 3; ++c)
                     {
-                        const float want = view->channels[c](x, y), hi = full->channels[c](x, y),
+                        const float want = 4.f * img->channels[size_t(c)](x, y), hi = full->channels[c](x, y),
                                     lo = none->channels[c](x, y);
                         if (want >= 0.25f)
                             stops.push_back(std::abs(std::log2(std::max(hi, 1e-6f) / want)));
@@ -531,8 +541,9 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             ctx->LogInfo("%s %s: stops 99%% %.3f worst %.3f; code values 99%% %.4f worst %.4f", gc.format,
                          gc.gain_map ? gc.gain_map : "", quantile(stops, 0.99f), quantile(stops, 1.f),
                          quantile(codes, 0.99f), quantile(codes, 1.f));
-            IM_CHECK_LE(quantile(stops, 0.99f), 0.5f);
-            IM_CHECK_LE(quantile(codes, 0.99f), 0.1f);
+            // about twice what the codec's loss leaves, so an exposure half a stop off fails too
+            IM_CHECK_LE(quantile(stops, 0.99f), 0.25f);
+            IM_CHECK_LE(quantile(codes, 0.99f), 0.05f);
 
             std::filesystem::remove(path);
         };
