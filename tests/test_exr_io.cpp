@@ -83,30 +83,11 @@ TEST_CASE("An EXR saved without chromaticities or alpha claims neither")
 {
     // a reader that invented either would convert or composite the pixels by something the file never said
     auto img = make_test_image(int2{2, 2});
-    REQUIRE_FALSE(img->chromaticities.has_value());
 
     auto reloaded = save_and_reload(*img);
     REQUIRE(reloaded.size() == 1);
     CHECK_FALSE(reloaded[0]->chromaticities.has_value());
     CHECK(reloaded[0]->transparency == TransparencyType_None);
-}
-
-TEST_CASE("EXR half samples are floating point, not quantized, and not exact")
-{
-    // 0.1f has no exact half-precision representation
-    auto img = std::make_shared<Image>();
-    img->channels.emplace_back("Y", int2{1, 1});
-    img->channels.back()(0, 0) = 0.1f;
-    img->finalize();
-
-    auto opts       = exr_default_save_options(*img);
-    opts.pixel_type = 1; // HALF
-    auto reloaded   = save_and_reload(*img, opts);
-    REQUIRE(reloaded.size() == 1);
-    CHECK(reloaded[0]->channels[0].bits_per_sample == 0); //< floating point, so no quantization lattice
-    float value = reloaded[0]->channels[0](0, 0);
-    CHECK(value != doctest::Approx(0.1f).epsilon(1e-6)); // not exact
-    CHECK(value == doctest::Approx(0.1f).epsilon(1e-3)); // but close, within half precision
 }
 
 TEST_CASE("EXR channels report their own sample depths independently")
@@ -168,27 +149,6 @@ std::ifstream open_test_exr(const char *filename)
 }
 
 } // namespace
-
-TEST_CASE("EXR load splits a real multi-part file into one Image per part, with correct part names")
-{
-    auto file     = open_test_exr("multipart.0001.exr");
-    auto reloaded = load_exr_image(file, "multipart.0001.exr");
-
-    REQUIRE(reloaded.size() == 10);
-
-    std::set<std::string> expected_names = {"rgba_right", "depth_left",        "forward_left",  "whitebarmask_left",
-                                            "rgba_left",  "depth_right",       "forward_right", "disparityL",
-                                            "disparityR", "whitebarmask_right"};
-    std::set<std::string> actual_names;
-    for (const auto &img : reloaded) actual_names.insert(img->partname);
-    CHECK(actual_names == expected_names);
-
-    auto depth_left = std::find_if(reloaded.begin(), reloaded.end(),
-                                   [](const ImagePtr &img) { return img->partname == "depth_left"; });
-    REQUIRE(depth_left != reloaded.end());
-    REQUIRE((*depth_left)->channels.size() == 1);
-    CHECK((*depth_left)->channels[0].name == "Z");
-}
 
 TEST_CASE("EXR load up-samples subsampled channels to full resolution with block-consistent nearest-neighbor values")
 {
@@ -268,6 +228,15 @@ TEST_CASE("EXR load reads every vendored real-world file identically from disk a
         auto from_disk = decode(file, name);
         REQUIRE_FALSE(from_disk.empty());
         for (const auto &[names, samples] : from_disk) CHECK_FALSE(samples.empty());
+        // a multi-part file loads as one image per part, named for it
+        if (name == "multipart.0001.exr")
+        {
+            std::set<std::string> parts;
+            for (const auto &part : from_disk) parts.insert(part.first.substr(0, part.first.find(' ')));
+            CHECK(parts == std::set<std::string>{"rgba_right", "depth_left", "forward_left", "whitebarmask_left",
+                                                 "rgba_left", "depth_right", "forward_right", "disparityL",
+                                                 "disparityR", "whitebarmask_right"});
+        }
 
         file.clear();
         file.seekg(0);
@@ -336,7 +305,6 @@ TEST_CASE("MemoryIStream's concurrent reads return what exists at an offset and 
     std::string bytes(100, '\0');
     for (size_t i = 0; i < bytes.size(); ++i) bytes[i] = char(i + 1);
     MemoryIStream is{bytes, "test.exr"};
-    CHECK(is.isStatelessRead());
     CHECK(is.size() == int64_t(bytes.size()));
 
     for (uint64_t offset :

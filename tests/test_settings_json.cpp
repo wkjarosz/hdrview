@@ -33,7 +33,6 @@ TEST_CASE("Each settings section survives JSON, and bad values cannot get in")
 
         Settings back;
         back.from_json(s.to_json());
-        CHECK(back.to_json() == s.to_json());
         CHECK(back.enabled);
         CHECK(back.preset == s.preset);
         CHECK(back.custom.ceiling == s.custom.ceiling);

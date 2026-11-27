@@ -392,12 +392,9 @@ TEST_CASE("The sniff accepts both JPEG 2000 syntaxes and nothing else")
         CHECK(in.tellg() == std::streampos(0));
     }
 
-    // a JPEG SOI, a PNG signature, an ISOBMFF ftyp and an empty file are all near misses
-    for (const std::string &other : {std::string("\xFF\xD8\xFF\xE0", 4), std::string("\x89PNG\r\n\x1A\n", 8),
-                                     std::string("\0\0\0\x18"
-                                                 "ftypavif",
-                                                 12),
-                                     std::string()})
+    // a JPEG SOI and an empty file are near misses; the export round trip's loader check shows it turning down the
+    // formats whose loaders it runs ahead of
+    for (const std::string &other : {std::string("\xFF\xD8\xFF\xE0", 4), std::string()})
     {
         std::istringstream in(other, std::ios::binary);
         CHECK_FALSE(is_j2k_image(in));

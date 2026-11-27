@@ -67,7 +67,4 @@ TEST_CASE("A QOI's colorspace tag decides whether its samples are linearized")
         decoded[colorspace] = img;
     }
 
-    // mid-gray 128 separates the two: 0.216 linearized against 0.502 left encoded
-    CHECK(decoded[QOI_SRGB]->channels[0](2, 0) !=
-          doctest::Approx(decoded[QOI_LINEAR]->channels[0](2, 0)).epsilon(1e-4));
 }

@@ -809,16 +809,17 @@ TEST_CASE("every writer's file, cut short anywhere, loads cleanly or not at all"
 TEST_CASE("every lossless integer writer quantizes at the depth it stores: values on its grid come back exactly, and "
           "a dithering one averages others back to themselves")
 {
-    // a patch large enough for the dither to average out over, every sample at one encoded value
-    const int2 size{64, 64};
-    const auto patch = [&](float encoded, const TransferFunction &tf)
+    // one 64x64 band per encoded value, large enough for the dither to average out over, written in one file
+    const int  band  = 64;
+    const auto bands = [&](const std::vector<float> &encoded, const TransferFunction &tf)
     {
-        auto img = std::make_shared<Image>();
+        const int2 size{band, band * int(encoded.size())};
+        auto       img = std::make_shared<Image>();
         for (auto name : {"R", "G", "B"}) img->channels.emplace_back(name, size);
         img->display_window = img->data_window = Box2i{int2{0}, size};
-        const float linear                     = to_linear(encoded, tf);
         for (auto &c : img->channels)
-            for (int i = 0; i < c.num_elements(); ++i) c(i) = linear;
+            for (int y = 0; y < size.y; ++y)
+                for (int x = 0; x < size.x; ++x) c(x, y) = to_linear(encoded[size_t(y / band)], tf);
         img->finalize();
         return img;
     };
@@ -829,9 +830,8 @@ TEST_CASE("every lossless integer writer quantizes at the depth it stores: value
             continue;
         CAPTURE(std::string(writer.name));
         const TransferFunction tf = representative_tf(writer);
-        REQUIRE(writer.offers(tf));
 
-        const auto probe = save(writer, *patch(0.5f, tf), tf);
+        const auto probe = save(writer, *bands({0.5f}, tf), tf);
         if (!probe)
             continue;
         const auto probed = load(writer, *probe);
@@ -848,42 +848,36 @@ TEST_CASE("every lossless integer writer quantizes at the depth it stores: value
         REQUIRE((bits >= 8 && bits <= 16));
         const float max_code = float((1u << bits) - 1u);
 
-        // the codes a patch at \p encoded comes back as: their mean, and the furthest from \p want
-        const auto read_back = [&](float encoded, float want) -> std::optional<std::pair<double, float>>
+        // on the grid, at both ends and between, and last halfway between two codes, which rounding alone takes half
+        // a step off; an ICC profile read in float moves a sample by a few 1e-6
+        std::vector<float> codes{0.f, 1.f, std::round(max_code / 3.f), max_code - 1.f, max_code};
+        const bool         dithers = writer.caps & Cap_Dithers;
+        if (dithers)
+            codes.push_back(std::round(0.4f * max_code) + 0.5f);
+        std::vector<float> encoded;
+        for (float code : codes) encoded.push_back(code / max_code);
+        const auto bytes = save(writer, *bands(encoded, tf), tf);
+        REQUIRE(bytes);
+        const auto loaded = load(writer, *bytes);
+        REQUIRE(loaded.size() == 1);
+        const auto &img = *loaded.front();
+        for (size_t b = 0; b < codes.size(); ++b)
         {
-            const auto bytes = save(writer, *patch(encoded, tf), tf);
-            if (!bytes)
-                return std::nullopt;
-            const auto loaded = load(writer, *bytes);
-            REQUIRE(loaded.size() == 1);
-            const auto &img   = *loaded.front();
-            double      sum   = 0.0;
-            float       worst = 0.f;
+            CAPTURE(codes[b]);
+            double sum   = 0.0;
+            float  worst = 0.f;
             for (int c = 0; c < 3; ++c)
-                for (int i = 0; i < img.channels[c].num_elements(); ++i)
-                {
-                    const float code = from_linear(img.channels[c](i), tf) * max_code;
-                    sum += code;
-                    worst = std::max(worst, std::abs(code - want));
-                }
-            return std::pair{sum / (3.0 * size.x * size.y), worst};
-        };
-
-        // on the grid, at both ends and between: an ICC profile read in float moves a sample by a few 1e-6
-        for (float code : {0.f, 1.f, std::round(max_code / 3.f), max_code - 1.f, max_code})
-        {
-            CAPTURE(code);
-            if (const auto got = read_back(code / max_code, code))
-                CHECK(got->second < 0.1f);
-        }
-
-        // halfway between two codes, which rounding alone takes half a step off
-        if (writer.caps & Cap_Dithers)
-        {
-            const float want = std::round(0.4f * max_code) + 0.5f;
-            CAPTURE(want);
-            if (const auto got = read_back(want / max_code, want))
-                CHECK(std::abs(got->first - want) < 0.05);
+                for (int y = int(b) * band; y < int(b + 1) * band; ++y)
+                    for (int x = 0; x < band; ++x)
+                    {
+                        const float code = from_linear(img.channels[c](x, y), tf) * max_code;
+                        sum += code;
+                        worst = std::max(worst, std::abs(code - codes[b]));
+                    }
+            if (dithers && b + 1 == codes.size())
+                CHECK(std::abs(sum / (3.0 * band * band) - codes[b]) < 0.05);
+            else
+                CHECK(worst < 0.1f);
         }
     }
 }
