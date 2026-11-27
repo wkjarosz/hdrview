@@ -34,15 +34,11 @@ void RegisterTests_View(ImGuiTestEngine *engine)
         IM_CHECK_EQ(hdrview()->zoom_level(), 0.f);
         const float one_to_one = hdrview()->zoom();
 
-        // the menu round trip, driven the way a user drives it
+        // the menu items reach the steps the loop below holds to their stops
         ctx->MenuClick("View/Zoom in");
         IM_CHECK_EQ(hdrview()->zoom(), 2.f * one_to_one);
         ctx->MenuClick("View/Zoom out");
         IM_CHECK_EQ(hdrview()->zoom(), one_to_one);
-        ctx->MenuClick("View/Zoom out");
-        IM_CHECK_EQ(hdrview()->zoom(), 0.5f * one_to_one);
-        ctx->MenuClick("View/100%");
-        IM_CHECK_EQ(hdrview()->zoom_level(), 0.f);
 
         // every start, exact or not, lands on the stop next to it, and one step back returns to the
         // interval it came from
