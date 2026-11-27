@@ -349,12 +349,13 @@ private:
 
 // Bits of the flags byte. Only UseBaseColorSpace and IsMultiChannel are in ISO 21496-1 itself; libultrahdr
 // writes the other two, and other readers honor them.
-enum IsoFlags : uint8_t
+using IsoFlags = uint8_t;
+enum IsoFlags_ : IsoFlags
 {
-    IsoFlag_BackwardDirection    = 1u << 2,
-    IsoFlag_UseCommonDenominator = 1u << 3,
-    IsoFlag_UseBaseColorSpace    = 1u << 6,
-    IsoFlag_IsMultiChannel       = 1u << 7,
+    IsoFlags_BackwardDirection    = 1u << 2,
+    IsoFlags_UseCommonDenominator = 1u << 3,
+    IsoFlags_UseBaseColorSpace    = 1u << 6,
+    IsoFlags_IsMultiChannel       = 1u << 7,
 };
 
 } // namespace
@@ -387,11 +388,11 @@ IsoGainmapParams parse_iso_gainmap(const uint8_t *data, size_t size)
     p.version = fmt::format("ISO 21496-1 v{} (writer v{})", minimum_version, writer_version);
 
     const uint8_t flags    = r.u8();
-    const int     channels = (flags & IsoFlag_IsMultiChannel) ? 3 : 1;
+    const int     channels = (flags & IsoFlags_IsMultiChannel) ? 3 : 1;
 
-    p.use_base_color_space = (flags & IsoFlag_UseBaseColorSpace) != 0;
+    p.use_base_color_space = (flags & IsoFlags_UseBaseColorSpace) != 0;
 
-    const bool common_denominator = (flags & IsoFlag_UseCommonDenominator) != 0;
+    const bool common_denominator = (flags & IsoFlags_UseCommonDenominator) != 0;
 
     if (common_denominator)
     {
@@ -436,7 +437,7 @@ IsoGainmapParams parse_iso_gainmap(const uint8_t *data, size_t size)
         p.alternate_offset[c] = p.alternate_offset[0];
     }
 
-    if (flags & IsoFlag_BackwardDirection)
+    if (flags & IsoFlags_BackwardDirection)
     {
         std::swap(p.base_headroom, p.alternate_headroom);
         std::swap(p.base_offset, p.alternate_offset);
@@ -466,7 +467,7 @@ std::vector<uint8_t> serialize_iso_gainmap(const IsoGainmapParams &p)
 
     put(0, 2); // minimum version
     put(0, 2); // writer version
-    out.push_back(uint8_t(IsoFlag_IsMultiChannel | (p.use_base_color_space ? IsoFlag_UseBaseColorSpace : 0)));
+    out.push_back(uint8_t(IsoFlags_IsMultiChannel | (p.use_base_color_space ? IsoFlags_UseBaseColorSpace : 0)));
     rational(p.base_headroom, false);
     rational(p.alternate_headroom, false);
     for (int c = 0; c < 3; ++c)

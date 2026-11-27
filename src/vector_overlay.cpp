@@ -67,7 +67,7 @@ struct VgState
     bool  stroke_width_relative = false;
     float font_size             = 20.f; // tev's default
     bool  font_size_relative    = false;
-    int   text_align            = VgCommand::AlignLeft | VgCommand::AlignBaseline;
+    int   text_align            = VgCommand::TextAlign_Left | VgCommand::TextAlign_Baseline;
     void *font                  = nullptr;
 };
 
@@ -169,17 +169,17 @@ float text_baked_size(float size)
 float2 aligned_text_pos(float2 anchor, float2 size, int align)
 {
     float x = anchor.x;
-    if (align & VgCommand::AlignCenter)
+    if (align & VgCommand::TextAlign_Center)
         x -= size.x * 0.5f;
-    else if (align & VgCommand::AlignRight)
+    else if (align & VgCommand::TextAlign_Right)
         x -= size.x;
 
-    float y = anchor.y; // AlignTop
-    if (align & VgCommand::AlignMiddle)
+    float y = anchor.y; // TextAlign_Top
+    if (align & VgCommand::TextAlign_Middle)
         y -= size.y * 0.5f;
-    else if (align & VgCommand::AlignBottom)
+    else if (align & VgCommand::TextAlign_Bottom)
         y -= size.y;
-    else if (align & VgCommand::AlignBaseline)
+    else if (align & VgCommand::TextAlign_Baseline)
         y -= size.y * 0.8f;
 
     return float2(x, y);
@@ -236,7 +236,7 @@ void draw_vector_overlay(ImDrawList *draw_list, const std::vector<VgCommand> &co
         case VgCommand::Type::StrokeColor: state.stroke_color = color_from(f); break;
         case VgCommand::Type::StrokeWidth:
             state.stroke_width          = f[0];
-            state.stroke_width_relative = int(f[1]) == VgCommand::Relative;
+            state.stroke_width_relative = int(f[1]) == VgCommand::ScaleKind_Relative;
             break;
 
         // -- path construction ------------------------------------------------------------------------
@@ -319,7 +319,7 @@ void draw_vector_overlay(ImDrawList *draw_list, const std::vector<VgCommand> &co
         // -- text -------------------------------------------------------------------------------------
         case VgCommand::Type::FontSize:
             state.font_size          = f[0];
-            state.font_size_relative = int(f[1]) == VgCommand::Relative;
+            state.font_size_relative = int(f[1]) == VgCommand::ScaleKind_Relative;
             break;
         case VgCommand::Type::TextAlign: state.text_align = int(f[0]); break;
         case VgCommand::Type::FontFace:

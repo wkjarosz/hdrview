@@ -208,16 +208,16 @@ public:
             ImGui::TableNextColumn();
             ImGui::TextDisabled("Total");
 
-            for (int r = m_monochrome ? int(Out_Monochrome) : int(Out_Red);
-                 r < (m_monochrome ? int(Out_COUNT) : int(Out_Monochrome)); ++r)
+            for (int r = m_monochrome ? int(Output_Monochrome) : int(Output_Red);
+                 r < (m_monochrome ? int(Output_COUNT) : int(Output_Monochrome)); ++r)
             {
                 float3 &w = m_rows[r];
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 ImGui::AlignTextToFramePadding();
                 name(r);
-                ImGui::Tooltip(r == Out_Monochrome ? "The weights the gray is mixed with."
-                                                   : "The weights this output channel is mixed with.");
+                ImGui::Tooltip(r == Output_Monochrome ? "The weights the gray is mixed with."
+                                                      : "The weights this output channel is mixed with.");
                 for (int c = 0; c < 3; ++c)
                 {
                     ImGui::TableNextColumn();
@@ -247,9 +247,9 @@ public:
 
         // the rows of the matrix, as source weights per output channel; Monochrome writes one gray to all three
         const bool   mono = m_monochrome;
-        const float3 r    = row(m_rows[mono ? Out_Monochrome : Out_Red]),
-                     g    = row(m_rows[mono ? Out_Monochrome : Out_Green]),
-                     b    = row(m_rows[mono ? Out_Monochrome : Out_Blue]);
+        const float3 r    = row(m_rows[mono ? Output_Monochrome : Output_Red]),
+                     g    = row(m_rows[mono ? Output_Monochrome : Output_Green]),
+                     b    = row(m_rows[mono ? Output_Monochrome : Output_Blue]);
         PointEdit    e{shader::EDIT_MATRIX};
         e.m0 = transpose(float3x3{r, g, b});
         return e;
@@ -259,19 +259,20 @@ public:
 
 private:
     /// The rows of weights: one per output channel, and the one that mixes a single gray.
-    enum Output : int
+    using Output = int;
+    enum Output_ : Output
     {
-        Out_Red = 0,
-        Out_Green,
-        Out_Blue,
-        Out_Monochrome,
+        Output_Red = 0,
+        Output_Green,
+        Output_Blue,
+        Output_Monochrome,
 
-        Out_COUNT
+        Output_COUNT
     };
 
     // a row of source weights per output channel, plus the one that makes a single gray from all three,
     // as percentages the way Photoshop presents them. Thirds, so the monochrome default totals 100%.
-    float3 m_rows[Out_COUNT] = {
+    float3 m_rows[Output_COUNT] = {
         {100.f, 0.f, 0.f}, {0.f, 100.f, 0.f}, {0.f, 0.f, 100.f}, {100.f / 3.f, 100.f / 3.f, 100.f / 3.f}};
     bool m_monochrome = false;
     bool m_normalize  = false;

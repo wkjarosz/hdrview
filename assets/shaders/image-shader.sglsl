@@ -58,8 +58,8 @@ layout(binding=1) uniform fs_params {
     float rolloff_ceiling;            // in stops above SDR white
     int   rolloff_has_peak;           // whether rolloff_peak is known
     float rolloff_peak;               // the content's peak, in stops above SDR white
-    int   bg_mode;                    // a BGMode_
-    vec4  bg_color;                   // the background under BGMode_Custom_Color
+    int   bg_mode;                    // a BackgroundMode_
+    vec4  bg_color;                   // the background under BackgroundMode_Custom_Color
     int   reverse_colormap;           // whether the colormap runs backward
     vec3  primary_yw;                 // the current image's luminance weights
     int   primary_luminance_chroma;   // whether the current image shows a luminance/chroma group
@@ -314,14 +314,14 @@ void main()
 {
     vec2 pixel      = vec2(gl_FragCoord.x, -gl_FragCoord.y);
     vec4 background = vec4(fsp.bg_color.rgb, 1.0);
-    if (fsp.bg_mode == BGMode_Black)
+    if (fsp.bg_mode == BackgroundMode_Black)
         background.rgb = vec3(0.0);
-    else if (fsp.bg_mode == BGMode_White)
+    else if (fsp.bg_mode == BackgroundMode_White)
         background.rgb = vec3(1.0);
-    else if (fsp.bg_mode == BGMode_Dark_Checker || fsp.bg_mode == BGMode_Light_Checker)
+    else if (fsp.bg_mode == BackgroundMode_Dark_Checker || fsp.bg_mode == BackgroundMode_Light_Checker)
     {
-        float dark_gray    = (fsp.bg_mode == BGMode_Dark_Checker) ? 0.1 : 0.5;
-        float light_gray   = (fsp.bg_mode == BGMode_Dark_Checker) ? 0.2 : 0.55;
+        float dark_gray    = (fsp.bg_mode == BackgroundMode_Dark_Checker) ? 0.1 : 0.5;
+        float light_gray   = (fsp.bg_mode == BackgroundMode_Dark_Checker) ? 0.2 : 0.55;
         float checkerboard = mod(floor(pixel.x / 8.0) + floor(pixel.y / 8.0), 2.0) == 0.0 ? dark_gray : light_gray;
         background.rgb     = sRGB_to_linear(vec3(checkerboard));
     }

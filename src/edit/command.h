@@ -21,11 +21,13 @@
 #include <vector>
 
 /// How far an edit reached, which says what has to be rebuilt afterwards.
-enum EditExtent : int
+using EditExtent = int;
+enum EditExtent_ : EditExtent
 {
-    Extent_Pixels = 0,     ///< Pixels within the channels the image already had
-    Extent_Structure,      ///< The channel list or the windows: the layer tree is rebuilt and the view refit
-    Extent_StructureInView ///< As Extent_Structure, but the view stays where a preview has already framed the result
+    EditExtent_Pixels = 0,     ///< Pixels within the channels the image already had
+    EditExtent_Structure,      ///< The channel list or the windows: the layer tree is rebuilt and the view refit
+    EditExtent_StructureInView ///< As EditExtent_Structure, but the view stays where a preview has already framed the
+                               ///< result
 };
 
 /// Produces a rectangle of one channel, in channel-local coordinates.

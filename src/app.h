@@ -969,8 +969,8 @@ private:
     bool            m_reverse_colormap = false;
     BlendMode_      m_blend_mode = BlendMode_::BlendMode_Normal; ///< How to blend the current and reference images
     BackgroundMode_ m_bg_mode =
-        BackgroundMode_::BGMode_Dark_Checker;     ///< How the background around the image should be rendered
-    float4 m_bg_color = {0.3f, 0.3f, 0.3f, 1.0f}; ///< The background color if m_bg_mode == BGMode_Custom_Color
+        BackgroundMode_::BackgroundMode_Dark_Checker; ///< How the background around the image should be rendered
+    float4 m_bg_color = {0.3f, 0.3f, 0.3f, 1.0f}; ///< The background color if m_bg_mode == BackgroundMode_Custom_Color
 
     //-----------------------------------------------------------------------------
     // Pan/zoom/flip and the viewport's on-screen extent

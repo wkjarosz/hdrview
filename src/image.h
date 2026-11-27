@@ -819,19 +819,20 @@ public:
         Nothing is resampled: the image gains empty margins or loses what falls outside. New samples are
         zero.
     */
-    enum CanvasAnchor : int
+    using CanvasAnchor = int;
+    enum CanvasAnchor_ : CanvasAnchor
     {
-        Anchor_TopLeft = 0,
-        Anchor_TopCenter,
-        Anchor_TopRight,
-        Anchor_MiddleLeft,
-        Anchor_MiddleCenter,
-        Anchor_MiddleRight,
-        Anchor_BottomLeft,
-        Anchor_BottomCenter,
-        Anchor_BottomRight,
+        CanvasAnchor_TopLeft = 0,
+        CanvasAnchor_TopCenter,
+        CanvasAnchor_TopRight,
+        CanvasAnchor_MiddleLeft,
+        CanvasAnchor_MiddleCenter,
+        CanvasAnchor_MiddleRight,
+        CanvasAnchor_BottomLeft,
+        CanvasAnchor_BottomCenter,
+        CanvasAnchor_BottomRight,
 
-        Anchor_COUNT
+        CanvasAnchor_COUNT
     };
     void resize_canvas(int2 size, CanvasAnchor anchor);
 

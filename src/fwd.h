@@ -85,13 +85,13 @@ enum BlendMode_ : BlendMode
 using BackgroundMode = int;
 enum BackgroundMode_ : BackgroundMode
 {
-    BGMode_Black = 0,
-    BGMode_White,
-    BGMode_Dark_Checker,
-    BGMode_Light_Checker,
-    BGMode_Custom_Color,
+    BackgroundMode_Black = 0,
+    BackgroundMode_White,
+    BackgroundMode_Dark_Checker,
+    BackgroundMode_Light_Checker,
+    BackgroundMode_Custom_Color,
 
-    BGMode_COUNT
+    BackgroundMode_COUNT
 };
 
 using Direction = int;

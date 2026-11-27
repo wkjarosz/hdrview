@@ -46,7 +46,8 @@ const char *const g_blend_mode_ids[BlendMode_COUNT] = {
     "difference", "relative_difference"};
 const char *const g_tonemap_ids[Tonemap_COUNT]  = {"gamma", "false_color", "positive_negative"};
 const char *const g_channel_ids[Channels_COUNT] = {"rgba", "rgb", "red", "green", "blue", "alpha", "y"};
-const char *const g_bg_mode_ids[BGMode_COUNT]   = {"black", "white", "dark_checker", "light_checker", "custom_color"};
+const char *const g_bg_mode_ids[BackgroundMode_COUNT] = {"black", "white", "dark_checker", "light_checker",
+                                                         "custom_color"};
 // A session records the alpha override the user chose, not the interpretation it produced: with no override
 // the file is read afresh, so a corrected loader or an edited file is picked up. The trailing entry is that
 // "no override" case, which is why this table is one longer than the enum.

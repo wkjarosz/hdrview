@@ -75,7 +75,7 @@ struct Annotation
     /// Which face a Shape::Text is drawn in, as a NanoVG face name; see annotation_font_faces().
     std::string font_face = "sans";
     /// VgCommand::TextAlign flags, saying where p0 sits relative to the text it anchors.
-    int text_align = VgCommand::AlignLeft | VgCommand::AlignTop;
+    int text_align = VgCommand::TextAlign_Left | VgCommand::TextAlign_Top;
 
     std::string text;  ///< What a Shape::Text annotation says
     std::string label; ///< What the panel's row says; display_label() supplies one when this is empty

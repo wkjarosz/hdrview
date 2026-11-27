@@ -750,8 +750,8 @@ void HDRViewApp::draw_font_popup(Annotation &a, const ImVec2 &frame_padding, flo
     // align flags say. Each square carries a dot where its own anchor sits, drawn because FontAwesome has
     // no diagonal arrows and four of the nine would be blank under it. Baseline is the tenth position and
     // has no square; only a renderer sends it.
-    constexpr int h_of[3] = {VgCommand::AlignLeft, VgCommand::AlignCenter, VgCommand::AlignRight};
-    constexpr int v_of[3] = {VgCommand::AlignTop, VgCommand::AlignMiddle, VgCommand::AlignBottom};
+    constexpr int h_of[3] = {VgCommand::TextAlign_Left, VgCommand::TextAlign_Center, VgCommand::TextAlign_Right};
+    constexpr int v_of[3] = {VgCommand::TextAlign_Top, VgCommand::TextAlign_Middle, VgCommand::TextAlign_Bottom};
 
     static const char *const rows[3] = {"top", "middle", "bottom"};
     static const char *const cols[3] = {"left", "center", "right"};

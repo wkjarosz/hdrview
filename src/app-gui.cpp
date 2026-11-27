@@ -1014,14 +1014,15 @@ void HDRViewApp::draw_command_palette(bool &open)
                      else
                      {
                          // Set predefined background mode
-                         m_bg_mode = (BackgroundMode_)clamp(selected_option, (int)BGMode_Black, (int)BGMode_COUNT - 1);
+                         m_bg_mode = (BackgroundMode_)clamp(selected_option, (int)BackgroundMode_Black,
+                                                            (int)BackgroundMode_COUNT - 1);
                      }
                  },
                  nullptr,
                  [this]()
                  {
                      // Only called when custom color is accepted
-                     m_bg_mode = BGMode_Custom_Color;
+                     m_bg_mode = BackgroundMode_Custom_Color;
                      spdlog::info("Background color set to: ({:.3f}, {:.3f}, {:.3f})", m_bg_color.x, m_bg_color.y,
                                   m_bg_color.z);
                  },

@@ -110,7 +110,7 @@ EditContext HDRViewApp::edit_context(ImagePtr img)
         update_visibility();
 
         // the view was framing an image of a different size, unless a preview already had it framing the result
-        if (extent == Extent_Structure)
+        if (extent == EditExtent_Structure)
             fit_display_window();
     };
 
@@ -651,7 +651,7 @@ struct HDRViewApp::RunningFilter
     std::function<Array2Df(const Array2Df &, int, AtomicProgress)> filter;
 
     int2                  new_size{0};               ///< The size of the results; zero keeps the image's shape.
-    EditExtent            extent = Extent_Structure; ///< How a reshaping lands, whether the view refits to it
+    EditExtent            extent = EditExtent_Structure; ///< How a reshaping lands, whether the view refits to it
     std::vector<Array2Df> results;
     AtomicProgress        progress{true};
     std::atomic<bool>     done{false};
