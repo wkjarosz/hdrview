@@ -335,7 +335,7 @@ TEST_CASE("Every shape is picked up within its tolerance and not beyond, unless 
                 const float  tol        = k_slop + 0.5f * a.stroke_width * (stroke_relative ? scale : 1.f);
                 const float2 on         = x.to_screen(point_on_outline(a));
                 const float2 inside     = on - float2{0.f, tol - 1.f};
-                const float2 beyond     = on - float2{0.f, 4.f * tol};
+                const float2 beyond     = on - float2{0.f, 1.5f * tol};
 
                 CHECK(annotation_at({a}, inside, x, k_slop) == 0);
                 CHECK(annotation_at({a}, beyond, x, k_slop) == -1);
