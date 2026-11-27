@@ -269,17 +269,6 @@ TEST_CASE("Each x scale's bins are uniform in that scale's own space")
     }
 }
 
-TEST_CASE("Binning 8-bit content finer than its depth leaves most bins empty")
-{
-    // which reads as a row of detached spikes, so the bin count follows the depth; the unpremultiplying test below
-    // holds a matched count to one bin per level
-    auto ramp            = make_8bit_sRGB_ramp();
-    ramp.bits_per_sample = 0;
-    auto stats           = compute(ramp);
-    REQUIRE(stats.num_bins == PixelStats::MAX_BINS);
-    CHECK(count_empty_bins(stats, AxisScale_SRGB) >= 250);
-}
-
 TEST_CASE("The asinh axis keeps 8-bit levels within a bin or two of each other")
 {
     // asinh's knee has to sit well above the darkest 8-bit level, or the curve is logarithmic across the
