@@ -23,9 +23,10 @@ bool is_png_image(std::istream &is) noexcept;
 // throws on error
 std::vector<ImagePtr> load_png_image(std::istream &is, const std::string_view filename,
                                      const ImageLoadOptions &opts = {});
-// throws on error
+/// Write \p img as a PNG, throwing on error; \p compression_level is zlib's, 0-9, or -1 for its default.
 void save_png_image(const Image &img, std::ostream &os, const std::string_view filename, bool dither = true,
-                    bool interlaced = false, bool sixteen_bit = false, TransferFunction tf = TransferFunction::sRGB);
+                    bool interlaced = false, bool sixteen_bit = false, TransferFunction tf = TransferFunction::sRGB,
+                    int compression_level = -1);
 
 struct PNGSaveOptions;
 struct SaveContext;

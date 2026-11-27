@@ -38,7 +38,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
     throw runtime_error("PNG support not enabled in this build.");
 }
 
-void save_png_image(const Image &, std::ostream &, std::string_view, bool, bool, bool, TransferFunction)
+void save_png_image(const Image &, std::ostream &, std::string_view, bool, bool, bool, TransferFunction, int)
 {
     throw runtime_error("PNG support not enabled in this build.");
 }
@@ -892,7 +892,7 @@ bool png_offers_tf(TransferFunction tf)
 }
 
 void save_png_image(const Image &img, ostream &os, string_view /*filename*/, bool dither, bool interlaced,
-                    bool sixteen_bit, TransferFunction tf)
+                    bool sixteen_bit, TransferFunction tf, int compression_level)
 {
     Timer                       timer;
     int                         w = 0, h = 0, n = 0;
@@ -971,6 +971,8 @@ void save_png_image(const Image &img, ostream &os, string_view /*filename*/, boo
     png_set_IHDR(png_ptr, info_ptr.get(), w, h, bit_depth, color_type,
                  interlaced ? PNG_INTERLACE_ADAM7 : PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT,
                  PNG_FILTER_TYPE_DEFAULT);
+    if (compression_level >= 0)
+        png_set_compression_level(png_ptr, compression_level > 9 ? 9 : compression_level);
 
     if (img.chromaticities)
     {
@@ -999,8 +1001,10 @@ void save_png_image(const Image &img, ostream &os, string_view /*filename*/, boo
     if (is_hdr_encoding(tf))
     {
 #ifdef PNG_cLLI_SUPPORTED
-        const auto cll = measure_content_light_level(img, cicp_primaries < 0);
-        png_set_cLLI(png_ptr, info_ptr.get(), cll.max_cll, cll.max_fall);
+        // at most PQ's peak of 10,000 cd/m^2, which no HDR encoding exceeds, keeping them in libpng's fixed point
+        const auto cll  = measure_content_light_level(img, cicp_primaries < 0);
+        const auto peak = [](float nits) { return std::clamp(nits, 0.f, 10000.f); };
+        png_set_cLLI(png_ptr, info_ptr.get(), peak(cll.max_cll), peak(cll.max_fall));
 #endif
 #ifdef PNG_mDCV_SUPPORTED
         if (const auto md = mastering_display(img.metadata.value("header", json::object())))

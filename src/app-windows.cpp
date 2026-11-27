@@ -1,5 +1,6 @@
 #include "app.h"
 
+#include "clipboard.h"
 #include "colorspace.h"
 #include "fonts.h"
 #include "image.h"
@@ -84,6 +85,8 @@ void HDRViewApp::enable_gui_test_engine(void (*register_tests)(ImGuiTestEngine *
     // layout and HelloImGui's LoadUserPref/SaveUserPref treat as "don't", so tests start from the built-in
     // defaults every run.
     m_params.iniDisable = true;
+    // Likewise the tests copy into a clipboard of their own, so they never replace what the user copied.
+    use_private_clipboard();
 
     // The suite is a long sequence of "yield until this becomes true", so what it costs is frames, and both
     // idling and vsync make a frame wait: idling throttles the rate whenever nothing is animating, which

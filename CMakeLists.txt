@@ -636,6 +636,9 @@ if(EMSCRIPTEN)
   target_include_directories(emscripten-browser-file INTERFACE "${emscripten-browser-file_SOURCE_DIR}")
   list(APPEND HDRVIEW_DEPENDENCIES "emscripten-browser-file")
 
+  # the browser's clipboard; see src/clipboard_platform.h
+  list(APPEND EXTRA_SOURCES src/clipboard_web.cpp)
+
 else()
 
   # The file dialogs run in HDRView's own process, so they take keyboard focus. On Linux they go through
@@ -666,6 +669,25 @@ else()
     pkg_check_modules(DBUS REQUIRED IMPORTED_TARGET dbus-1)
     list(APPEND HDRVIEW_DEPENDENCIES "PkgConfig::DBUS")
   endif()
+
+  # The system clipboard on Windows, macOS and X11; Wayland's goes through the GLFW fork. HDRView passes encoded
+  # files through clip's custom formats, and uses its image support only to read a Windows bitmap.
+  CPMAddPackage(
+    NAME clip
+    GITHUB_REPOSITORY dacap/clip
+    GIT_TAG 9cd472bbd8a97b115957fc5220f34e78fbac825e
+    OPTIONS "CLIP_EXAMPLES OFF" "CLIP_TESTS OFF" "CLIP_INSTALL OFF" "CLIP_ENABLE_IMAGE ON" "CLIP_X11_WITH_PNG OFF"
+    SYSTEM YES
+    EXCLUDE_FROM_ALL YES
+  )
+  if(clip_ADDED)
+    disable_target_warnings(clip)
+    mark_as_system_library(clip)
+  else()
+    message(FATAL_ERROR "Could not download the clip library.")
+  endif()
+  list(APPEND HDRVIEW_DEPENDENCIES "clip")
+  list(APPEND EXTRA_SOURCES src/clipboard_native.cpp)
 
 endif()
 
@@ -1814,6 +1836,7 @@ set(HDRVIEW_SOURCES
     src/app-zoom.cpp
     src/app.cpp
     src/chromaticity.cpp
+    src/clipboard.cpp
     src/colormap.cpp
     src/colorspace.cpp
     src/common.cpp

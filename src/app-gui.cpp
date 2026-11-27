@@ -59,7 +59,7 @@ void HDRViewApp::pixel_color_widget(const int2 &pixel, int &color_mode, int whic
             return;
         auto &group = current_image()->groups[current_image()->selected_group];
         components  = group.num_channels;
-        show_swatch = group.type == ChannelGroup::RGBA_Channels || group.type == ChannelGroup::RGB_Channels;
+        show_swatch = group_is_rgb(group.type);
         inside      = current_image()->contains(pixel);
     }
     else if (which_image == 1)
@@ -70,7 +70,7 @@ void HDRViewApp::pixel_color_widget(const int2 &pixel, int &color_mode, int whic
         {
             auto &group = reference_image()->groups[reference_image()->active_group_index(Target_Secondary)];
             components  = group.num_channels;
-            show_swatch = group.type == ChannelGroup::RGBA_Channels || group.type == ChannelGroup::RGB_Channels;
+            show_swatch = group_is_rgb(group.type);
             inside      = reference_image()->contains(pixel);
         }
         else
@@ -331,6 +331,7 @@ void HDRViewApp::draw_menus()
     if (ImGui::BeginMenu("File"))
     {
         MenuItem(action("Open image..."));
+        MenuItem(action("From clipboard"));
         MenuItem(action("Image loading options..."));
 #if defined(__EMSCRIPTEN__)
         MenuItem(action("Open URL..."));
@@ -448,6 +449,7 @@ void HDRViewApp::draw_menus()
 
         MenuItem(action("Cut"));
         MenuItem(action("Copy"));
+        MenuItem(action("Copy as SDR"));
         MenuItem(action("Paste"));
         MenuItem(action("Seamless paste..."));
 

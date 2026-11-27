@@ -1237,7 +1237,7 @@ void Image::rebuild_layers()
         reference_group = -1;
 }
 
-ImagePtr Image::duplicate(const Box2i &region) const
+ImagePtr Image::duplicate(const Box2i &region, bool visible_group_only) const
 {
     Box2i clipped = region.has_volume() ? region : data_window;
     clipped.intersect(data_window);
@@ -1252,9 +1252,17 @@ ImagePtr Image::duplicate(const Box2i &region) const
     const int2 extent = clipped.size();
     const int2 offset = clipped.min - data_window.min;
 
-    copy->channels.reserve(channels.size());
-    for (const auto &channel : channels)
+    std::vector<const Channel *> copied;
+    if (visible_group_only && is_valid_group(selected_group))
+        for (int c = 0; c < groups[size_t(selected_group)].num_channels; ++c)
+            copied.push_back(&channels[size_t(groups[size_t(selected_group)].channels[c])]);
+    else
+        for (const auto &channel : channels) copied.push_back(&channel);
+
+    copy->channels.reserve(copied.size());
+    for (const Channel *source : copied)
     {
+        const Channel &channel = *source;
         // Channel cannot be copied; the deleted copy is what stops a texture or a statistics task being
         // duplicated by accident, so a fresh one is filled from this one's samples.
         Channel out{channel.name, extent};

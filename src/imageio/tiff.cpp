@@ -20,9 +20,12 @@ using namespace std;
 struct TIFFSaveOptions
 {
     TransferFunction tf              = TransferFunction::Linear;
-    int              compression     = 1; // 0=None, 1=LZW, 2=ZIP, 3=PackBits
-    int              data_type_index = 0; // 0=8bit, 1=16bit, 2=float
+    TIFFCompression  compression     = TIFFCompression_LZW;
+    TIFFSampleType   data_type_index = TIFFSampleType_UInt8;
 };
+
+static bool is_float_type(TIFFSampleType data_type)
+{ return data_type == TIFFSampleType_Float32 || data_type == TIFFSampleType_Float16; }
 
 static TIFFSaveOptions s_opts;
 
@@ -38,7 +41,7 @@ vector<ImagePtr> load_tiff_image(istream &is, string_view filename, const ImageL
 }
 
 void save_tiff_image(const Image &img, std::ostream &os, std::string_view filename, TransferFunction tf,
-                     int compression, int data_type)
+                     TIFFCompression compression, TIFFSampleType data_type)
 {
     throw runtime_error("TIFF support not enabled in this build.");
 }
@@ -1325,7 +1328,8 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
 
     // A TIFF names its transfer function and primaries only through an ICC profile; without one a reader takes
     // integer samples for sRGB and float ones for linear, over BT.709's primaries
-    const auto             default_tf = opts->data_type_index == 2 ? TransferFunction::Linear : TransferFunction::sRGB;
+    const bool             is_float   = is_float_type(opts->data_type_index);
+    const auto             default_tf = is_float ? TransferFunction::Linear : TransferFunction::sRGB;
     const TransferFunction tf =
         tiff_offers_tf(opts->tf, opts->data_type_index) ? opts->tf : labeled_tf(opts->tf, default_tf, "TIFF");
 
@@ -1394,29 +1398,38 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
     uint16_t compression = COMPRESSION_NONE;
     switch (opts->compression)
     {
-    case 0: compression = COMPRESSION_NONE; break;
-    case 1: compression = COMPRESSION_LZW; break;
-    case 2: compression = COMPRESSION_DEFLATE; break;
-    case 3: compression = COMPRESSION_PACKBITS; break;
+    case TIFFCompression_None: compression = COMPRESSION_NONE; break;
+    case TIFFCompression_LZW: compression = COMPRESSION_LZW; break;
+    case TIFFCompression_ZIP: compression = COMPRESSION_DEFLATE; break;
+    case TIFFCompression_PackBits: compression = COMPRESSION_PACKBITS; break;
     }
     TIFFSetField(tif, TIFFTAG_COMPRESSION, compression);
 
     // Set data type and write pixels
-    if (opts->data_type_index == 2) // Float
+    if (is_float)
     {
-        TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, 32);
+        const bool half_float = opts->data_type_index == TIFFSampleType_Float16;
+        TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, half_float ? 16 : 32);
         TIFFSetField(tif, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_IEEEFP);
 
         int  w_out, h_out, n_out;
         auto pixels = img.as_interleaved<float>(&w_out, &h_out, &n_out, tf, false, true, false, true);
 
+        vector<half> row(half_float ? size_t(w) * n : 0);
         for (int y = 0; y < h; ++y)
         {
-            if (TIFFWriteScanline(tif, pixels.get() + y * w * n, y, 0) < 0)
+            float *line = pixels.get() + size_t(y) * w * n;
+            void  *data = line;
+            if (half_float)
+            {
+                for (size_t i = 0; i < row.size(); ++i) row[i] = half(line[i]);
+                data = row.data();
+            }
+            if (TIFFWriteScanline(tif, data, y, 0) < 0)
                 throw runtime_error("Failed to write TIFF scanline.");
         }
     }
-    else if (opts->data_type_index == 1) // 16-bit
+    else if (opts->data_type_index == TIFFSampleType_UInt16)
     {
         TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, 16);
         TIFFSetField(tif, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_UINT);
@@ -1453,12 +1466,14 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
         TIFFSetField(tif, TIFFTAG_IMAGEDESCRIPTION, desc.c_str());
     }
 
-    spdlog::debug("Saved TIFF image ({}x{}, {} channels, {}-bit) in {:.2f}ms", w, h, n,
-                  opts->data_type_index == 2 ? 32 : (opts->data_type_index == 1 ? 16 : 8), timer.elapsed());
+    spdlog::debug(
+        "Saved TIFF image ({}x{}, {} channels, {}-bit) in {:.2f}ms", w, h, n,
+        opts->data_type_index == TIFFSampleType_Float32 ? 32 : (opts->data_type_index == TIFFSampleType_UInt8 ? 8 : 16),
+        timer.elapsed());
 }
 
-void save_tiff_image(const Image &img, ostream &os, string_view filename, TransferFunction tf, int compression,
-                     int data_type)
+void save_tiff_image(const Image &img, ostream &os, string_view filename, TransferFunction tf,
+                     TIFFCompression compression, TIFFSampleType data_type)
 {
     TIFFSaveOptions opts;
     opts.tf              = tf;
@@ -1485,7 +1500,7 @@ TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
             "Data type",
             [&]
             {
-                const char *data_type_items[] = {"8-bit", "16-bit", "32-bit float"};
+                const char *data_type_items[] = {"8-bit", "16-bit", "32-bit float", "16-bit float"};
                 return ImGui::Combo("##DataType", &s_opts.data_type_index, data_type_items,
                                     IM_ARRAYSIZE(data_type_items));
             },
@@ -1493,9 +1508,10 @@ TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
 
         // the chosen transfer function falls back on the default when the data type does not offer it; only
         // integer samples offer a choice, and only where this build can write an ICC profile to record it
+        const bool is_float = is_float_type(s_opts.data_type_index);
         if (!tiff_offers_tf(s_opts.tf, s_opts.data_type_index))
-            s_opts.tf = s_opts.data_type_index == 2 ? TransferFunction::Linear : TransferFunction::sRGB;
-        if (s_opts.data_type_index != 2 && ICCProfile::can_describe(TransferFunction::Linear))
+            s_opts.tf = is_float ? TransferFunction::Linear : TransferFunction::sRGB;
+        if (!is_float && ICCProfile::can_describe(TransferFunction::Linear))
             ImGui::PE::Entry(
                 "Transfer function",
                 [&]
@@ -1519,7 +1535,7 @@ TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
                     return changed;
                 },
                 "Encode the pixel values using this transfer function, which an ICC profile records.");
-        if (s_opts.data_type_index != 2 && s_opts.tf.type == TransferFunction::Gamma)
+        if (!is_float && s_opts.tf.type == TransferFunction::Gamma)
             ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
                                    "When using a gamma transfer function, this is the gamma value to use.");
 
@@ -1531,17 +1547,17 @@ TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
 
     caveat_entry(tiff_caveat(s_opts.tf, ctx.wide_gamut));
 
-    ctx.hdr               = is_hdr_encoding(s_opts.tf, s_opts.data_type_index == 2);
+    ctx.hdr               = is_hdr_encoding(s_opts.tf, is_float_type(s_opts.data_type_index));
     ctx.records_primaries = ICCProfile::can_label(s_opts.tf); //< in an ICC profile
     return &s_opts;
 }
 
 #endif
 
-bool tiff_offers_tf(TransferFunction tf, int data_type_index)
+bool tiff_offers_tf(TransferFunction tf, TIFFSampleType data_type_index)
 {
     // float samples are linear; integer ones are sRGB, or any transfer function an ICC profile names
-    if (data_type_index == 2)
+    if (is_float_type(data_type_index))
         return tf.type == TransferFunction::Linear;
     return tf.type == TransferFunction::sRGB || ICCProfile::can_label(tf);
 }

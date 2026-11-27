@@ -152,23 +152,14 @@ bool modify_pixels(const EditContext &ctx, const string &name, const function<fl
         { return std::make_unique<ChannelRectUndo>(image, channels, bounds, n); });
 }
 
-bool modify_colors(const EditContext &ctx, const string &name, const function<float4(const float4 &, int2, int)> &op,
+namespace
+{
+
+/// Apply \p op to each of \p groups' channels together; \p channels are all of theirs, for the undo entry.
+bool modify_groups(const EditContext &ctx, const string &name, const std::vector<int> &groups,
+                   const std::vector<int> &channels, const function<float4(const float4 &, int2, int)> &op,
                    const function<void(Image &)> &retag)
 {
-    if (!ctx.image)
-        return false;
-
-    // Named apart: C++17 cannot capture a structured binding in a lambda.
-    auto  color    = subject_color_groups(*ctx.image, ctx.subject);
-    auto &groups   = color.first;
-    auto &channels = color.second;
-    if (groups.empty())
-    {
-        // e.g. an ungrouped image or a depth pass: nothing here is color
-        spdlog::warn("'{}' covers no color channel group of '{}'.", name, ctx.image->file_and_partname());
-        return false;
-    }
-
     Box2i bounds = ctx.image->data_window;
     if (ctx.subject.selection_only && ctx.roi.has_volume())
         bounds.intersect(ctx.roi);
@@ -220,6 +211,36 @@ bool modify_colors(const EditContext &ctx, const string &name, const function<fl
         });
 }
 
+} // namespace
+
+bool modify_colors(const EditContext &ctx, const string &name, const function<float4(const float4 &, int2, int)> &op,
+                   const function<void(Image &)> &retag)
+{
+    if (!ctx.image)
+        return false;
+
+    const auto color = subject_color_groups(*ctx.image, ctx.subject);
+    if (color.first.empty())
+    {
+        // e.g. an ungrouped image or a depth pass: nothing here is color
+        spdlog::warn("'{}' covers no color channel group of '{}'.", name, ctx.image->file_and_partname());
+        return false;
+    }
+    return modify_groups(ctx, name, color.first, color.second, op, retag);
+}
+
+bool modify_group(const EditContext &ctx, const string &name, const function<float4(const float4 &, int2)> &op)
+{
+    if (!ctx.image || !ctx.image->is_valid_group(ctx.image->selected_group))
+        return false;
+
+    const int           g     = ctx.image->selected_group;
+    const ChannelGroup &group = ctx.image->groups[size_t(g)];
+    std::vector<int>    channels;
+    for (int c = 0; c < group.num_channels; ++c) channels.push_back(group.channels[c]);
+    return modify_groups(ctx, name, {g}, channels, [&op](const float4 &v, int2 p, int) { return op(v, p); }, {});
+}
+
 bool apply_point_edit(const EditContext &ctx, const string &name, const PointEdit &edit,
                       const function<void(Image &)> &retag)
 {
@@ -229,4 +250,37 @@ bool apply_point_edit(const EditContext &ctx, const string &name, const PointEdi
     return modify_colors(
         ctx, name, [edit](const float4 &c, int2, int)
         { return shader::edit_color(edit.op, c, edit.p0, edit.p1, edit.m0, edit.m1); }, retag);
+}
+
+ImagePtr visible_group_in(const Image &img, const Chromaticities &to, AdaptationMethod method)
+{
+    auto out = img.duplicate(Box2i{}, true);
+    if (!out || !out->is_valid_group(out->selected_group))
+        return out;
+
+    const ChannelGroup &group = out->groups[size_t(out->selected_group)];
+    float3x3            M;
+    if (!group_is_rgb(group.type) ||
+        !color_conversion_matrix(M, out->chromaticities.value_or(Chromaticities{}), to, method))
+        return out;
+
+    const int2 size = out->size();
+    parallel_for(blocked_range<int>(0, size.y, std::max(1, 1024 * 1024 / std::max(1, size.x))),
+                 [&](int begin_y, int end_y, int, int)
+                 {
+                     for (int y = begin_y; y < end_y; ++y)
+                         for (int x = 0; x < size.x; ++x)
+                         {
+                             float3 v;
+                             for (int c = 0; c < 3; ++c) v[c] = out->channels[size_t(group.channels[c])](x, y);
+                             v = mul(M, v);
+                             for (int c = 0; c < 3; ++c) out->channels[size_t(group.channels[c])](x, y) = v[c];
+                         }
+                 });
+
+    // compute_color_transform() names the color space and white point from these
+    out->chromaticities    = to;
+    out->adaptation_method = method;
+    out->compute_color_transform();
+    return out;
 }

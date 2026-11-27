@@ -151,6 +151,10 @@ public:
         bool draws_subject_selector = true; ///< Whether "Apply to" means anything here, and so is shown.
         bool fans_out               = true; ///< Whether a multi-selection runs this once per image.
         bool needs_editable         = true; ///< Whether the image has to accept edits for this to be offered.
+        /// Whether this reads EditContext::clipboard, which the application first fills from the system clipboard.
+        bool reads_clipboard = false;
+        /// Whether this, though it edits at once, has a dialog to ask through first when asks() says to.
+        bool may_ask = false;
     };
 
     explicit EditCommand(Info info) : m_info(std::move(info)) {}
@@ -186,6 +190,8 @@ public:
 
     /// Whether the command can run at all, beyond the image accepting edits.
     virtual bool enabled(const EditContext &) const { return true; }
+    /// Whether invoking a command that may_ask opens its dialog this time, rather than editing at once.
+    virtual bool asks(const EditContext &) const { return false; }
 
     /// Called as the dialog opens, for anything that has to be read from the image each time.
     virtual void on_open(EditContext &) {}
