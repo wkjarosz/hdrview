@@ -451,15 +451,18 @@ TEST_CASE("the image shader's per-pixel steps do what the viewer's controls say"
                 CHECK(rolled.w == alpha);
                 CHECK(la::maxelem(rolled.xyz()) / alpha == doctest::Approx(curve(6.f)));
                 CHECK(la::maxelem(rolled.xyz()) / alpha <= std::exp2(ceiling));
-                for (int i = 0; i < 3; ++i)
-                {
-                    const float each     = curve(straight_hot[i]);
-                    const float together = straight_hot[i] * curve(6.f) / 6.f;
-                    CHECK(rolled[i] / alpha == doctest::Approx(each + (together - each) * preserve_hue));
-                }
-                if (preserve_hue == 1.f)
+                if (preserve_hue == 0.f)
+                    for (int i = 0; i < 3; ++i) CHECK(rolled[i] / alpha == doctest::Approx(curve(straight_hot[i])));
+                else if (preserve_hue == 1.f)
                     for (int i = 0; i < 3; ++i)
                         CHECK(rolled[i] / rolled[(i + 1) % 3] == doctest::Approx(hot[i] / hot[(i + 1) % 3]));
+                else
+                {
+                    // as far between the two as preserve_hue says
+                    const float4 apart = roll(hot, 0.f), together = roll(hot, 1.f);
+                    for (int i = 0; i < 3; ++i)
+                        CHECK(rolled[i] == doctest::Approx(apart[i] + (together[i] - apart[i]) * preserve_hue));
+                }
 
                 const float4 gray{float3{6.f * alpha}, alpha};
                 CHECK(approx_equal(roll(gray, preserve_hue), roll(gray, 1.f - preserve_hue), 1e-6f));
