@@ -443,7 +443,7 @@ public:
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted("Adjust");
         const char *names[] = {"RGB", "Lightness", "Chromaticity"};
-        for (int i = 0; i < Channel_COUNT; ++i)
+        for (int i = 0; i < CurveMode_COUNT; ++i)
         {
             ImGui::SameLine();
             ImGui::RadioButton(names[i], &m_channel, i);
@@ -461,7 +461,7 @@ public:
         e.p1 = float4{float(m_channel), 0.f, 0.f, 0.f};
         // through the image's own primaries: L*a*b* is defined from XYZ, and what the samples mean in XYZ is what
         // the image says they do
-        if (m_channel != Channel_RGB && ctx.image)
+        if (m_channel != CurveMode_RGB && ctx.image)
         {
             const auto  &img   = *ctx.image;
             const float3 white = img.chromaticities ? XYZ_from_xy(img.chromaticities->white) : Lab_reference_white();
@@ -584,21 +584,22 @@ private:
     }
 
     /// Which of the image's qualities the curve is applied to.
-    enum Channel : int
+    using CurveMode = int;
+    enum CurveMode_ : CurveMode
     {
-        Channel_RGB = 0,      ///< The three channels alike, saturation moving with everything else
-        Channel_Lightness,    ///< L* alone, so the colors stay where they are
-        Channel_Chromaticity, ///< a* and b*, so how light the image is does not change
+        CurveMode_RGB = 0,      ///< The three channels alike, saturation moving with everything else
+        CurveMode_Lightness,    ///< L* alone, so the colors stay where they are
+        CurveMode_Chromaticity, ///< a* and b*, so how light the image is does not change
 
-        Channel_COUNT
+        CurveMode_COUNT
     };
     // the shader's names for them, which point_edit() hands it
-    static_assert(Channel_RGB == shader::CURVE_RGB && Channel_Lightness == shader::CURVE_LIGHTNESS &&
-                  Channel_Chromaticity == shader::CURVE_CHROMATICITY);
+    static_assert(CurveMode_RGB == shader::CURVE_RGB && CurveMode_Lightness == shader::CURVE_LIGHTNESS &&
+                  CurveMode_Chromaticity == shader::CURVE_CHROMATICITY);
 
     float m_brightness = 0.f, m_contrast = 0.f;
     bool  m_linear = false, m_clip = false;
-    int   m_channel = Channel_RGB;
+    CurveMode m_channel = CurveMode_RGB;
     /// Which of the two things the drag in progress is doing; unset between drags.
     std::optional<bool> m_dragging_pivot;
 };

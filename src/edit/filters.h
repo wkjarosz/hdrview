@@ -24,7 +24,8 @@
 /**
     Chosen per axis, since an image can tile along one and not the other.
 */
-enum BorderMode : int
+using BorderMode = int;
+enum BorderMode_ : BorderMode
 {
     BorderMode_Black = 0, ///< Nothing outside; samples read there are zero
     BorderMode_Edge,      ///< The nearest sample inside, extended outward
@@ -44,7 +45,8 @@ int wrap_coord(int p, int extent, int mode);
     All three agree at whole-sample offsets, so an integral offset gives the same result whichever is
     chosen.
 */
-enum Sampler : int
+using Sampler = int;
+enum Sampler_ : Sampler
 {
     Sampler_Nearest = 0,
     Sampler_Bilinear,
@@ -112,7 +114,8 @@ Array2Df unsharp_masked(const Array2Df &src, const Box2i &region, float sigma, f
                         AtomicProgress progress = {});
 
 /// How a mip level is filtered from the one before it.
-enum MipFilter : int
+using MipFilter = int;
+enum MipFilter_ : MipFilter
 {
     MipFilter_Box = 0,  ///< The average of what each sample covers
     MipFilter_Mitchell, ///< Mitchell and Netravali's cubic, which stb's resampler shrinks with by default

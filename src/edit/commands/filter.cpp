@@ -145,14 +145,15 @@ public:
 
 private:
     /// What kernel is wanted, which decides what the controls above mean.
-    enum Kind : int
+    using Kind = int;
+    enum Kind_ : Kind
     {
         Kind_Gaussian = 0, ///< The real thing, at a cost that grows with sigma
         Kind_FastGaussian, ///< Repeated boxes converging on it, at a cost independent of sigma
         Kind_Box           ///< Boxes as an effect in their own right
     };
 
-    int   m_kind         = Kind_Gaussian;
+    Kind  m_kind         = Kind_Gaussian;
     float m_sigma        = 2.f;
     float m_sigma_y      = 2.f;
     int   m_half_width   = 2;
@@ -327,13 +328,14 @@ public:
     }
 
 private:
-    enum Mode : int
+    using Mode = int;
+    enum Mode_ : Mode
     {
         Mode_Median = 0,
         Mode_Value
     };
 
-    int    m_mode = Mode_Median;
+    Mode   m_mode = Mode_Median;
     float4 m_value{0.f, 0.f, 0.f, 1.f};
 };
 

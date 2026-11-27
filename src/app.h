@@ -548,7 +548,8 @@ public:
     DisplayGamut display_gamut() const { return ::display_gamut(m_display_cs, m_float_buffer); }
 
     /// Where the highlight rolloff takes the content's peak from.
-    enum PeakSource : int
+    using PeakSource = int;
+    enum PeakSource_ : PeakSource
     {
         PeakSource_Auto = 0, ///< The file's light-level metadata if it agrees with the pixels, else the measured peak
         PeakSource_Metadata,
@@ -558,7 +559,8 @@ public:
     };
 
     /// Where the highlight rolloff's ceiling sits.
-    enum RolloffCeiling : int
+    using RolloffCeiling = int;
+    enum RolloffCeiling_ : RolloffCeiling
     {
         RolloffCeiling_SDRWhite = 0,
         RolloffCeiling_Display, ///< The display's headroom, as it reports it each frame
@@ -577,7 +579,8 @@ public:
     };
 
     /// The highlight rolloff's presets: two fixed ones, and one the user's own changes go into.
-    enum RolloffPreset : int
+    using RolloffPreset = int;
+    enum RolloffPreset_ : RolloffPreset
     {
         RolloffPreset_SDRWhite = 0,
         RolloffPreset_Display,
@@ -628,7 +631,8 @@ public:
     /// The chosen highlight mode's name, as the settings list it.
     const char *highlight_mode_name() const;
     /// What a save writes: the image's own data, or a rendition of the view.
-    enum SaveMode : int
+    using SaveMode = int;
+    enum SaveMode_ : SaveMode
     {
         SaveMode_Data = 0,
         SaveMode_Rendition

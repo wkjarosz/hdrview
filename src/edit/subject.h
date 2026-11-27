@@ -14,7 +14,8 @@
 /// Which channels and which rectangle an edit applies to (Edit > Apply to).
 struct EditSubject
 {
-    enum Scope : int
+    using Scope = int;
+    enum Scope_ : Scope
     {
         Scope_CurrentGroup = 0, ///< Only the channels the viewport is currently showing
         Scope_SelectedGroups,   ///< Every group selected in the Images panel, which always includes the current one

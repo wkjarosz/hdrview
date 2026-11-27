@@ -122,7 +122,8 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
     if (begin_navigable_dialog(rendition ? "Export rendition..." : "Save as...", open, folded))
     {
         // Define enum for save formats
-        enum Format_
+        using Format = int;
+        enum Format_ : Format
         {
             Format_BMP_STB = 0,
             Format_HDR_STB,

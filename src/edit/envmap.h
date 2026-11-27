@@ -17,7 +17,8 @@
 /**
     Each is a pair of functions between a direction and a point on the image, all in the same world frame.
 */
-enum EnvMapping : int
+using EnvMapping = int;
+enum EnvMapping_ : EnvMapping
 {
     EnvMapping_Angular = 0,   ///< Polar angle grows linearly with distance from the center
     EnvMapping_MirrorBall,    ///< What a photograph of a mirrored sphere records
@@ -61,7 +62,8 @@ inline float2 convert_envmap_uv(EnvMapping dst, EnvMapping src, float2 uv)
 float envmap_jacobian(EnvMapping mapping, float2 uv);
 
 /// How remapped_envmap() reads the source.
-enum EnvMapSampling : int
+using EnvMapSampling = int;
+enum EnvMapSampling_ : EnvMapSampling
 {
     EnvMapSampling_Point = 0, ///< Supersample a Gaussian of a chosen width with bilinear reads
     EnvMapSampling_EWA        ///< Elliptical Gaussian over mip levels
