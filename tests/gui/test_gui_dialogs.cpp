@@ -34,6 +34,39 @@ using namespace hdrview_test;
 #include <functional>
 #include <limits>
 
+namespace
+{
+
+/// Shows the view two stops up in plain gamma, highlights passed through, and puts it back however the test ends.
+struct TwoStopsUp
+{
+    HDRViewApp *app      = hdrview();
+    bool       &roll_off = *app->action("Roll off highlights").p_selected;
+    float       exposure = app->exposure_live(), gamma = app->gamma_live();
+    Tonemap_    tonemap = app->tonemap();
+    bool        clamp = app->clamp_to_LDR(), rolling = roll_off;
+
+    explicit TwoStopsUp(ImGuiTestContext *ctx)
+    {
+        app->exposure_live() = 2.f;
+        app->gamma_live()    = 1.f;
+        app->tonemap()       = Tonemap_Gamma;
+        app->clamp_to_LDR()  = false;
+        roll_off             = false;
+        ctx->Yield(2); //< for update_rolloff() to see it
+    }
+    ~TwoStopsUp()
+    {
+        app->exposure_live() = exposure;
+        app->gamma_live()    = gamma;
+        app->tonemap()       = tonemap;
+        app->clamp_to_LDR()  = clamp;
+        roll_off             = rolling;
+    }
+};
+
+} // namespace
+
 void RegisterTests_Dialogs(ImGuiTestEngine *engine)
 {
     ImGuiTest *t = IM_REGISTER_TEST(engine, "dialogs", "image_loading_options_open_close");
@@ -72,12 +105,8 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             auto             *app = hdrview();
             const std::string at  = std::string("//") + dialog + "/";
             // the view as it was, pan and all, since the drags below move it
-            OnExit restore{[app, zoom = app->zoom(), at = app->vp_pos_at_pixel(float2{0.f})]
-                           {
-                               app->set_zoom(zoom);
-                               app->reposition_pixel_to_vp_pos(at, float2{0.f});
-                               app->set_selection(Box2i{});
-                           }};
+            const KeepView view;
+            OnExit         deselect{[app] { app->set_selection(Box2i{}); }};
             app->set_selection(Box2i{});
 
             ctx->SetRef("##MainMenuBar");
@@ -269,25 +298,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         // A rendition two stops up in plain gamma, with highlights passed through whatever the saved settings chose,
         // is the exposed value at any target. Clipped at SDR white instead, it holds the premultiplied colors of the
         // fixture's partly transparent pixels to their alpha.
-        bool       &roll_off = *app->action("Roll off highlights").p_selected;
-        const float exposure = app->exposure_live(), gamma = app->gamma_live();
-        const auto  tonemap = app->tonemap();
-        const bool  clamp = app->clamp_to_LDR(), rolling = roll_off;
-        // put back however the test ends, a failed check returning early
-        OnExit restore{[&, exposure, gamma, tonemap, clamp, rolling]
-                       {
-                           app->exposure_live() = exposure;
-                           app->gamma_live()    = gamma;
-                           app->tonemap()       = tonemap;
-                           app->clamp_to_LDR()  = clamp;
-                           roll_off             = rolling;
-                       }};
-        app->exposure_live() = 2.f;
-        app->gamma_live()    = 1.f;
-        app->tonemap()       = Tonemap_Gamma;
-        app->clamp_to_LDR()  = false;
-        roll_off             = false;
-        ctx->Yield(2); //< for update_rolloff() to see it
+        const TwoStopsUp view{ctx};
 
         // Each check compares with the image's own stored samples: two stops up is four times them, in the image's
         // own primaries, or converted by \p M into those chosen for it; clipped, each channel stops at the pixel's
@@ -380,29 +391,15 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             auto  img = app->current_image();
             IM_CHECK(img != nullptr);
 
-            bool       &roll_off = *app->action("Roll off highlights").p_selected;
-            const float exposure = app->exposure_live(), gamma = app->gamma_live();
-            const auto  tonemap = app->tonemap();
-            const bool  clamp = app->clamp_to_LDR(), rolling = roll_off;
-            // a failed check returns early, so the view and the test hooks are put back however the test ends
-            OnExit restore{[&, exposure, gamma, tonemap, clamp, rolling]
+            const TwoStopsUp view{ctx};
+            // the test hooks, put back however the test ends
+            OnExit restore{[app]
                            {
                                app->test_save_path().clear();
 #if HDRVIEW_ENABLE_LIBJXL
                                jxl_gain_map_option() = 0;
 #endif
-                               app->exposure_live() = exposure;
-                               app->gamma_live()    = gamma;
-                               app->tonemap()       = tonemap;
-                               app->clamp_to_LDR()  = clamp;
-                               roll_off             = rolling;
                            }};
-            app->exposure_live() = 2.f;
-            app->gamma_live()    = 1.f;
-            app->tonemap()       = Tonemap_Gamma;
-            app->clamp_to_LDR()  = false;
-            roll_off             = false;
-            ctx->Yield(2); //< for update_rolloff() to see it
 
             const auto path =
                 std::filesystem::temp_directory_path() / (std::string("hdrview_gui_gainmap") + gc.extension);

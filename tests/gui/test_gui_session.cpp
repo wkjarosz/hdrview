@@ -107,10 +107,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         wait_for_loads(ctx);
 
         IM_CHECK_EQ(hdrview()->num_images(), 2);
-        // both occurrences of the same path must resolve to distinct Image instances, with current and
-        // reference each pointing at their own. IM_CHECK returns from this lambda on failure, so a null
-        // current/reference below is never dereferenced.
-        IM_CHECK(hdrview()->current_image_index() != hdrview()->reference_image_index());
+        // both occurrences of the same path resolve to distinct images, current and reference each its own
         IM_CHECK(hdrview()->current_image() != nullptr);
         IM_CHECK(hdrview()->reference_image() != nullptr);
         IM_CHECK(hdrview()->current_image() != hdrview()->reference_image());

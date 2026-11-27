@@ -204,6 +204,18 @@ struct OnExit
     F       f;
 };
 
+/// Puts the view's zoom and pan back as they were when it was made, however the test ends.
+struct KeepView
+{
+    float  zoom = hdrview()->zoom();
+    float2 at   = hdrview()->vp_pos_at_pixel(float2{0.f});
+    ~KeepView()
+    {
+        hdrview()->set_zoom(zoom);
+        hdrview()->reposition_pixel_to_vp_pos(at, float2{0.f});
+    }
+};
+
 /// A left-button drag from \p from by \p by, both in app coordinates, with \p mods held throughout.
 inline void drag(ImGuiTestContext *ctx, float2 from, float2 by, ImGuiKeyChord mods = 0)
 {

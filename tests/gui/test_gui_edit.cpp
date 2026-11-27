@@ -983,7 +983,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         auto  *app = hdrview();
         auto   img = app->current_image();
-        OnExit restore{[&, zoom = app->zoom()] { app->set_zoom(zoom); }};
+        const KeepView view;
 
         // previewed as the shift asked for, over the channels the view shows: the shown group's, all of them the
         // subject's
@@ -1073,12 +1073,8 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         auto      *app        = hdrview();
         bool      &status_bar = *app->action("Show status bar").p_selected;
         const bool had_bar    = status_bar;
-        OnExit     restore{[&, zoom = app->zoom(), at = app->vp_pos_at_pixel(float2{0.f})]
-                           {
-                           status_bar = had_bar;
-                           app->set_zoom(zoom);
-                           app->reposition_pixel_to_vp_pos(at, float2{0.f});
-                           }};
+        const KeepView view;
+        OnExit         restore{[&] { status_bar = had_bar; }};
         status_bar = true;
         app->set_zoom(2.f);
         ctx->MouseMoveToPos(ImVec2(app->app_pos_at_vp_pos(0.5f * app->viewport_size())));
@@ -1184,12 +1180,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         auto      *app      = hdrview();
         const int2 original = img->size();
         const auto samples  = snapshot(img);
-        // the view as it was, since the drag below pans it
-        OnExit restore{[&, zoom = app->zoom(), at = app->vp_pos_at_pixel(float2{0.f})]
-                       {
-                           app->set_zoom(zoom);
-                           app->reposition_pixel_to_vp_pos(at, float2{0.f});
-                       }};
+        const KeepView view; //< the drag below pans it
 
         // panned while it is previewed, so the result is seen to land where its preview was, not where a fit would
         // put it
