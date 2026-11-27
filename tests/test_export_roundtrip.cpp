@@ -469,6 +469,18 @@ TEST_CASE("every writer round-trips every channel-group layout as the viewport s
             // footing as one that can; alpha only where the format can hold one and the group carries one
             const bool check_alpha =
                 (writer.caps & Cap_Alpha) && group_has_alpha(img->groups[img->selected_group].type);
+            // A luminance-chroma image's color by OpenEXR's definition of its channels, RY = (R - Y) / Y and
+            // BY = (B - Y) / Y over the image's luminance weights, not through the YC_to_RGB() that both the
+            // image's own reading of it and the writers share.
+            const bool   ycc       = std::string{layout.label} == "YC" || std::string{layout.label} == "YCA";
+            const float3 Yw        = img->luminance_weights;
+            auto         ycc_color = [&Yw](int x, int y)
+            {
+                const float ry = straight_value(0, x, y, 1.f), Y = straight_value(1, x, y, 1.f),
+                            by = straight_value(2, x, y, 1.f);
+                const float r = (ry + 1.f) * Y, b = (by + 1.f) * Y;
+                return float3{r, (Y - Yw.x * r - Yw.z * b) / Yw.y, b};
+            };
             float worst = 0.f, worst_alpha = 0.f;
             int2  worst_at{0};
             for (int y = 0; y < k_size.y; ++y)
@@ -476,7 +488,8 @@ TEST_CASE("every writer round-trips every channel-group layout as the viewport s
                 {
                     const float4 want4 = img->rgba_pixel(int2{x, y}, Target_Primary);
                     const float4 got4  = reloaded[0]->rgba_pixel(int2{x, y}, Target_Primary);
-                    const float3 want = from_linear(straight_rgb(want4), tf), got = from_linear(straight_rgb(got4), tf);
+                    const float3 want  = from_linear(ycc ? ycc_color(x, y) : straight_rgb(want4), tf),
+                                 got   = from_linear(straight_rgb(got4), tf);
                     const float  tol = tolerance(writer, want4[3]);
                     for (int c = 0; c < 3; ++c)
                         if (const float e = std::abs(got[c] - want[c]) / tol; !(e <= worst))
