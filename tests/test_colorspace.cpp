@@ -380,7 +380,8 @@ TEST_CASE("the image shader's per-pixel steps do what the viewer's controls say"
         }
         else
         {
-            CHECK(approx_equal(got.xyz(), sRGB_to_linear(colormap_sRGB) * c.w, 1e-6f));
+            // the colormap's color decoded from sRGB, worked out by hand, and premultiplied
+            CHECK(approx_equal(got.xyz(), float3{0.7874123f, 0.1328683f, 0.0100228f} * c.w, 1e-6f));
             CHECK(shader::tonemap(float4{5.f, -1.f, 0.f, c.w}, Tonemap_(m), 2.2f, colormap_sRGB) == got);
         }
     }
