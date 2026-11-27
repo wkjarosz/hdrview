@@ -33,11 +33,25 @@ bool s_own_since_focus = false; ///< Whether this page copied last and has kept 
 function<void(ClipboardRead)> s_waiting;
 /// What the page's last paste event delivered, while no read was waiting for it.
 optional<ClipboardFile> s_pasted;
-int                     s_pasted_frame    = -1000; ///< The frame s_pasted arrived in
+optional<int>           s_pasted_frame;            ///< The frame s_pasted arrived in
 bool                    s_paste_in_flight = false; ///< A paste event's file is on its way
+
+/// How many frames a paste event's file waits for the Ctrl/Cmd+V shortcut it came with, which may arrive after it.
+constexpr int k_paste_frames = 2;
 
 // The paste event's image, and a blur, after which another application may copy next.
 EM_JS(void, hdrview_clipboard_listen, (), {
+    // hands a file, or a failed read's reason, to hdrview_clipboard_delivered()
+    globalThis.hdrview_clipboard_deliver = function(type, buffer, error)
+    {
+        var bytes = new Uint8Array(buffer);
+        var ptr   = Module._malloc(Math.max(1, bytes.length));
+        Module.HEAPU8.set(bytes, ptr);
+        Module.ccall('hdrview_clipboard_delivered', null, [ 'string', 'number', 'number', 'string' ],
+                     [ type, ptr, bytes.length, error || '' ]);
+        Module._free(ptr);
+    };
+
     document.addEventListener('paste', function(e) {
         var items = e.clipboardData ? e.clipboardData.items : [];
         for (var i = 0; i < items.length; ++i)
@@ -49,14 +63,7 @@ EM_JS(void, hdrview_clipboard_listen, (), {
             if (!file)
                 continue;
             Module.ccall('hdrview_clipboard_paste_started', null, [], []);
-            file.arrayBuffer().then(function(buffer) {
-                var bytes = new Uint8Array(buffer);
-                var ptr   = Module._malloc(Math.max(1, bytes.length));
-                Module.HEAPU8.set(bytes, ptr);
-                Module.ccall('hdrview_clipboard_delivered', null, [ 'string', 'number', 'number', 'string' ],
-                             [ file.type, ptr, bytes.length, '' ]);
-                Module._free(ptr);
-            });
+            file.arrayBuffer().then(function(buffer) { hdrview_clipboard_deliver(file.type, buffer); });
             return;
         }
     });
@@ -66,7 +73,8 @@ EM_JS(void, hdrview_clipboard_listen, (), {
     // comes too late. During each click and key press, the GLFW port requests an animation frame callback, which
     // Safari counts as part of the press, and runs the actions deferred to it there, as it does for its own text
     // clipboard. The extra request here runs an action queued with no press pending, which Chrome and Firefox allow.
-    globalThis.hdrview_clipboard_soon = function(action) {
+    globalThis.hdrview_clipboard_soon = function(action)
+    {
         if (typeof GLFW3 == 'undefined')
             return action();
         GLFW3.deferAction(action);
@@ -77,17 +85,9 @@ EM_JS(void, hdrview_clipboard_listen, (), {
 // only Chromium has navigator.userAgentData, and only its clipboard writes a PQ PNG unchanged
 EM_JS(int, hdrview_clipboard_keeps_hdr, (), { return navigator.userAgentData !== undefined ? 1 : 0; });
 
+// a failed read passes its reason, which HDRView logs as an error
 EM_JS(void, hdrview_clipboard_read, (), {
-    // a failed read passes its reason too, which HDRView logs as an error
-    function deliver(type, buffer, error)
-    {
-        var bytes = new Uint8Array(buffer);
-        var ptr   = Module._malloc(Math.max(1, bytes.length));
-        Module.HEAPU8.set(bytes, ptr);
-        Module.ccall('hdrview_clipboard_delivered', null, [ 'string', 'number', 'number', 'string' ],
-                     [ type, ptr, bytes.length, error || '' ]);
-        Module._free(ptr);
-    }
+    var deliver = hdrview_clipboard_deliver;
     if (!navigator.clipboard || !navigator.clipboard.read)
     {
         deliver('', new ArrayBuffer(0), 'This browser cannot read images from the clipboard.');
@@ -193,9 +193,9 @@ void read(function<void(ClipboardRead)> done)
         s_waiting = std::move(done);
         return;
     }
-    if (ImGui::GetFrameCount() - s_pasted_frame <= 2)
+    if (s_pasted_frame && ImGui::GetFrameCount() - *s_pasted_frame <= k_paste_frames)
     {
-        s_pasted_frame = -1000;
+        s_pasted_frame.reset();
         return done({std::exchange(s_pasted, nullopt)});
     }
     s_waiting = std::move(done);

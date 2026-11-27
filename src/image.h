@@ -404,6 +404,14 @@ inline bool group_has_alpha(ChannelGroup::Type type)
            type == ChannelGroup::YCA_Channels || type == ChannelGroup::XYZA_Channels;
 }
 
+/// Whether a group of \p type holds red, green and blue, with or without alpha.
+inline bool group_is_rgb(ChannelGroup::Type type)
+{ return type == ChannelGroup::RGBA_Channels || type == ChannelGroup::RGB_Channels; }
+
+/// Whether a group of \p type holds a gray, a lone channel or Y with alpha.
+inline bool group_is_gray(ChannelGroup::Type type)
+{ return type == ChannelGroup::Single_Channel || type == ChannelGroup::YA_Channels; }
+
 /// The color a group's samples stand for, in the image's own primaries.
 /**
     \p raw holds the group's channels in order. A single channel is gray, as is Y with its alpha, the YC types
@@ -833,9 +841,10 @@ public:
 
         Deep: the samples are copied, not shared, and everything describing how to read them comes along.
         The copy has no history and no texture, and is never live, which is how one keeps a frame a
-        renderer is about to overwrite.
+        renderer is about to overwrite. With \p visible_group_only, it holds only the channels of the group on
+        screen, which becomes its one group.
     */
-    ImagePtr duplicate(const Box2i &region = Box2i{}) const;
+    ImagePtr duplicate(const Box2i &region = Box2i{}, bool visible_group_only = false) const;
 
 private:
     /// Move the windows the way the samples just moved, so the two stay in the same frame.

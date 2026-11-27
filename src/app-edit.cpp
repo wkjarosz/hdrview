@@ -37,7 +37,7 @@ namespace
 /// The preview frame of an edit confirmed and handed to a worker, whose preview stays up until its result lands.
 constexpr int k_preview_held = std::numeric_limits<int>::max();
 
-void copy_to_system_clipboard(HDRViewApp &app, SystemCopy what);
+void copy_to_system_clipboard(const Image &clip);
 } // namespace
 
 ImagePtr HDRViewApp::target_image() { return m_target_image_override ? m_target_image_override : current_image(); }
@@ -140,19 +140,25 @@ void HDRViewApp::apply_edit_command(EditCommand &cmd)
 {
     // one context and one apply() per image, so each lands as its own undo entry. Each starts from the
     // same selection, since cropping clears it and the images after the first would find nothing to crop.
-    const Box2i roi = m_roi;
+    const Box2i roi           = m_roi;
+    const auto  clipboard_was = m_clipboard;
     for (const auto &img : edit_command_images(cmd))
     {
         m_roi = roi;
         cmd.apply(edit_context(img));
     }
 
-    if (cmd.info().system_copy != SystemCopy_None)
-        copy_to_system_clipboard(*this, cmd.info().system_copy);
+    // what Copy or Cut put in the app's clipboard goes on the system's too
+    if (m_clipboard && m_clipboard != clipboard_was)
+        copy_to_system_clipboard(*m_clipboard);
 }
 
 namespace
 {
+
+/// zlib's fastest level, since nothing keeps a clipboard's file: six times faster than its default, for a file an
+/// eighth larger.
+constexpr int k_clipboard_png_level = 1;
 
 /// The image's own values, as a half-float TIFF and a PQ PNG, among which other applications choose.
 /**
@@ -166,65 +172,38 @@ std::vector<ClipboardFile> encode_data(const Image &img)
     if (clipboard_carries("image/tiff"))
     {
         std::ostringstream tiff;
-        save_tiff_image(img, tiff, "clipboard.tiff", TransferFunction::Linear, 0, 3);
+        save_tiff_image(img, tiff, "clipboard.tiff", TransferFunction::Linear, TIFFCompression_None,
+                        TIFFSampleType_Float16);
         files.push_back({"image/tiff", tiff.str()});
     }
 
-    // zlib's fastest level, since a clipboard's file is short-lived
     std::ostringstream png;
     if (clipboard_keeps_hdr())
     {
         // in BT.2020's primaries, which PQ files conventionally use
-        const auto bt2020 = selected_group_in(img, gamut_chromaticities(ColorGamut_BT2020_2100), img.adaptation_method);
-        save_png_image(*bt2020, png, "clipboard.png", false, false, true, TransferFunction::BT2100_PQ, 1);
+        const auto bt2020 = visible_group_in(img, gamut_chromaticities(ColorGamut_BT2020_2100), img.adaptation_method);
+        save_png_image(*bt2020, png, "clipboard.png", false, false, true, TransferFunction::BT2100_PQ,
+                       k_clipboard_png_level);
     }
     else
-        save_png_image(img, png, "clipboard.png", true, false, false, TransferFunction::sRGB, 1);
+        save_png_image(img, png, "clipboard.png", true, false, false, TransferFunction::sRGB, k_clipboard_png_level);
     files.push_back({"image/png", png.str()});
     return files;
 }
 
-/// An 8-bit sRGB PNG of the view over what Copy as SDR just took, for applications that read only SDR.
-std::vector<ClipboardFile> encode_view(HDRViewApp &app)
-{
-    const Chromaticities srgb{};
-    auto img = app.image_to_save(HDRViewApp::SaveMode_Rendition, app.edit_subject().selection_only, 0.f, &srgb);
-    if (!img)
-        return {};
-    std::ostringstream png;
-    // zlib's fastest level: six times faster than its default, for a file an eighth larger
-    save_png_image(*img, png, "clipboard.png", true, false, false, TransferFunction::sRGB, 1);
-    return {{"image/png", png.str()}};
-}
-
-/// Put what Copy, Cut or Copy as SDR just took into the app's clipboard on the system clipboard too.
+/// Put what Copy or Cut just took into the app's clipboard on the system clipboard too.
 /**
-    HDRView's own paste recognizes these files when it reads them back. For a data copy it then takes the app's
-    clipboard, at full precision; Copy as SDR replaces that with the rendition, so a paste in HDRView gives what other
-    applications get.
+    HDRView's own paste recognizes these files when it reads them back, and takes the app's clipboard instead, at full
+    precision.
 */
-void copy_to_system_clipboard(HDRViewApp &app, SystemCopy what)
+void copy_to_system_clipboard(const Image &clip)
 {
-    const auto clip = app.clipboard();
-    if (!clip)
-        return;
-
     try
     {
-        Timer      timer;
-        const auto files = what == SystemCopy_SDR ? encode_view(app) : encode_data(*clip);
-        if (files.empty() || !set_clipboard_files(files))
-            return;
-        spdlog::info("Copied {}x{} pixels to the system clipboard in {:.0f} ms.", clip->size().x, clip->size().y,
-                     timer.elapsed());
-
-        if (what == SystemCopy_SDR)
-        {
-            SpanIStream in{files.front().bytes};
-            auto        images = load_image(in, "clipboard.png");
-            if (!images.empty())
-                app.set_clipboard(images.front());
-        }
+        Timer timer;
+        if (set_clipboard_files(encode_data(clip)))
+            spdlog::info("Copied {}x{} pixels to the system clipboard in {:.0f} ms.", clip.size().x, clip.size().y,
+                         timer.elapsed());
     }
     catch (const std::exception &e)
     {
@@ -232,15 +211,18 @@ void copy_to_system_clipboard(HDRViewApp &app, SystemCopy what)
     }
 }
 
-/// Read the system clipboard's image and hand it to \p use at the start of a frame.
+/// Read the system clipboard's image and hand it to \p use within a frame.
 /**
-    Natively that is the next frame; on the web, the first after the browser has read the clipboard.
+    Natively the read completes at once, inside the frame that asked for it. On the web it completes outside any
+    frame, once the browser has read the clipboard, and \p use waits for the next one.
 */
 void read_clipboard_then(HDRViewApp &app, std::function<void(ClipboardRead)> use)
 {
     read_clipboard_image(
         [&app, use = std::move(use)](ClipboardRead read) mutable
         {
+            if (ImGui::GetCurrentContext()->WithinFrameScope)
+                return use(std::move(read));
             app.post_to_main_thread([use = std::move(use), read = std::move(read)]() mutable { use(std::move(read)); });
             app.wake_event_loop();
         });
@@ -276,7 +258,7 @@ void take_clipboard_file(HDRViewApp &app, const ClipboardRead &read)
     {
         // decoded here and now, since the paste that asked for it runs next
         SpanIStream in{file->bytes};
-        auto        images = load_image(in, clipboard_file_name("clipboard", *file));
+        auto        images = load_image(in, clipboard_file_name("clipboard", *file), load_image_options());
         if (!images.empty())
             app.set_clipboard(images.front());
     }
@@ -307,6 +289,38 @@ void open_clipboard_file(HDRViewApp &app, const ClipboardRead &read)
 }
 
 } // namespace
+
+bool HDRViewApp::can_open_clipboard_image() const { return clipboard_holds_image() || m_clipboard; }
+
+void HDRViewApp::copy_rendition_to_clipboard()
+{
+    const Chromaticities srgb{};
+    auto                 img = image_to_save(SaveMode_Rendition, m_edit_subject.selection_only, 0.f, &srgb);
+    if (!img)
+        return;
+
+    try
+    {
+        Timer              timer;
+        std::ostringstream png;
+        save_png_image(*img, png, "clipboard.png", true, false, false, TransferFunction::sRGB, k_clipboard_png_level);
+        const std::vector<ClipboardFile> files{{"image/png", png.str()}};
+        if (!set_clipboard_files(files))
+            return;
+        spdlog::info("Copied {}x{} pixels to the system clipboard in {:.0f} ms.", img->size().x, img->size().y,
+                     timer.elapsed());
+
+        // so a paste in HDRView gives what other applications get
+        SpanIStream in{files.front().bytes};
+        auto        images = ::load_image(in, "clipboard.png");
+        if (!images.empty())
+            m_clipboard = images.front();
+    }
+    catch (const std::exception &e)
+    {
+        spdlog::error("Could not copy to the system clipboard: {}", e.what());
+    }
+}
 
 void HDRViewApp::open_clipboard_image()
 {
@@ -339,17 +353,14 @@ void HDRViewApp::invoke_edit_command(EditCommand &cmd)
 
 bool HDRViewApp::edit_command_enabled(const EditCommand &cmd)
 {
-    if (cmd.info().reads_clipboard)
-    {
-        // opening the clipboard's image instead; see invoke_edit_command()
-        if (!target_image())
-            return clipboard_holds_image() || m_clipboard;
-        // another application's image, which the command sees only once invoke_edit_command() has read it
-        if (clipboard_holds_image() && (!cmd.info().needs_editable || can_edit(target_image())))
-            return true;
-    }
+    // with nothing to paste into, a paste opens the clipboard's image instead; see invoke_edit_command()
+    if (cmd.info().reads_clipboard && !target_image())
+        return can_open_clipboard_image();
     if (cmd.info().needs_editable && !can_edit(target_image()))
         return false;
+    // another application's image, which the command sees only once invoke_edit_command() has read it
+    if (cmd.info().reads_clipboard && clipboard_holds_image())
+        return true;
     return cmd.enabled(edit_context());
 }
 

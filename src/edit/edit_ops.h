@@ -93,10 +93,9 @@ bool apply_point_edit(const EditContext &ctx, const std::string &name, const Poi
 
 ///@}
 
-/// \p img's visible channel group alone over \p region, or all of it, as a new image with its colors in \p to.
+/// \p img's visible channel group alone, as a new image with its colors converted into the primaries \p to.
 /**
-    The samples stay as stored, premultiplied where they are, and the channels keep their names. Only an RGB or
-    RGBA group's samples are converted and retagged; any other group is copied as it is.
+    Only an RGB or RGBA group's samples are converted, premultiplied as they are stored, and retagged; any other
+    group is copied as it is.
 */
-ImagePtr selected_group_in(const Image &img, const Chromaticities &to, AdaptationMethod method,
-                           const Box2i &region = Box2i{});
+ImagePtr visible_group_in(const Image &img, const Chromaticities &to, AdaptationMethod method);

@@ -1087,7 +1087,13 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    ImGuiKey_None,
                    0,
                    [this]() { open_clipboard_image(); },
-                   [this]() { return clipboard_holds_image() || m_clipboard != nullptr; }});
+                   [this]() { return can_open_clipboard_image(); }});
+        add(Action{{"Copy as SDR", "Copy as 8-bit", "Copy rendition"},
+                   ICON_MY_COPY,
+                   ImGuiKey_None,
+                   0,
+                   [this]() { copy_rendition_to_clipboard(); },
+                   [this]() { return current_image() != nullptr; }});
 
         add(Action{{"Create gradient image..."}, ICON_MY_DITHER, ImGuiKey_None, 0, [this]() {
                        dialog("Create gradient image...").open = true;

@@ -9,8 +9,8 @@
 
     Cut, copy and paste, of the visible channel group, over a clipboard that holds one. A pasted region keeps its full
     precision, and maps into the visible group by what its channels mean. The application also puts each copy on the
-    system clipboard, in encodings that keep HDR or, for Copy as SDR, as an eight-bit rendition of the view, and fills
-    this clipboard from the system's when another application has put an image there since.
+    system clipboard, in encodings that keep HDR, and fills this clipboard from the system's when another application
+    has put an image there since.
 */
 
 #include "edit/commands.h"
@@ -53,28 +53,8 @@ std::string color_space_name(const Image &img)
                        white_point_name(named_white_point(chr.white)));
 }
 
-/// What a channel group's values are, as a paste maps them: a color, with or without alpha, or anything else.
-enum class Kind
-{
-    Gray,
-    GrayAlpha,
-    RGB,
-    RGBA,
-    Other ///< Depth, motion vectors, normals and the like, whose channels have no meaning a paste could match
-};
-
-Kind kind_of(const ChannelGroup &group)
-{
-    switch (group.type)
-    {
-    case ChannelGroup::Single_Channel: return Kind::Gray;
-    case ChannelGroup::YA_Channels: return Kind::GrayAlpha;
-    case ChannelGroup::RGB_Channels: return Kind::RGB;
-    case ChannelGroup::RGBA_Channels: return Kind::RGBA;
-    default: return Kind::Other;
-    }
-}
-bool is_gray(Kind k) { return k == Kind::Gray || k == Kind::GrayAlpha; }
+/// Whether a group of \p type holds colors, grays included, as opposed to depth, motion vectors and the like.
+bool is_color(ChannelGroup::Type type) { return group_is_rgb(type) || group_is_gray(type); }
 
 /// The two channel groups a paste maps between: the clipboard's visible one and the image's.
 struct Pairing
@@ -83,21 +63,20 @@ struct Pairing
     ConstImagePtr       image;
     const ChannelGroup *from = nullptr;
     const ChannelGroup *to   = nullptr;
-    Kind                from_kind = Kind::Other, to_kind = Kind::Other;
 
-    /// Whether both are colors, which map by what their channels mean.
-    bool colors() const { return from_kind != Kind::Other && to_kind != Kind::Other; }
+    /// Whether both hold colors, grays included, which map by what their channels mean.
+    bool colors() const { return is_color(from->type) && is_color(to->type); }
     /// Whether both are the same kind of group, depth into depth say, which map channel for channel.
     bool alike() const { return from->type == to->type && from->num_channels == to->num_channels; }
-    /// Whether the clipboard holds colors in another color space than the image's; a gray is neutral in any.
+    /// Whether the clipboard holds RGB colors in another color space than the image's; a gray is neutral in any.
     bool spaces_differ() const
     {
         float3x3 M;
-        return colors() && !is_gray(from_kind) &&
+        return colors() && group_is_rgb(from->type) &&
                color_conversion_matrix(M, chromaticities_of(*clip), chromaticities_of(*image));
     }
-    /// Whether the clipboard holds colors and the image's group is gray, which a paste has to reduce to one value.
-    bool color_into_gray() const { return colors() && !is_gray(from_kind) && is_gray(to_kind); }
+    /// Whether RGB colors go into a gray, which a paste has to reduce to one value.
+    bool color_into_gray() const { return group_is_rgb(from->type) && group_is_gray(to->type); }
 };
 
 std::optional<Pairing> pairing(const EditContext &ctx)
@@ -106,11 +85,8 @@ std::optional<Pairing> pairing(const EditContext &ctx)
     if (!clip || !ctx.image || !clip->is_valid_group(clip->selected_group) ||
         !ctx.image->is_valid_group(ctx.image->selected_group))
         return std::nullopt;
-    Pairing p{clip, ctx.image, &clip->groups[size_t(clip->selected_group)],
-              &ctx.image->groups[size_t(ctx.image->selected_group)]};
-    p.from_kind = kind_of(*p.from);
-    p.to_kind   = kind_of(*p.to);
-    return p;
+    return Pairing{clip, ctx.image, &clip->groups[size_t(clip->selected_group)],
+                   &ctx.image->groups[size_t(ctx.image->selected_group)]};
 }
 
 /// How a paste lays the clipboard's visible channel group into the image's, asking where it has to choose.
@@ -265,19 +241,18 @@ public:
                     continue;
                 }
 
-                float3      rgb = is_gray(p->from_kind) ? float3{raw[0]} : raw.xyz();
-                const float a =
-                    p->from_kind == Kind::GrayAlpha ? raw[1] : (p->from_kind == Kind::RGBA ? raw[3] : 1.f);
+                float3      rgb = group_is_gray(p->from->type) ? float3{raw[0]} : raw.xyz();
+                const float a   = group_has_alpha(p->from->type) ? raw[n_from - 1] : 1.f;
                 if (convert)
                     rgb = mul(M, rgb);
 
-                if (is_gray(p->to_kind))
+                if (group_is_gray(p->to->type))
                     out->slots[0](x, y) = !p->color_into_gray() ? rgb.x
                                           : m_convert            ? dot(Yw, rgb)
                                                                  : (rgb.x + rgb.y + rgb.z) / 3.f;
                 else
                     for (int c = 0; c < 3; ++c) out->slots[size_t(c)](x, y) = rgb[c];
-                if (p->to_kind == Kind::GrayAlpha || p->to_kind == Kind::RGBA)
+                if (group_has_alpha(p->to->type))
                     out->slots[size_t(n_to - 1)](x, y) = a;
                 out->alpha(x, y) = a;
             }
@@ -296,14 +271,10 @@ private:
 class Copy final : public EditCommand
 {
 public:
-    /// Copy, or with \p sdr, Copy as SDR, which differ only in what reaches the system clipboard.
-    explicit Copy(bool sdr) :
-        EditCommand(sdr ? Info{{"Copy as SDR", "Copy as 8-bit", "Copy rendition"}, ICON_MY_COPY}
-                        : Info{{"Copy", "Copy selection"}, ICON_MY_COPY, ImGuiMod_Ctrl | ImGuiKey_C})
+    Copy() : EditCommand({{"Copy", "Copy selection"}, ICON_MY_COPY, ImGuiMod_Ctrl | ImGuiKey_C})
     {
         m_info.needs_editable = false; // copying a live image is fine
         m_info.fans_out       = false; // one clipboard
-        m_info.system_copy    = sdr ? SystemCopy_SDR : SystemCopy_Data;
     }
 
     bool enabled(const EditContext &ctx) const override { return ctx.image && ctx.clipboard; }
@@ -311,8 +282,7 @@ public:
     void apply(const EditContext &ctx) override
     {
         if (ctx.image && ctx.clipboard)
-            *ctx.clipboard = selected_group_in(*ctx.image, chromaticities_of(*ctx.image), AdaptationMethod_Identity,
-                                               target_region(ctx));
+            *ctx.clipboard = ctx.image->duplicate(target_region(ctx), true);
     }
 };
 
@@ -322,8 +292,7 @@ public:
     Cut() : EditCommand({{"Cut", "Cut selection"}, ICON_MY_CUT, ImGuiMod_Ctrl | ImGuiKey_X})
     {
         // the copy half cannot fan out; see Copy
-        m_info.fans_out    = false;
-        m_info.system_copy = SystemCopy_Data;
+        m_info.fans_out = false;
     }
 
     void apply(const EditContext &ctx) override
@@ -333,8 +302,7 @@ public:
             return;
 
         // copied before it is cleared, over the same rectangle
-        *ctx.clipboard =
-            selected_group_in(*img, chromaticities_of(*img), AdaptationMethod_Identity, target_region(ctx));
+        *ctx.clipboard = img->duplicate(target_region(ctx), true);
 
         // zero throughout: these samples are held premultiplied, where a color with no alpha is additive
         // and not invisible
@@ -526,8 +494,7 @@ private:
 void add_clipboard_commands(std::vector<EditCommandPtr> &out)
 {
     out.push_back(std::make_unique<Cut>());
-    out.push_back(std::make_unique<Copy>(false));
-    out.push_back(std::make_unique<Copy>(true));
+    out.push_back(std::make_unique<Copy>());
     out.push_back(std::make_unique<Paste>());
     out.push_back(std::make_unique<SeamlessPaste>());
 }

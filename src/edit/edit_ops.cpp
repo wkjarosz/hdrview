@@ -252,64 +252,35 @@ bool apply_point_edit(const EditContext &ctx, const string &name, const PointEdi
         { return shader::edit_color(edit.op, c, edit.p0, edit.p1, edit.m0, edit.m1); }, retag);
 }
 
-ImagePtr selected_group_in(const Image &img, const Chromaticities &to, AdaptationMethod method, const Box2i &region)
+ImagePtr visible_group_in(const Image &img, const Chromaticities &to, AdaptationMethod method)
 {
-    if (!img.is_valid_group(img.selected_group))
-        return nullptr;
-    Box2i clipped = region.has_volume() ? region : img.data_window;
-    clipped.intersect(img.data_window);
-    if (!clipped.has_volume())
-        return nullptr;
+    auto out = img.duplicate(Box2i{}, true);
+    if (!out || !out->is_valid_group(out->selected_group))
+        return out;
 
-    const ChannelGroup &group  = img.groups[size_t(img.selected_group)];
-    const int           n      = group.num_channels;
-    const int2          extent = clipped.size();
-    const int2          offset = clipped.min - img.data_window.min;
-    const bool          is_color =
-        group.type == ChannelGroup::RGB_Channels || group.type == ChannelGroup::RGBA_Channels;
+    const ChannelGroup &group = out->groups[size_t(out->selected_group)];
+    float3x3            M;
+    if (!group_is_rgb(group.type) ||
+        !color_conversion_matrix(M, out->chromaticities.value_or(Chromaticities{}), to, method))
+        return out;
 
-    float3x3   M{la::identity};
-    const bool convert =
-        is_color && color_conversion_matrix(M, img.chromaticities.value_or(Chromaticities{}), to, method);
-
-    // a fresh id and an empty history, as Image::duplicate() gives its copy
-    auto out                           = std::make_shared<Image>();
-    static_cast<ImageMetadata &>(*out) = img;
-    for (int c = 0; c < n; ++c)
-    {
-        const Channel &channel = img.channels[size_t(group.channels[c])];
-        Channel        copy{channel.name, extent};
-        copy.bits_per_sample = channel.bits_per_sample;
-        out->channels.push_back(std::move(copy));
-    }
-    parallel_for(blocked_range<int>(0, extent.y, std::max(1, 1024 * 1024 / std::max(1, extent.x))),
+    const int2 size = out->size();
+    parallel_for(blocked_range<int>(0, size.y, std::max(1, 1024 * 1024 / std::max(1, size.x))),
                  [&](int begin_y, int end_y, int, int)
                  {
                      for (int y = begin_y; y < end_y; ++y)
-                         for (int x = 0; x < extent.x; ++x)
+                         for (int x = 0; x < size.x; ++x)
                          {
-                             float4 v{0.f};
-                             for (int c = 0; c < n; ++c)
-                                 v[c] = img.channels[size_t(group.channels[c])](offset.x + x, offset.y + y);
-                             if (convert)
-                                 v.xyz() = mul(M, v.xyz());
-                             for (int c = 0; c < n; ++c) out->channels[size_t(c)](x, y) = v[c];
+                             float3 v;
+                             for (int c = 0; c < 3; ++c) v[c] = out->channels[size_t(group.channels[c])](x, y);
+                             v = mul(M, v);
+                             for (int c = 0; c < 3; ++c) out->channels[size_t(group.channels[c])](x, y) = v[c];
                          }
                  });
 
-    if (clipped != img.data_window)
-        out->data_window = out->display_window = clipped;
-    if (convert)
-    {
-        out->chromaticities    = to;
-        out->color_space       = named_color_gamut(to);
-        out->white_point       = named_white_point(to.white);
-        out->adaptation_method = method;
-        out->compute_color_transform();
-    }
-
-    // the layers and groups follow from the names; not finalize(), which would premultiply the samples again
-    out->rebuild_layers();
-    out->selected_group = 0;
+    // compute_color_transform() names the color space and white point from these
+    out->chromaticities    = to;
+    out->adaptation_method = method;
+    out->compute_color_transform();
     return out;
 }

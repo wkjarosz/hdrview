@@ -242,6 +242,24 @@ and one sentence**; when more is needed, the `///` line states what the thing is
 below it carries the detail. This is not only style: `JAVADOC_AUTOBRIEF` defaults to off, so a multi-line
 `///` produces no brief at all and the whole block becomes the detailed description.
 
+### Enums
+An enum whose values are stored or passed as integers (settings, ImGui combos, the shaders' constants) follows
+Dear ImGui's convention: an `int` alias without the underscore, the enum with it, and every value prefixed with
+the enum's exact name, with an optional `_COUNT` last.
+```cpp
+using Tonemap = int;
+enum Tonemap_ : Tonemap
+{
+    Tonemap_Gamma = 0,
+    Tonemap_FalseColor,
+    Tonemap_COUNT
+};
+```
+Variables and parameters use the alias, which keeps an ImGui combo's `int *` and a stored setting free of casts.
+An `enum class` suits a type never used as an integer, such as the renderer's, and its values need no prefix.
+Some older enums predate this (a reversed alias, a prefix that is not the enum's name); rename one when touching
+it, without reordering its values, since settings store them as integers.
+
 ### Spelling
 Use American English: **color** not colour, **behavior** not behaviour, **normalize**/**initialize**/
 **recognize** not `-ise`, **honor**, **gray**, **center**, **analyze**. This applies to comments and commit

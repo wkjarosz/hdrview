@@ -357,7 +357,6 @@ TEST_CASE("Every edit that applies changes the image as one undo entry, and one 
     // The commands writing somewhere other than the image they are handed, which record nothing on it.
     const std::set<std::string> elsewhere = {
         "Copy",                // the clipboard
-        "Copy as SDR",         // likewise
         "Generate mipmaps...", // new images beside it
     };
 
@@ -420,7 +419,7 @@ TEST_CASE("Every edit that applies changes the image as one undo entry, and one 
                 CHECK(after == before);
 
                 // and it did write where it writes
-                if (enabled && pass != Pass_Live && (name == "Copy" || name == "Copy as SDR"))
+                if (enabled && pass != Pass_Live && name == "Copy")
                     CHECK(ctx.clipboard_image != clipboard);
                 if (enabled && pass != Pass_Live && name == "Generate mipmaps...")
                     CHECK_FALSE(ctx.added.empty());

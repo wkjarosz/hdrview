@@ -220,20 +220,19 @@ const Variant k_variants[] = {
     {"jpg_stb", ".jpg", k_jpg_loader, Cap_Default | Cap_Lossy, 0.03f, [](TransferFunction t) { return stb_offers_tf(t, false); }, never,
      [](const Image &i, std::ostream &o, TransferFunction) { save_stb_jpg(i, o, "a.jpg", false); }},
 #if HDRVIEW_ENABLE_LIBTIFF
-    // the save dialog's compressions (0 none, 1 LZW, 2 ZIP, 3 PackBits) and data types (0 8-bit, 1 16-bit, 2 float,
-    // 3 half); an ICC profile, which lcms reads in float, moves float samples by a few 1e-6
+    // an ICC profile, which lcms reads in float, moves float samples by a few 1e-6
     {"tiff8 lzw", ".tif", "libtiff", Cap_Default | Cap_Alpha | Cap_Premultiplied | Cap_Dithers, k_8bit_dithered, [](TransferFunction t) { return tiff_offers_tf(t, 0); }, icc_labels,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, 1, 0); }},
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, TIFFCompression_LZW, TIFFSampleType_UInt8); }},
     {"tiff8 none", ".tif", "libtiff", Cap_Alpha | Cap_Premultiplied | Cap_Dithers, k_8bit_dithered, [](TransferFunction t) { return tiff_offers_tf(t, 0); }, icc_labels,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, 0, 0); }},
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, TIFFCompression_None, TIFFSampleType_UInt8); }},
     {"tiff16 zip", ".tif", "libtiff", Cap_Alpha | Cap_Premultiplied | Cap_Dithers, 1e-4f, [](TransferFunction t) { return tiff_offers_tf(t, 1); }, icc_labels,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, 2, 1); }},
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, TIFFCompression_ZIP, TIFFSampleType_UInt16); }},
     {"tiff16 packbits", ".tif", "libtiff", Cap_Alpha | Cap_Premultiplied | Cap_Dithers, 1e-4f, [](TransferFunction t) { return tiff_offers_tf(t, 1); }, icc_labels,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, 3, 1); }},
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, TIFFCompression_PackBits, TIFFSampleType_UInt16); }},
     {"tiff float lzw", ".tif", "libtiff", Cap_Float | Cap_Alpha, 1e-5f, [](TransferFunction t) { return tiff_offers_tf(t, 2); }, icc_labels,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, 1, 2); }},
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, TIFFCompression_LZW, TIFFSampleType_Float32); }},
     {"tiff half zip", ".tif", "libtiff", Cap_Float | Cap_Alpha, 1e-3f, [](TransferFunction t) { return tiff_offers_tf(t, 3); }, icc_labels,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, 2, 3); }},
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, TIFFCompression_ZIP, TIFFSampleType_Float16); }},
 #endif
     {"qoi", ".qoi", "qoi", Cap_Default | Cap_Alpha, k_8bit, qoi_offers_tf, never,
      [](const Image &i, std::ostream &o, TransferFunction t)

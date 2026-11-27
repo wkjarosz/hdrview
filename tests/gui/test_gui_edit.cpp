@@ -750,8 +750,8 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         // offered as a TIFF and a smaller PNG, of which a paste takes the TIFF, which can hold floats
         {
             std::ostringstream tiff, png;
-            save_tiff_image(*img->duplicate(Box2i{o, o + int2{5, 4}}), tiff, "other.tif", TransferFunction::Linear, 0,
-                            2);
+            save_tiff_image(*img->duplicate(Box2i{o, o + int2{5, 4}}), tiff, "other.tif", TransferFunction::Linear,
+                            TIFFCompression_None, TIFFSampleType_Float32);
             save_png_image(*img->duplicate(Box2i{o, o + int2{3, 2}}), png, "other.png", false);
             system = {{"image/png", png.str()}, {"image/tiff", tiff.str()}};
         }
@@ -765,9 +765,9 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         {
             const Box2i source{middle + int2{2, 2}, middle + int2{7, 6}};
             const Box2i landing{middle + int2{0, 12}, middle + int2{5, 16}};
-            const auto  p3 = selected_group_in(*img->duplicate(source),
-                                               gamut_chromaticities(ColorGamut_Display_P3_SMPTE432),
-                                               AdaptationMethod_Bradford);
+            const auto  p3 =
+                visible_group_in(*img->duplicate(source), gamut_chromaticities(ColorGamut_Display_P3_SMPTE432),
+                                 AdaptationMethod_Bradford);
             std::ostringstream png;
             save_png_image(*p3, png, "p3.png", false, false, true);
             system = {{"image/png", png.str()}};
