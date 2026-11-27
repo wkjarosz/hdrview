@@ -39,26 +39,18 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
     ImGuiTest *t = IM_REGISTER_TEST(engine, "dialogs", "image_loading_options_open_close");
     t->TestFunc  = [](ImGuiTestContext *ctx)
     {
-        // the menu bar is a top-level BeginMainMenuBar() window named "##MainMenuBar", not part of
-        // "MainDockSpace"'s ID stack
         ctx->SetRef("##MainMenuBar");
         ctx->MenuClick("File/Image loading options...");
-
-        // the popup is a top-level window, not a child of "##MainMenuBar": reset the ref to root, or
-        // WindowInfo() searches relative to the still-active one
         ctx->SetRef("");
         IM_CHECK(ctx->WindowInfo("Image loading options...").Window != nullptr);
-
-        ctx->SetRef("Image loading options...");
-        ctx->ItemClick("OK");
-
-        ctx->SetRef("");
+        ctx->ItemClick("//Image loading options.../OK");
         IM_CHECK(window_closed(ctx, "Image loading options..."));
     };
 
     // The save and edit dialogs are modal, but leave the viewport to be panned and zoomed around them, to look at
     // the image while choosing: the wheel zooms over the viewport and not over the dialog, and a drag begun in the
-    // viewport pans it. All of them also close from their title bar.
+    // viewport pans it. Their keys are their own, and all of them close from their title bar. Export rendition is
+    // the same dialog as Save as.
     struct Navigable
     {
         std::string menu;
@@ -67,8 +59,6 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
     };
     for (const Navigable &n :
          {Navigable{"File/Save as...", "Save as...", "save_as_lets_the_viewport_be_navigated", false},
-          Navigable{"File/Export rendition...", "Export rendition...",
-                    "export_rendition_lets_the_viewport_be_navigated", false},
           Navigable{edit_menu_item("Channel mixer..."), "Channel mixer...",
                     "edit_dialog_lets_the_viewport_be_navigated", true}})
     {
@@ -76,7 +66,8 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         t->TestFunc = [n](ImGuiTestContext *ctx)
         {
             const char *dialog = n.dialog;
-            if (!load_fixture(ctx))
+            // two images, so a Down that reached the shortcuts behind the dialog would change the current one
+            if (!load_fixture(ctx, 2))
                 return;
             auto             *app = hdrview();
             const std::string at  = std::string("//") + dialog + "/";
@@ -94,6 +85,18 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             ctx->SetRef("");
             ImGuiWindow *window = ctx->WindowInfo(dialog).Window;
             IM_CHECK(window != nullptr);
+
+            // Keyboard navigation is on while it is open, Down moves within it rather than through the images
+            // behind it, and a shortcut it has no use for, H to mirror the view, stands down.
+            const int current = app->current_image_index();
+            ctx->Yield(2);
+            IM_CHECK(ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard);
+            const bool flipped = *app->action("Mirror view horizontally").p_selected;
+            ctx->KeyPress(ImGuiKey_DownArrow);
+            ctx->KeyPress(ImGuiKey_H);
+            ctx->Yield(2);
+            IM_CHECK_EQ(app->current_image_index(), current);
+            IM_CHECK_EQ(*app->action("Mirror view horizontally").p_selected, flipped);
 
             // a corner of the viewport, which the centered dialog leaves clear
             const float2 corner = app->app_pos_at_vp_pos(float2{HelloImGui::EmSize(2.f)});
@@ -163,43 +166,11 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
                           .RectFull.Overlaps(ctx->ItemInfo((at + "#CLOSE").c_str()).RectFull));
             ctx->ItemClick((at + "#CLOSE").c_str());
             IM_CHECK(window_closed(ctx, dialog));
+            // and once it closes, the arrows are the app's again
+            ctx->Yield(2);
+            IM_CHECK((ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard) == 0);
         };
     }
-
-    t           = IM_REGISTER_TEST(engine, "dialogs", "save_as_open_close");
-    t->TestFunc = [](ImGuiTestContext *ctx)
-    {
-        // two images, so a Down that reached the shortcuts behind the dialog would change the current one
-        if (!load_fixture(ctx, 2))
-            return;
-        const int current = hdrview()->current_image_index();
-
-        ctx->SetRef("##MainMenuBar");
-        ctx->MenuClick("File/Save as...");
-
-        ctx->SetRef("");
-        IM_CHECK(ctx->WindowInfo("Save as...").Window != nullptr);
-
-        // The dialog's keys are its own: keyboard navigation is on while it is open, Down moves within it rather than
-        // through the images behind it, and a shortcut it has no use for, H to mirror the view, stands down.
-        ctx->Yield(2);
-        IM_CHECK(ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard);
-        const bool flipped = *hdrview()->action("Mirror view horizontally").p_selected;
-        ctx->KeyPress(ImGuiKey_DownArrow);
-        ctx->KeyPress(ImGuiKey_H);
-        ctx->Yield(2);
-        IM_CHECK_EQ(hdrview()->current_image_index(), current);
-        IM_CHECK_EQ(*hdrview()->action("Mirror view horizontally").p_selected, flipped);
-
-        ctx->SetRef("Save as...");
-        ctx->ItemClick("Cancel");
-
-        ctx->SetRef("");
-        IM_CHECK(window_closed(ctx, "Save as..."));
-        // and once it closes, the arrows are the app's again
-        ctx->Yield(2);
-        IM_CHECK((ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard) == 0);
-    };
 
     // Selecting each format in turn is what runs every *_parameters_gui(): in both dialogs, since a rendition
     // gives EXR's options one RGBA group to list and adds a target display to every HDR encoding.
@@ -244,7 +215,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             for (ImGuiID id : format_ids)
             {
                 ctx->ItemClick(id);
-                ctx->Yield(3); // let the newly selected format's options panel draw
+                ctx->Yield(); // the newly selected format's options panel draws
             }
 
             ctx->SetRef(dialog);
