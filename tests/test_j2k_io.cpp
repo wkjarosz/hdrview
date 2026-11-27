@@ -455,27 +455,21 @@ TEST_CASE("A codestream declaring impossible dimensions is refused before it is 
     std::vector<int32_t> wrote;
     auto                 j2k = ramp_codestream(8, false, 4, 4, wrote, OPJ_CODEC_J2K);
 
-    // SIZ follows SOC: FF4F FF51 Lsiz(2) Rsiz(2) Xsiz(4) Ysiz(4)
-    REQUIRE(j2k.size() > 16);
-    for (int i = 0; i < 4; ++i)
-    {
-        j2k[8 + i]  = (char)0x7F;
-        j2k[12 + i] = (char)0x7F;
-    }
+    // 70000 samples across, in one tile as wide: a header OpenJPEG reads, so the refusal is HDRView's own.
+    // SIZ follows SOC: FF4F FF51 Lsiz(2) Rsiz(2) Xsiz(4) Ysiz(4) XOsiz(4) YOsiz(4) XTsiz(4), big-endian.
+    REQUIRE(j2k.size() > 28);
+    for (const size_t at : {size_t(8), size_t(24)})
+        write_as((unsigned char *)j2k.data() + at, uint32_t(70000), Endian::Big);
 
-    CHECK_THROWS_AS(load_bytes(load_j2k_image, j2k, "huge.j2k"), std::exception);
+    CHECK_THROWS_WITH_AS(load_bytes(load_j2k_image, j2k, "huge.j2k"), doctest::Contains("implausibly large"),
+                         std::invalid_argument);
 }
 
 #ifdef HDRVIEW_TEST_LCMS_TESTBED_DIR
 
-// lcms's own CMYK printer profile, which is a real one with real tables and says of itself that it is not
-// suitable for real use. That is all this needs: a profile whose color space is CMYK, so the conversion has
-// something to run through.
 TEST_CASE("CMYK ink decodes through the file's profile, and the right way up")
 {
-    std::ifstream in(std::string(HDRVIEW_TEST_LCMS_TESTBED_DIR) + "/test1.icc", std::ios::binary);
-    REQUIRE(in.good());
-    const std::string icc{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+    const std::string icc = cmyk_profile();
     REQUIRE(icc.size() > 128);
 
     // two pixels of known ink: bare paper, and a solid hit of black

@@ -16,7 +16,6 @@
 #include <array>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <half.h>
 #include <optional>
 #include <sstream>
@@ -106,13 +105,6 @@ std::string cmyk_tiff(const std::string &icc)
     return tiff_bytes(Endian::Little, entries, {0, 0, 0, 0, 0, 0, 0, 0xff});
 }
 
-/// lcms's own CMYK printer profile, which libjxl carries in-tree.
-std::string cmyk_profile()
-{
-    std::ifstream in(std::string(HDRVIEW_TEST_LCMS_TESTBED_DIR) + "/test1.icc", std::ios::binary);
-    REQUIRE(in.good());
-    return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
-}
 #endif
 
 ImagePtr load_tiff(const std::string &bytes)
@@ -485,9 +477,8 @@ TEST_CASE("libtiff's test images decode as their names say, or are refused")
         const std::string name = path.filename().string();
         CAPTURE(name);
 
-        std::ifstream in(path, std::ios::binary);
-        REQUIRE(in.good());
-        const std::string bytes{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+        const std::string bytes = file_bytes(path.string());
+        REQUIRE_FALSE(bytes.empty());
 
         // the loader is called directly rather than through load_bytes(), which keeps only a lone image: the
         // files with several directories are the ones worth reaching here, and they decode to one apiece

@@ -15,6 +15,8 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <fstream>
+#include <iterator>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -213,5 +215,21 @@ inline std::string png_chunk(const char *type, const std::string &data)
     put<uint32_t>(out, ~crc, Endian::Big);
     return out;
 }
+
+/// The bytes of the file at \p path, or nothing if it cannot be read.
+inline std::string file_bytes(const std::string &path)
+{
+    std::ifstream in(path, std::ios::binary);
+    return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+}
+
+#ifdef HDRVIEW_TEST_LCMS_TESTBED_DIR
+/// lcms's own CMYK printer profile, from its testbed, which libjxl carries in-tree.
+/**
+    It says of itself that it is not suitable for real use, which is beside the point: it is a real profile with
+    real tables whose color space is CMYK, the property every conversion of ink turns on.
+*/
+inline std::string cmyk_profile() { return file_bytes(std::string(HDRVIEW_TEST_LCMS_TESTBED_DIR) + "/test1.icc"); }
+#endif
 
 } // namespace hdrview_test
