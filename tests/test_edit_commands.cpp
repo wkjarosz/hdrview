@@ -519,23 +519,18 @@ TEST_CASE("An edit covers the subject it was given and nothing else")
             if (!cmd->enabled(ctx))
                 continue;
 
-            // worked out from the scope here, not asked of subject_channels(), so the resolver is checked
-            // against an independent reading of it
+            // the channels each scope names in this fixture, written out rather than worked out from the groups
+            const std::vector<std::vector<std::string>> named_by_scope = {
+                {"R", "G", "B", "A"},                                           // the current group
+                {"R", "G", "B", "A", "normal.R", "normal.G", "normal.B"},       // the selected groups
+                {"R", "G", "B", "A", "Z", "normal.R", "normal.G", "normal.B"}}; // every channel
+            static_assert(EditSubject::Scope_COUNT == 3, "a new scope needs its channels written out above");
             std::vector<int> covered;
-            if (scope == EditSubject::Scope_AllChannels)
-            {
-                covered.resize(img->channels.size());
-                std::iota(covered.begin(), covered.end(), 0);
-            }
-            else
-            {
-                const std::vector<int> groups = scope == EditSubject::Scope_SelectedGroups
-                                                    ? img->selected_groups()
-                                                    : std::vector<int>{img->selected_group};
-                for (int g : groups)
-                    for (int i = 0; i < img->groups[size_t(g)].num_channels; ++i)
-                        covered.push_back(img->groups[size_t(g)].channels[i]);
-            }
+            for (const auto &channel : named_by_scope[size_t(scope)])
+                for (size_t c = 0; c < img->channels.size(); ++c)
+                    if (img->channels[c].name == channel)
+                        covered.push_back(int(c));
+            REQUIRE(covered.size() == named_by_scope[size_t(scope)].size());
 
             const std::vector<float> before      = samples(img);
             const int                steps       = img->history.size();
@@ -603,34 +598,34 @@ TEST_CASE("An edit reaches every channel its scope names, each as the slot it ho
             ctx.subject.scope          = EditSubject::Scope(scope);
             ctx.subject.selection_only = false;
 
-            // the groups the scope names, read off the image rather than asked of the resolver
-            std::vector<int> groups;
-            if (scope == EditSubject::Scope_AllChannels)
-                for (size_t g = 0; g < img->groups.size(); ++g) groups.push_back(int(g));
-            else if (scope == EditSubject::Scope_SelectedGroups)
-                groups = img->selected_groups();
-            else
-                groups.push_back(img->selected_group);
+            // What each scope names in this fixture, written out rather than worked out from the groups: the
+            // channels, and the color groups among them as their red, green and blue. "Every channel" names them
+            // all, whether or not they belong to a group, and lone channels form no color group.
+            static_assert(EditSubject::Scope_COUNT == 3, "a new scope needs its channels written out below");
+            using Names             = std::vector<std::string>;
+            const Names all         = {"R", "G", "B", "A", "Z", "normal.R", "normal.G", "normal.B"};
+            const Names named[2][3] = {
+                {{"R", "G", "B", "A"}, {"R", "G", "B", "A", "normal.R", "normal.G", "normal.B"}, all},
+                {{"R"}, {"R", "normal.R"}, all}};
+            const std::vector<Names> grouped_colors[] = {{{"R", "G", "B"}},
+                                                         {{"R", "G", "B"}, {"normal.R", "normal.G", "normal.B"}},
+                                                         {{"R", "G", "B"}, {"normal.R", "normal.G", "normal.B"}}};
+            auto                     index_of         = [&](const std::string &n)
+            {
+                for (size_t c = 0; c < img->channels.size(); ++c)
+                    if (img->channels[c].name == n)
+                        return int(c);
+                return -1;
+            };
 
-            // the channels in slot order, which is channel order; "every channel" names them all, whether or
-            // not they belong to a group
-            std::vector<int>              covered;
-            std::vector<std::vector<int>> colors;
-            for (int g : groups)
-            {
-                const auto      &group = img->groups[size_t(g)];
-                std::vector<int> channels;
-                for (int i = 0; i < group.num_channels; ++i) channels.push_back(group.channels[i]);
-                covered.insert(covered.end(), channels.begin(), channels.end());
-                if (group.type == ChannelGroup::RGB_Channels || group.type == ChannelGroup::RGBA_Channels)
-                    colors.push_back(channels);
-            }
-            if (scope == EditSubject::Scope_AllChannels)
-            {
-                covered.resize(img->channels.size());
-                std::iota(covered.begin(), covered.end(), 0);
-            }
+            // the channels in slot order, which is channel order
+            std::vector<int> covered;
+            for (const auto &n : named[lone][scope]) covered.push_back(index_of(n));
             std::sort(covered.begin(), covered.end());
+            std::vector<std::vector<int>> colors;
+            if (!lone)
+                for (const auto &group : grouped_colors[scope])
+                    colors.push_back({index_of(group[0]), index_of(group[1]), index_of(group[2])});
 
             const size_t             per_channel = size_t(k_size.x * k_size.y);
             const std::vector<float> before      = samples(img);
