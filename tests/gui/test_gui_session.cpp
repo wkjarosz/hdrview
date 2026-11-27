@@ -22,6 +22,8 @@ using namespace hdrview_test;
 
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
+#include <vector>
 
 #ifndef HDRVIEW_GUI_TEST_IMAGE
 #error "HDRVIEW_GUI_TEST_IMAGE must be defined by CMake to a small fixture image path"
@@ -37,59 +39,43 @@ fs::path write_temp_session(const json &j, const char *name)
     return path;
 }
 
-string current_version_string() { return fmt::format("{}.{}.{}", version_major(), version_minor(), version_patch()); }
+/// A session showing the first of \p images, against \p reference, with \p view's settings.
+json session(std::initializer_list<json> images, int reference = -1, const json &view = json::object())
+{
+    return {{"type", "HDRView session"},
+            {"version", fmt::format("{}.{}.{}", version_major(), version_minor(), version_patch())},
+            {"images", std::vector<json>(images)},
+            {"current", 0},
+            {"reference", reference},
+            {"blend_mode", "normal"},
+            {"view", view}};
+}
+
+/// A session entry for the fixture image, with \p fields besides its path.
+json fixture_entry(json fields = json::object())
+{
+    fields["path"] = fs::path(HDRVIEW_GUI_TEST_IMAGE).generic_u8string();
+    return fields;
+}
 
 } // namespace
 
 void RegisterTests_Session(ImGuiTestEngine *engine)
 {
-    ImGuiTest *t = IM_REGISTER_TEST(engine, "session", "hsess_dropped_as_image_loads_as_session");
+    ImGuiTest *t = IM_REGISTER_TEST(engine, "session", "hsess_dropped_or_from_open_recent_loads_as_session");
     t->TestFunc  = [](ImGuiTestContext *ctx)
     {
-        json j;
-        j["type"]    = "HDRView session";
-        j["version"] = current_version_string();
-        json entry;
-        entry["path"]         = fs::path(HDRVIEW_GUI_TEST_IMAGE).generic_u8string();
-        j["images"]           = json::array({entry});
-        j["current"]          = 0;
-        j["reference"]        = -1;
-        j["blend_mode"]       = "normal";
-        j["view"]             = json::object();
-        fs::path session_path = write_temp_session(j, "hdrview_test_dnd.hsess");
-
-        hdrview()->close_all_images();
-        // the call the GLFW drop callback, CLI args and Finder "Open With" all funnel through
-        hdrview()->load_images({session_path.string()});
-        wait_for_loads(ctx);
-
-        IM_CHECK_EQ(hdrview()->num_images(), 1);
-        IM_CHECK_EQ(hdrview()->current_image_index(), 0);
-    };
-
-    t           = IM_REGISTER_TEST(engine, "session", "hsess_from_open_recent_loads_as_session");
-    t->TestFunc = [](ImGuiTestContext *ctx)
-    {
-        json j;
-        j["type"]    = "HDRView session";
-        j["version"] = current_version_string();
-        json entry;
-        entry["path"]         = fs::path(HDRVIEW_GUI_TEST_IMAGE).generic_u8string();
-        j["images"]           = json::array({entry});
-        j["current"]          = 0;
-        j["reference"]        = -1;
-        j["blend_mode"]       = "normal";
-        j["view"]             = json::object();
-        fs::path session_path = write_temp_session(j, "hdrview_test_recent.hsess");
+        const fs::path session_path = write_temp_session(session({fixture_entry()}), "hdrview_test_recent.hsess");
 
         // an entry is addressed below by the path prefix its truncated label exposes, so start from an
         // empty list and let only this session's temp-directory path match
         ctx->SetRef("##MainMenuBar"); // the menu bar is its own top-level window (see test_gui_dialogs.cpp)
         ctx->MenuClick("File/Open recent/Clear recently opened");
 
-        // loading the session once is what puts it in the recent list
+        // loading the session once is what puts it in the recent list, through the call the GLFW drop callback,
+        // CLI args and Finder "Open With" all funnel through
         hdrview()->close_all_images();
-        hdrview()->load_session(session_path.string());
+        hdrview()->load_images({session_path.string()});
         wait_for_loads(ctx);
         IM_CHECK_EQ(hdrview()->num_images(), 1);
 
@@ -128,21 +114,9 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
         // the same fixture listed twice, with a different selected_group/reference_group per entry
-        json entry0, entry1;
-        entry0["path"]            = fs::path(HDRVIEW_GUI_TEST_IMAGE).generic_u8string();
-        entry0["selected_group"]  = 0;
-        entry1["path"]            = fs::path(HDRVIEW_GUI_TEST_IMAGE).generic_u8string();
-        entry1["reference_group"] = 1;
-
-        json j;
-        j["type"]             = "HDRView session";
-        j["version"]          = current_version_string();
-        j["images"]           = json::array({entry0, entry1});
-        j["current"]          = 0;
-        j["reference"]        = 1;
-        j["blend_mode"]       = "normal";
-        j["view"]             = json::object();
-        fs::path session_path = write_temp_session(j, "hdrview_test_duplicate.hsess");
+        const fs::path session_path = write_temp_session(
+            session({fixture_entry({{"selected_group", 0}}), fixture_entry({{"reference_group", 1}})}, 1),
+            "hdrview_test_duplicate.hsess");
 
         hdrview()->close_all_images();
         // load_session(const string&) is the non-dialog overload load_images() dispatches .hsess paths to
@@ -201,19 +175,10 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         // one entry points at a file that does not exist, alongside one that does: BackgroundImageLoader
         // never reports failures, so finish_pending_session() detects one as num_pending_images() reaching
         // 0 with an entry still unresolved
-        json good, missing;
-        good["path"]    = fs::path(HDRVIEW_GUI_TEST_IMAGE).generic_u8string();
-        missing["path"] = (fs::temp_directory_path() / "hdrview_test_does_not_exist.png").generic_u8string();
-
-        json j;
-        j["type"]             = "HDRView session";
-        j["version"]          = current_version_string();
-        j["images"]           = json::array({good, missing});
-        j["current"]          = 0;
-        j["reference"]        = 1;
-        j["blend_mode"]       = "normal";
-        j["view"]             = json::object();
-        fs::path session_path = write_temp_session(j, "hdrview_test_missing.hsess");
+        const json missing{
+            {"path", (fs::temp_directory_path() / "hdrview_test_does_not_exist.png").generic_u8string()}};
+        const fs::path session_path =
+            write_temp_session(session({fixture_entry(), missing}, 1), "hdrview_test_missing.hsess");
 
         hdrview()->close_all_images();
         hdrview()->load_session(session_path.string());
@@ -230,9 +195,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
     {
         // a session file is ordinary user data, and several of its fields are used as array indices or
         // divisors; none of these values is reachable through the GUI
-        json entry;
-        entry["path"]           = fs::path(HDRVIEW_GUI_TEST_IMAGE).generic_u8string();
-        entry["selected_group"] = 9999; // indexed unchecked by raw_pixel() via active_group_index()
+        const json entry = fixture_entry({{"selected_group", 9999}}); // indexed by raw_pixel() via active_group_index()
 
         json view;
         view["colormap_index"] = 9999; // indexes HDRViewApp::m_colormaps
@@ -242,15 +205,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         view["offset"]         = -1e30f;
         view["roi"]            = json::array({json::array({100, 100}), json::array({10, 10})}); // inverted
 
-        json j;
-        j["type"]             = "HDRView session";
-        j["version"]          = current_version_string();
-        j["images"]           = json::array({entry});
-        j["current"]          = 0;
-        j["reference"]        = -1;
-        j["blend_mode"]       = "normal";
-        j["view"]             = view;
-        fs::path session_path = write_temp_session(j, "hdrview_test_out_of_range.hsess");
+        const fs::path session_path = write_temp_session(session({entry}, -1, view), "hdrview_test_out_of_range.hsess");
 
         hdrview()->close_all_images();
         hdrview()->load_session(session_path.string());
@@ -296,17 +251,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
     t           = IM_REGISTER_TEST(engine, "session", "replacing_a_session_asks_first");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
-        json j;
-        j["type"]    = "HDRView session";
-        j["version"] = current_version_string();
-        json entry;
-        entry["path"]               = fs::path(HDRVIEW_GUI_TEST_IMAGE).generic_u8string();
-        j["images"]                 = json::array({entry});
-        j["current"]                = 0;
-        j["reference"]              = -1;
-        j["blend_mode"]             = "normal";
-        j["view"]                   = json::object();
-        const fs::path session_path = write_temp_session(j, "hdrview_test_replace.hsess");
+        const fs::path session_path = write_temp_session(session({fixture_entry()}), "hdrview_test_replace.hsess");
 
         reset_images(ctx);
         IM_CHECK_EQ(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE_2}), 1);
