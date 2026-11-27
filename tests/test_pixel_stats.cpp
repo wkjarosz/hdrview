@@ -217,13 +217,22 @@ TEST_CASE("PixelStats::calculate takes its bin count from the channel's bit dept
     Channel c("test", int2{16, 16});
     c.apply([](float, int x, int y) { return (x + y) / 30.f; });
 
+    // as the rule above works out with MAX_BINS at 512
+    static_assert(PixelStats::MAX_BINS == 512, "the counts below assume 512 bins of storage");
+    const std::pair<int, int> counts[] = {{1, 2},    {2, 4},    {8, 256},  {9, 512}, {10, 512}, {12, 512},
+                                          {14, 512}, {16, 512}, {32, 512}, {0, 512}, {-1, 512}, {64, 512}};
+    for (const auto &[bits, want] : counts)
+    {
+        CAPTURE(bits);
+        CHECK(PixelStats::bins_for_bit_depth(bits) == want);
+    }
+
     for (int bits = -1; bits <= 64; ++bits)
     {
         CAPTURE(bits);
         const int bins = PixelStats::bins_for_bit_depth(bits);
         CHECK(bins >= 1);
         CHECK(bins <= PixelStats::MAX_BINS); //< hist_xs/hist_ys are sized MAX_BINS
-        CHECK(bins == (bits >= 1 && bits <= 15 ? std::min(1 << bits, PixelStats::MAX_BINS) : PixelStats::MAX_BINS));
 
         // and calculate(), which fills hist_xs[0..num_bins] inclusive, uses that count
         c.bits_per_sample = bits;
