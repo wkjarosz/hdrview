@@ -7,8 +7,11 @@
 #include <doctest/doctest.h>
 
 #include "edit/poisson.h"
+#include "test_support.h"
 
 #include <cmath>
+
+using namespace hdrview_test;
 
 namespace
 {
@@ -26,13 +29,6 @@ Array2Df interior_mask(int2 size, int margin = 1)
     return m;
 }
 
-Array2Df filled(int2 size, float v)
-{
-    Array2Df a{size};
-    for (int i = 0; i < a.num_elements(); ++i) a(i) = v;
-    return a;
-}
-
 /// Values varying in both directions, whose Laplacian is not trivially zero.
 Array2Df bumpy(int2 size, float scale = 1.f)
 {
@@ -40,13 +36,6 @@ Array2Df bumpy(int2 size, float scale = 1.f)
     for (int y = 0; y < size.y; ++y)
         for (int x = 0; x < size.x; ++x) a(x, y) = scale * (std::sin(0.4f * x) * std::cos(0.3f * y) + 0.1f * x);
     return a;
-}
-
-float max_difference(const Array2Df &a, const Array2Df &b)
-{
-    float worst = 0.f;
-    for (int i = 0; i < a.num_elements(); ++i) worst = std::max(worst, std::abs(a(i) - b(i)));
-    return worst;
 }
 
 } // namespace

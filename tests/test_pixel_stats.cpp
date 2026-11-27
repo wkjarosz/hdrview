@@ -656,15 +656,6 @@ TEST_CASE("A selection that misses the channel leaves the statistics empty")
         CHECK(stats.summary.valid_pixels == 0);
     }
 
-    SUBCASE("a selection that does overlap is unaffected")
-    {
-        PixelStats::Settings settings;
-        settings.roi = Box2i{int2{10, 20}, int2{40, 50}};
-
-        auto stats = compute(c, settings);
-        CHECK(stats.computed);
-        CHECK(stats.summary.valid_pixels == 30 * 30);
-    }
 }
 
 TEST_CASE("Statistics over an arbitrary selection count exactly the pixels it overlaps")

@@ -173,15 +173,6 @@ int group_of_channel(const ImagePtr &img, const std::string &name)
     return -1;
 }
 
-/// The index of the channel named \p name, or -1.
-int channel_index(const ImagePtr &img, const std::string &name)
-{
-    for (size_t c = 0; c < img->channels.size(); ++c)
-        if (img->channels[c].name == name)
-            return int(c);
-    return -1;
-}
-
 /// Every sample of \p a, as one comparable value.
 std::vector<float> values(const Array2Df &a) { return std::vector<float>(a.data(), a.data() + a.num_elements()); }
 
@@ -610,22 +601,16 @@ TEST_CASE("An edit reaches every channel its scope names, each as the slot it ho
             const std::vector<Names> grouped_colors[] = {{{"R", "G", "B"}},
                                                          {{"R", "G", "B"}, {"normal.R", "normal.G", "normal.B"}},
                                                          {{"R", "G", "B"}, {"normal.R", "normal.G", "normal.B"}}};
-            auto                     index_of         = [&](const std::string &n)
-            {
-                for (size_t c = 0; c < img->channels.size(); ++c)
-                    if (img->channels[c].name == n)
-                        return int(c);
-                return -1;
-            };
 
             // the channels in slot order, which is channel order
             std::vector<int> covered;
-            for (const auto &n : named[lone][scope]) covered.push_back(index_of(n));
+            for (const auto &n : named[lone][scope]) covered.push_back(channel_index(*img, n));
             std::sort(covered.begin(), covered.end());
             std::vector<std::vector<int>> colors;
             if (!lone)
                 for (const auto &group : grouped_colors[scope])
-                    colors.push_back({index_of(group[0]), index_of(group[1]), index_of(group[2])});
+                    colors.push_back(
+                        {channel_index(*img, group[0]), channel_index(*img, group[1]), channel_index(*img, group[2])});
 
             const size_t             per_channel = size_t(k_size.x * k_size.y);
             const std::vector<float> before      = samples(img);
@@ -1093,8 +1078,8 @@ TEST_CASE("Regrouping from a selection puts back exactly the channels it names")
     const int rgb = group_of_channel(img, "R");
     CHECK(img->groups[size_t(rgb)].num_channels == 3);
     CHECK(img->groups[size_t(group_of_channel(img, "A"))].num_channels == 1);
-    CHECK(img->channels[size_t(channel_index(img, "A"))].ungrouped);
-    CHECK_FALSE(img->channels[size_t(channel_index(img, "Z"))].ungrouped);
+    CHECK(img->channels[size_t(channel_index(*img, "A"))].ungrouped);
+    CHECK_FALSE(img->channels[size_t(channel_index(*img, "Z"))].ungrouped);
 
     // the viewport follows the group it was showing into whatever swallowed it
     CHECK(img->selected_group == rgb);
@@ -1106,8 +1091,8 @@ TEST_CASE("Regrouping from a selection puts back exactly the channels it names")
     // undo marks back what was cleared, and nothing else
     REQUIRE(img->history.undo(*img));
     CHECK(img->groups.size() == 5);
-    for (const char *name : {"R", "G", "B", "A"}) CHECK(img->channels[size_t(channel_index(img, name))].ungrouped);
-    CHECK_FALSE(img->channels[size_t(channel_index(img, "Z"))].ungrouped);
+    for (const char *name : {"R", "G", "B", "A"}) CHECK(img->channels[size_t(channel_index(*img, name))].ungrouped);
+    CHECK_FALSE(img->channels[size_t(channel_index(*img, "Z"))].ungrouped);
 }
 
 TEST_CASE("A group command covers every group it is given, as one entry, and nothing else")
@@ -1150,7 +1135,7 @@ TEST_CASE("A group command covers every group it is given, as one entry, and not
         REQUIRE(cmd->enabled(ctx));
 
         const Snapshot           before = snapshot(img);
-        const std::vector<float> depth  = values(img->channels[size_t(channel_index(img, "Z"))]);
+        const std::vector<float> depth  = values(img->channels[size_t(channel_index(*img, "Z"))]);
         const auto               shown  = names_of(img, img->selected_group);
         const int                steps  = img->history.size();
 
@@ -1158,7 +1143,7 @@ TEST_CASE("A group command covers every group it is given, as one entry, and not
         CHECK(img->history.size() == steps + 1); // one entry over the lot, not one per group
 
         // whatever it did, it left the group nobody selected alone
-        const int z = channel_index(img, "Z");
+        const int z = channel_index(*img, "Z");
         REQUIRE(z >= 0);
         CHECK_FALSE(img->channels[size_t(z)].ungrouped);
         CHECK(values(img->channels[size_t(z)]) == depth);
@@ -1172,7 +1157,7 @@ TEST_CASE("A group command covers every group it is given, as one entry, and not
             for (const char *n : {"R", "G", "B", "A", "normal.R", "normal.G", "normal.B"})
             {
                 CAPTURE(n);
-                CHECK(img->channels[size_t(channel_index(img, n))].ungrouped == apart);
+                CHECK(img->channels[size_t(channel_index(*img, n))].ungrouped == apart);
             }
 
             // the viewport follows what it was showing into whichever group now holds it
@@ -1275,7 +1260,7 @@ TEST_CASE("A group command pointed at a group outside the selection acts on it a
             if (std::find(reached.begin(), reached.end(), c.name) != reached.end())
                 continue;
             CAPTURE(c.name);
-            const int now = channel_index(img, c.name);
+            const int now = channel_index(*img, c.name);
             REQUIRE(now >= 0);
             CHECK(img->channels[size_t(now)].ungrouped == c.ungrouped);
             CHECK(values(img->channels[size_t(now)]) == c.samples);
@@ -1285,7 +1270,7 @@ TEST_CASE("A group command pointed at a group outside the selection acts on it a
         for (const auto &n : reached)
         {
             CAPTURE(n);
-            const int now = channel_index(img, n);
+            const int now = channel_index(*img, n);
             if (name == "Delete channel group")
                 CHECK(now < 0);
             else

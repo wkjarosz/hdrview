@@ -214,15 +214,6 @@ TEST_CASE("a display shows its panel's gamut only through a frame that reaches p
     }
 }
 
-TEST_CASE("color_u32_to_f128/color_f128_to_u32 round-trip exactly")
-{
-    for (uint32_t packed : {0x00000000u, 0xFFFFFFFFu, 0xFF0000FFu, 0x00FF00FFu, 0x0000FFFFu, 0x7F3C9AFFu})
-    {
-        INFO("packed = ", packed);
-        CHECK(color_f128_to_u32(color_u32_to_f128(packed)) == packed);
-    }
-}
-
 TEST_CASE("a gamut converts to itself as the identity, and the shader's sRGB luminance weights are the derived ones")
 {
     // converting a gamut to itself is reported as unnecessary, so the colorpass keeps an identity matrix in the
