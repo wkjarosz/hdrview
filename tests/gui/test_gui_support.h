@@ -11,6 +11,8 @@
 #include "edit/commands.h"
 #include "image.h"
 #include "imageio/image_loader.h"
+#include "json.h"
+#include "version.h"
 
 #include "../test_log_capture.h"
 #include "../test_zip.h"
@@ -23,6 +25,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <initializer_list>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -166,6 +169,18 @@ inline fs::path write_file(const fs::path &path, const std::string &bytes)
     std::ofstream os{path, std::ios::binary};
     os.write(bytes.data(), (std::streamsize)bytes.size());
     return path;
+}
+
+/// A session file's contents, showing the first of \p images against \p reference, with \p view's settings.
+inline json session_manifest(std::initializer_list<json> images, int reference = -1, const json &view = json::object())
+{
+    return {{"type", "HDRView session"},
+            {"version", fmt::format("{}.{}.{}", version_major(), version_minor(), version_patch())},
+            {"images", std::vector<json>(images)},
+            {"current", 0},
+            {"reference", reference},
+            {"blend_mode", "normal"},
+            {"view", view}};
 }
 
 /// A fresh, empty directory under the system temp dir, canonicalized the way the loader stores paths.

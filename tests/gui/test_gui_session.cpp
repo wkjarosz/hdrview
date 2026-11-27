@@ -11,7 +11,6 @@
 #include "image.h"
 #include "json.h"
 #include "test_gui_registry.h"
-#include "version.h"
 
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
@@ -22,8 +21,6 @@ using namespace hdrview_test;
 
 #include <filesystem>
 #include <fstream>
-#include <initializer_list>
-#include <vector>
 
 namespace
 {
@@ -34,18 +31,6 @@ fs::path write_temp_session(const json &j, const char *name)
     std::ofstream ofs{path};
     ofs << j.dump(4);
     return path;
-}
-
-/// A session showing the first of \p images, against \p reference, with \p view's settings.
-json session(std::initializer_list<json> images, int reference = -1, const json &view = json::object())
-{
-    return {{"type", "HDRView session"},
-            {"version", fmt::format("{}.{}.{}", version_major(), version_minor(), version_patch())},
-            {"images", std::vector<json>(images)},
-            {"current", 0},
-            {"reference", reference},
-            {"blend_mode", "normal"},
-            {"view", view}};
 }
 
 /// A session entry for the fixture image, with \p fields besides its path.
@@ -62,7 +47,8 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
     ImGuiTest *t = IM_REGISTER_TEST(engine, "session", "hsess_dropped_or_from_open_recent_loads_as_session");
     t->TestFunc  = [](ImGuiTestContext *ctx)
     {
-        const fs::path session_path = write_temp_session(session({fixture_entry()}), "hdrview_test_recent.hsess");
+        const fs::path session_path =
+            write_temp_session(session_manifest({fixture_entry()}), "hdrview_test_recent.hsess");
 
         // an entry is addressed below by the path prefix its truncated label exposes, so start from an
         // empty list and let only this session's temp-directory path match
@@ -112,7 +98,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
     {
         // the same fixture listed twice, with a different selected_group/reference_group per entry
         const fs::path session_path = write_temp_session(
-            session({fixture_entry({{"selected_group", 0}}), fixture_entry({{"reference_group", 1}})}, 1),
+            session_manifest({fixture_entry({{"selected_group", 0}}), fixture_entry({{"reference_group", 1}})}, 1),
             "hdrview_test_duplicate.hsess");
 
         hdrview()->close_all_images();
@@ -175,7 +161,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         const json missing{
             {"path", (fs::temp_directory_path() / "hdrview_test_does_not_exist.png").generic_u8string()}};
         const fs::path session_path =
-            write_temp_session(session({fixture_entry(), missing}, 1), "hdrview_test_missing.hsess");
+            write_temp_session(session_manifest({fixture_entry(), missing}, 1), "hdrview_test_missing.hsess");
 
         hdrview()->close_all_images();
         hdrview()->load_session(session_path.string());
@@ -202,7 +188,8 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         view["offset"]         = -1e30f;
         view["roi"]            = json::array({json::array({100, 100}), json::array({10, 10})}); // inverted
 
-        const fs::path session_path = write_temp_session(session({entry}, -1, view), "hdrview_test_out_of_range.hsess");
+        const fs::path session_path =
+            write_temp_session(session_manifest({entry}, -1, view), "hdrview_test_out_of_range.hsess");
 
         hdrview()->close_all_images();
         hdrview()->load_session(session_path.string());
@@ -248,7 +235,8 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
     t           = IM_REGISTER_TEST(engine, "session", "replacing_a_session_asks_first");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
-        const fs::path session_path = write_temp_session(session({fixture_entry()}), "hdrview_test_replace.hsess");
+        const fs::path session_path =
+            write_temp_session(session_manifest({fixture_entry()}), "hdrview_test_replace.hsess");
 
         reset_images(ctx);
         IM_CHECK_EQ(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE_2}), 1);
