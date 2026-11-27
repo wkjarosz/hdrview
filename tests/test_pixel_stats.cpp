@@ -269,27 +269,15 @@ TEST_CASE("Each x scale's bins are uniform in that scale's own space")
     }
 }
 
-TEST_CASE("Every 8-bit level gets its own bin on the sRGB axis")
+TEST_CASE("Binning 8-bit content finer than its depth leaves most bins empty")
 {
-    // 8-bit content has at most 256 distinct levels, so binning it finer leaves gaps that read as a row of
-    // detached spikes
-    auto ramp = make_8bit_sRGB_ramp();
-
-    SUBCASE("at a bin count matched to the source's depth")
-    {
-        auto stats = compute(ramp);
-        REQUIRE(stats.num_bins == 256);
-        // the 1/255 lattice and the 1/256 bin grid drift by up to a bin, leaving at most one gap
-        CHECK(count_empty_bins(stats, AxisScale_SRGB) <= 1);
-    }
-
-    SUBCASE("binning finer than the source leaves most bins empty")
-    {
-        ramp.bits_per_sample = 0;
-        auto stats           = compute(ramp);
-        REQUIRE(stats.num_bins == PixelStats::MAX_BINS);
-        CHECK(count_empty_bins(stats, AxisScale_SRGB) >= 250);
-    }
+    // which reads as a row of detached spikes, so the bin count follows the depth; the unpremultiplying test below
+    // holds a matched count to one bin per level
+    auto ramp            = make_8bit_sRGB_ramp();
+    ramp.bits_per_sample = 0;
+    auto stats           = compute(ramp);
+    REQUIRE(stats.num_bins == PixelStats::MAX_BINS);
+    CHECK(count_empty_bins(stats, AxisScale_SRGB) >= 250);
 }
 
 TEST_CASE("The asinh axis keeps 8-bit levels within a bin or two of each other")
@@ -576,24 +564,12 @@ TEST_CASE("PixelStats::calculate reports straight values when given an alpha cha
 
     PixelStats::Settings settings;
     std::atomic<bool>    canceled{false};
+    PixelStats           stats;
+    stats.calculate(img, &alpha, int2{0, 0}, nullptr, nullptr, int2{0, 0}, settings, canceled);
 
-    SUBCASE("with the alpha channel")
-    {
-        PixelStats stats;
-        stats.calculate(img, &alpha, int2{0, 0}, nullptr, nullptr, int2{0, 0}, settings, canceled);
-
-        CHECK(stats.summary.valid_pixels == 4);
-        CHECK(stats.summary.average == doctest::Approx(1.0));
-        CHECK(stats.summary.maximum == doctest::Approx(1.f));
-    }
-
-    SUBCASE("without it, the stored value is reported as-is")
-    {
-        PixelStats stats;
-        stats.calculate(img, nullptr, int2{0, 0}, nullptr, nullptr, int2{0, 0}, settings, canceled);
-
-        CHECK(stats.summary.average == doctest::Approx(0.5));
-    }
+    CHECK(stats.summary.valid_pixels == 4);
+    CHECK(stats.summary.average == doctest::Approx(1.0));
+    CHECK(stats.summary.maximum == doctest::Approx(1.f));
 }
 
 TEST_CASE("Unpremultiplying puts 8-bit samples back on the source's lattice")

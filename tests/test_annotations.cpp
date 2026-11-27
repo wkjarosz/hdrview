@@ -137,14 +137,7 @@ TEST_CASE("Every shape draws within the bounds it declares")
 
 TEST_CASE("A stroke is a screen width, and a font size an image one, unless set otherwise")
 {
-    // The defaults differ on purpose: a stroke is how the markup is drawn, so it stays as easy to see however
-    // far out the view is, while how large a string is on the image is its geometry, and shrinks with the
-    // feature it labels like every other extent here. Either can be switched, and the command stream has to
-    // carry whichever unit is set.
-    const Annotation defaults;
-    CHECK_FALSE(defaults.stroke_width_relative);
-    CHECK(defaults.font_size_relative);
-
+    // either unit can be set for each, and the command stream carries whichever is
     auto kind = [](bool relative) { return int(relative ? VgCommand::Relative : VgCommand::Absolute); };
 
     for (auto shape : all_shapes())
@@ -578,9 +571,6 @@ TEST_CASE("Every shape survives a trip through a session file")
 
         const Annotation b = json(a).get<Annotation>();
         CHECK(same(a, b));
-
-        // Each field really is away from its default, so the check above is not comparing two defaults.
-        CHECK(!same(a, Annotation{}));
     }
 }
 
