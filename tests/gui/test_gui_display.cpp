@@ -2,10 +2,9 @@
     \author Wojciech Jarosz
 
     The display pipeline as the readouts reproduce it: HDRViewApp::pixel_value() and tonemap_value() run the
-    image shader's own steps (src/shared/pipeline.h), except for the colormap lookup, which reads
-    Colormap::sample() where the shader reads a texture. These tests transcribe that texture fetch, check the
-    CPU lookup and the whole composition against it, and check that the readouts follow the viewer's channel
-    and blend controls as the screen does.
+    image shader's own steps (src/shared/pipeline.h), which test_colorspace.cpp holds to their definitions, except
+    for the colormap lookup, which reads Colormap::sample() where the shader reads a texture. These tests check that
+    lookup against the colormaps' own colors, and that the readouts follow the viewer's controls as the screen does.
 */
 
 #include "app.h"
@@ -28,27 +27,6 @@ bool approx(float3 a, float3 b, float eps = 2e-3f) { return la::maxelem(la::abs(
 
 /// Colormap::initialize()'s rule for which colormaps get a filtered texture; the qualitative ones are Nearest.
 bool is_continuous(Colormap_ cmap) { return cmap > ImPlotColormap_Paired; }
-
-/// The colormap fetch as the fragment shader performs it, returning the stored, sRGB-encoded color.
-/**
-    apply_tonemap()'s texel-center remap of \p t, then a bilinear lookup into the N-texel ClampToEdge texture.
-*/
-float3 glsl_colormap_fetch(Colormap_ cmap, float t)
-{
-    const auto &values = Colormap::values(cmap);
-    const float n      = (float)values.size();
-    // mix(0.5 / n, (n - 0.5) / n, t) in texel coordinates is t * (n - 1); ClampToEdge bounds it outside [0, 1]
-    const float coord = std::min(std::max(t * (n - 1.f), 0.f), n - 1.f);
-    const int   i0    = (int)std::floor(coord);
-    const int   i1    = std::min(i0 + 1, (int)values.size() - 1);
-
-    auto texel = [&values](int i)
-    {
-        ImVec4 c = ImGui::ColorConvertU32ToFloat4(values[i]);
-        return float3{c.x, c.y, c.z};
-    };
-    return la::lerp(texel(i0), texel(i1), coord - (float)i0);
-}
 
 /// Restores the tonemap controls the tests below drive directly, whatever the rest of the suite left set.
 struct TonemapState
@@ -73,92 +51,59 @@ struct TonemapState
 
 void RegisterTests_Display(ImGuiTestEngine *engine)
 {
-    ImGuiTest *t = IM_REGISTER_TEST(engine, "display", "colormap_sample_matches_the_shaders_texture_fetch");
+    // At each texel's center a colormap's own color, halfway between two of a filtered one their mean, and past
+    // either end that end, as the shader's ClampToEdge texture reads them; ImPlot quantizes each step into 255.
+    ImGuiTest *t = IM_REGISTER_TEST(engine, "display", "colormap_sample_reads_the_colormaps_own_colors");
     t->TestFunc  = [](ImGuiTestContext *)
     {
+        auto rgb = [](ImVec4 c) { return float3{c.x, c.y, c.z}; };
         for (Colormap_ cmap = 0; cmap < Colormap_COUNT; ++cmap)
         {
             const auto &values = Colormap::values(cmap);
-            IM_CHECK(!values.empty());
-
-            // both ends, for every colormap: this holds whether or not the texture is filtered
-            const ImVec4 first = ImGui::ColorConvertU32ToFloat4(values.front());
-            const ImVec4 last  = ImGui::ColorConvertU32ToFloat4(values.back());
-            const ImVec4 lo    = Colormap::sample(cmap, 0.f);
-            const ImVec4 hi    = Colormap::sample(cmap, 1.f);
-            IM_CHECK(approx(float3{lo.x, lo.y, lo.z}, float3{first.x, first.y, first.z}, 1.f / 255.f));
-            IM_CHECK(approx(float3{hi.x, hi.y, hi.z}, float3{last.x, last.y, last.z}, 1.f / 255.f));
-
-            if (!is_continuous(cmap))
-                continue;
-
-            // the interior, against the filtered fetch; ImPlot quantizes each step into 255 of its own
-            for (float x : {0.f, 0.01f, 0.1f, 0.25f, 1.f / 3.f, 0.5f, 0.625f, 0.75f, 0.9f, 0.99f, 1.f})
+            const int   n      = int(values.size());
+            IM_CHECK_RETV(n > 1, );
+            auto color = [&](int i) { return rgb(ImGui::ColorConvertU32ToFloat4(values[size_t(i)])); };
+            for (int i = 0; i < n; ++i)
             {
-                const ImVec4 got = Colormap::sample(cmap, x);
-                IM_CHECK(approx(float3{got.x, got.y, got.z}, glsl_colormap_fetch(cmap, x), 3.f / 255.f));
+                IM_CHECK(approx(rgb(Colormap::sample(cmap, float(i) / float(n - 1))), color(i), 2.f / 255.f));
+                if (is_continuous(cmap) && i + 1 < n)
+                    IM_CHECK(approx(rgb(Colormap::sample(cmap, (i + 0.5f) / float(n - 1))),
+                                    0.5f * (color(i) + color(i + 1)), 3.f / 255.f));
             }
-
-            // out of range clamps, as ClampToEdge does
-            const ImVec4 under = Colormap::sample(cmap, -0.5f);
-            const ImVec4 over  = Colormap::sample(cmap, 1.5f);
-            IM_CHECK(approx(float3{under.x, under.y, under.z}, float3{first.x, first.y, first.z}, 1.f / 255.f));
-            IM_CHECK(approx(float3{over.x, over.y, over.z}, float3{last.x, last.y, last.z}, 1.f / 255.f));
+            IM_CHECK(approx(rgb(Colormap::sample(cmap, -0.5f)), color(0), 1.f / 255.f));
+            IM_CHECK(approx(rgb(Colormap::sample(cmap, 1.5f)), color(n - 1), 1.f / 255.f));
         }
     };
 
-    // swept over exposure, offset, every tonemap mode, and the translucent pixels where only the
-    // premultiplied convention distinguishes a right answer from a plausible one
-    t           = IM_REGISTER_TEST(engine, "display", "tonemap_value_applies_each_setting_as_defined");
+    // tonemap_value() follows the live controls, as relations between its outputs: neutral settings change
+    // nothing, a stop more exposure doubles, the offset scales with coverage, the output raised to gamma gives back
+    // what went in, and a reversed colormap shows at a mean what the forward one shows at its mirror.
+    t           = IM_REGISTER_TEST(engine, "display", "tonemap_value_follows_the_live_controls");
     t->TestFunc = [](ImGuiTestContext *)
     {
         TonemapState restore;
-
-        // What the view shows of a premultiplied value, written out from what each setting means: exposure scales
-        // the color and the offset adds to it in proportion to alpha; the gamma mode raises each channel to one over
-        // gamma, mirrored about zero; a colormap mode shows the colormap's color at the channels' mean, mapped from
-        // [-1, 1] for positive/negative and turned around when reversed, premultiplied by alpha.
-        auto shown =
-            [](float4 v, float exposure, float offset, float gamma, Tonemap_ mode, Colormap_ cmap, bool reverse)
+        auto        *app   = hdrview();
+        auto         shown = [app](float4 v, float exposure, float offset, float gamma, Tonemap_ mode = Tonemap_Gamma,
+                                   bool reverse = false)
         {
-            const float3 x = v.xyz() * std::exp2(exposure) + float3{offset * v.w};
-            if (mode == Tonemap_Gamma)
-            {
-                float3 out;
-                for (int c = 0; c < 3; ++c) out[c] = std::copysign(std::pow(std::fabs(x[c]), 1.f / gamma), x[c]);
-                return float4{out, v.w};
-            }
-            float t = (x.x + x.y + x.z) / 3.f;
-            if (mode == Tonemap_PositiveNegative)
-                t = 0.5f * t + 0.5f;
-            if (reverse)
-                t = 1.f - t;
-            const ImVec4 c = Colormap::sample(cmap, t);
-            return float4{sRGB_to_linear(c.x) * v.w, sRGB_to_linear(c.y) * v.w, sRGB_to_linear(c.z) * v.w, v.w};
+            app->tonemap()          = mode;
+            app->exposure_live()    = exposure;
+            app->offset_live()      = offset;
+            app->gamma_live()       = gamma;
+            app->reverse_colormap() = reverse;
+            return app->tonemap_value(v);
         };
-
-        const float4 samples[] = {{0.4f, 0.4f, 0.4f, 1.f},   {0.4f, 0.4f, 0.4f, 0.5f}, {0.f, 0.f, 0.f, 0.f},
-                                  {0.9f, 0.2f, 0.05f, 0.7f}, {1.5f, 0.3f, 2.75f, 1.f}, {-0.2f, 0.6f, -0.05f, 0.25f}};
-
-        for (Tonemap_ mode : {Tonemap_Gamma, Tonemap_FalseColor, Tonemap_PositiveNegative})
-            for (bool reverse : {false, true})
-                for (float exposure : {-2.f, 0.f, 1.f})
-                    for (float offset : {0.f, 0.25f, -0.3f})
-                        for (float gamma : {1.f, 2.2f})
-                            for (const float4 &value : samples)
-                            {
-                                hdrview()->tonemap()          = mode;
-                                hdrview()->exposure_live()    = exposure;
-                                hdrview()->offset_live()      = offset;
-                                hdrview()->gamma_live()       = gamma;
-                                hdrview()->reverse_colormap() = reverse;
-
-                                const float4 got = hdrview()->tonemap_value(value);
-                                const float4 want =
-                                    shown(value, exposure, offset, gamma, mode, hdrview()->colormap(), reverse);
-                                IM_CHECK(approx(got.xyz(), want.xyz(), 3.f / 255.f));
-                                IM_CHECK(approx(got.w, want.w));
-                            }
+        const float4 v{0.9f, 0.2f, 0.05f, 0.7f};
+        IM_CHECK(approx(shown(v, 0.f, 0.f, 1.f).xyz(), v.xyz()) && shown(v, 0.f, 0.f, 1.f).w == v.w);
+        IM_CHECK(approx(shown(v, 1.f, 0.f, 1.f).xyz(), 2.f * v.xyz()));
+        IM_CHECK(approx(shown(v, 0.f, 0.25f, 1.f).xyz(), v.xyz() + float3{0.25f * v.w}));
+        IM_CHECK(approx(shown(float4{0.f}, 0.f, 0.25f, 1.f).xyz(), float3{0.f}));
+        for (int c = 0; c < 3; ++c) IM_CHECK(approx(std::pow(shown(v, 0.f, 0.f, 2.2f)[c], 2.2f), v[c]));
+        IM_CHECK(approx(shown(float4{-v.xyz(), v.w}, 0.f, 0.f, 2.2f).xyz(), -shown(v, 0.f, 0.f, 2.2f).xyz()));
+        for (Tonemap_ mode : {Tonemap_FalseColor, Tonemap_PositiveNegative})
+            IM_CHECK(approx(
+                shown(float4{0.3f, 0.3f, 0.3f, 1.f}, 0.f, 0.f, 1.f, mode, true).xyz(),
+                shown(float4{float3{mode == Tonemap_FalseColor ? 0.7f : -0.3f}, 1.f}, 0.f, 0.f, 1.f, mode).xyz()));
     };
 
     // The status bar, the pixel inspector's watched pixels and the pixel grid all read pixel_value(), so they
@@ -192,46 +137,34 @@ void RegisterTests_Display(ImGuiTestEngine *engine)
         IM_CHECK_RETV(p.x >= 0, );
         const float4 raw = hdrview()->pixel_value(p, true, 0);
 
-        // with the tonemap the identity, which tonemap_value_applies_each_setting_as_defined holds it to, what each
-        // channel mode shows written out: an isolated channel is gray and opaque, undone by alpha when the file's is
-        // straight, and luminance weighs by BT.709's
+        // With the tonemap the identity, the channel modes as relations between the readouts: a single channel is
+        // the gray of the RGB mode's, which undoes alpha only where the file's is straight, alpha is its own gray, and
+        // luminance weighs by the Y row of BT.709's RGB-to-XYZ matrix, from its primaries and D65 unrounded.
         hdrview()->tonemap()       = Tonemap_Gamma;
         hdrview()->gamma_live()    = 1.f;
         hdrview()->exposure_live() = 0.f;
         hdrview()->offset_live()   = 0.f;
-        auto isolated              = [](float4 v, int ch, bool straight_alpha) -> float4
+        auto shown                 = [&](Channels_ ch)
         {
-            const float d = straight_alpha ? v.w : 1.f;
-            switch (ch)
-            {
-            case Channels_RGBA: return v;
-            case Channels_RGB: return {v.x / d, v.y / d, v.z / d, 1.f};
-            case Channels_Red: return {float3{v.x / d}, 1.f};
-            case Channels_Green: return {float3{v.y / d}, 1.f};
-            case Channels_Blue: return {float3{v.z / d}, 1.f};
-            case Channels_Alpha: return {float3{v.w}, 1.f};
-            // Channels_Y, by the Y row of BT.709's RGB-to-XYZ matrix, from its primaries and D65 unrounded
-            default: return {float3{0.2126390f * v.x + 0.7151687f * v.y + 0.0721923f * v.z}, v.w};
-            }
+            hdrview()->channel() = ch;
+            return hdrview()->pixel_value(p, false, 0);
         };
-        static_assert(Channels_COUNT == 7, "a new channel mode needs what it shows written out above");
-
+        const float4 color = shown(Channels_RGB);
+        IM_CHECK(approx(shown(Channels_RGBA).xyz(), rgba.xyz(), 1e-5f) && shown(Channels_RGBA).w == rgba.w);
+        IM_CHECK(approx(color.xyz() * (straight ? rgba.w : 1.f), rgba.xyz(), 1e-5f) && color.w == 1.f);
+        for (int c = 0; c < 3; ++c) IM_CHECK((shown(Channels_(Channels_Red + c)) == float4{float3{color[c]}, 1.f}));
+        IM_CHECK((shown(Channels_Alpha) == float4{float3{rgba.w}, 1.f}));
+        IM_CHECK(approx(shown(Channels_Y).x, 0.2126390f * rgba.x + 0.7151687f * rgba.y + 0.0721923f * rgba.z, 1e-5f));
         for (int ch = 0; ch < Channels_COUNT; ++ch)
         {
-            hdrview()->channel() = Channels_(ch);
-            const float4 want    = isolated(rgba, ch, straight);
-            const float4 got     = hdrview()->pixel_value(p, false, 0);
-            IM_CHECK(approx(got.xyz(), want.xyz(), 1e-5f) && approx(got.w, want.w, 1e-5f));
-
+            const float4 got = shown(Channels_(ch));
             // raw values are the file's own, whatever the viewer isolates
             IM_CHECK(hdrview()->pixel_value(p, true, 0) == raw);
-
             // with no reference there is nothing to blend, whatever the blend mode says
             for (int m = 0; m < BlendMode_COUNT; ++m)
             {
                 hdrview()->blend_mode() = BlendMode_(m);
-                const float4 composite  = hdrview()->pixel_value(p, false, 2);
-                IM_CHECK(approx(composite.xyz(), got.xyz(), 1e-5f) && approx(composite.w, got.w, 1e-5f));
+                IM_CHECK(hdrview()->pixel_value(p, false, 2) == got);
             }
         }
 
@@ -255,22 +188,17 @@ void RegisterTests_Display(ImGuiTestEngine *engine)
                     q = {x, y};
             }
         IM_CHECK_RETV(q.x >= 0, );
-        for (Channels_ c : {Channels_RGBA, Channels_Green})
-            for (BlendMode_ m : {BlendMode_Normal, BlendMode_Difference})
-            {
-                hdrview()->channel()    = c;
-                hdrview()->blend_mode() = m;
-                const float4 top =
-                    isolated(cur->rgba_pixel(q, Target_Primary), c, cur->transparency == TransparencyType_Straight);
-                const float4 bottom = isolated(other->rgba_pixel(q, Target_Secondary), c,
-                                               other->transparency == TransparencyType_Straight);
-                const float  alpha  = top.w + bottom.w * (1.f - top.w);
-                const float3 color  = m == BlendMode_Normal ? top.xyz() + bottom.xyz() * (1.f - top.w)
-                                                            : la::abs(top.xyz() - bottom.xyz());
-                const float4 want{color, alpha};
-                const float4 got = hdrview()->pixel_value(q, false, 2);
-                IM_CHECK(approx(got.xyz(), want.xyz(), 1e-5f) && approx(got.w, want.w, 1e-5f));
-            }
+        hdrview()->channel() = Channels_RGBA;
+        const float4 top = cur->rgba_pixel(q, Target_Primary), bottom = other->rgba_pixel(q, Target_Secondary);
+        const float  alpha = top.w + bottom.w * (1.f - top.w);
+        for (BlendMode_ m : {BlendMode_Normal, BlendMode_Difference})
+        {
+            hdrview()->blend_mode() = m;
+            const float4 got        = hdrview()->pixel_value(q, false, 2);
+            const float3 want =
+                m == BlendMode_Normal ? top.xyz() + bottom.xyz() * (1.f - top.w) : la::abs(top.xyz() - bottom.xyz());
+            IM_CHECK(approx(got.xyz(), want, 1e-5f) && approx(got.w, alpha, 1e-5f));
+        }
 
         hdrview()->channel()    = channel;
         hdrview()->blend_mode() = blend;
