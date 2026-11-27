@@ -1040,10 +1040,12 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
             IM_CHECK_EQ(int(shown().p1.x), curve);
         }
 
-        // the plot is drawn above the sliders and must not swallow them; the pivot is where brightness puts it
+        // the plot is drawn above the sliders and must not swallow them; brightening sends mid-gray up, and the pivot
+        // it moves is still the input the curve sends to the middle
         ctx->ItemInputValue("Brightness", 0.4f);
         ctx->Yield(2);
-        IM_CHECK_EQ(shown().p0.y, (1.f - 0.4f) / 2.f);
+        IM_CHECK_GT(shader::brightness_contrast(0.5f, shown().p0), 0.5f);
+        IM_CHECK(std::abs(shader::brightness_contrast(shown().p0.y, shown().p0) - 0.5f) < 1e-6f);
 
         // the curve's shape, and the clip after it
         ctx->ItemUncheck("Linear");
@@ -1186,9 +1188,11 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         const auto [lo, hi] = shown_corners();
         IM_CHECK(la::length(la::abs(hi - lo) - app->zoom() * float2(shown->size)) < 1e-3f);
         IM_CHECK(!ctx->ItemExists("//StatusBar/##pixel x coordinates"));
-        // fitting the view to it
-        IM_CHECK_EQ(app->zoom(), std::min(app->viewport_size().x / float(shown->size.x),
-                                          app->viewport_size().y / float(shown->size.y)));
+        // fitting the view to it: all of it inside the viewport, which it fills across or down
+        const float2 vp = app->viewport_size();
+        IM_CHECK(la::all(la::gequal(la::min(lo, hi), float2{-1e-2f})) &&
+                 la::all(la::lequal(la::max(lo, hi), vp + 1e-2f)));
+        IM_CHECK(std::abs(std::abs(hi.x - lo.x) - vp.x) < 1e-2f || std::abs(std::abs(hi.y - lo.y) - vp.y) < 1e-2f);
 
         // unticked, nothing is previewed, and the readout comes back
         ctx->ItemUncheck("Preview");
@@ -1212,7 +1216,18 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         ctx->ItemInputValue("Roll", 60.f);
         ctx->Yield(2);
         {
-            const float3x3 want = envmap_rotation(0.f, -shader::ENVMAP_PI / 2.f, shader::ENVMAP_PI / 3.f);
+            // as envmap_rotation() documents it, Rx(pitch) Rz(roll) here, each a right-handed turn about its axis,
+            // built from that rather than asked of it
+            auto about = [](int axis, float angle)
+            {
+                float3x3  R{la::identity};
+                const int i = (axis + 1) % 3, j = (axis + 2) % 3;
+                R[i][i] = R[j][j] = std::cos(angle);
+                R[i][j]           = std::sin(angle); //< column i, row j: e_i turns toward e_j
+                R[j][i]           = -std::sin(angle);
+                return R;
+            };
+            const float3x3 want = mul(about(0, -shader::ENVMAP_PI / 2.f), about(2, shader::ENVMAP_PI / 3.f));
             for (int c = 0; c < 3; ++c) IM_CHECK(la::length(rotation()[c] - want[c]) < 1e-4f);
         }
         ctx->ItemClick("Reset rotation");
