@@ -275,9 +275,12 @@ TEST_CASE("Remapping carries a value with the direction it belongs to")
 
 TEST_CASE("A remap's rotation is the yaw, pitch and roll it is given, and a drag's turns one direction onto another")
 {
-    // yaw turns about the up axis, carrying +x toward -z, as it carries a lat-long's horizon sideways
-    const float3 turned = mul(envmap_rotation(0.3f, 0.f, 0.f), float3{1.f, 0.f, 0.f});
-    CHECK(la::length(turned - float3{std::cos(0.3f), 0.f, -std::sin(0.3f)}) < 1e-6f);
+    // each a right-handed turn about its axis: yaw about +y carries +z toward +x, pitch about +x carries +y toward +z,
+    // and roll about +z carries +x toward +y
+    const float c = std::cos(0.3f), s = std::sin(0.3f);
+    CHECK(la::length(mul(envmap_rotation(0.3f, 0.f, 0.f), float3{1.f, 0.f, 0.f}) - float3{c, 0.f, -s}) < 1e-6f);
+    CHECK(la::length(mul(envmap_rotation(0.f, 0.3f, 0.f), float3{0.f, 1.f, 0.f}) - float3{0.f, c, s}) < 1e-6f);
+    CHECK(la::length(mul(envmap_rotation(0.f, 0.f, 0.3f), float3{1.f, 0.f, 0.f}) - float3{c, s, 0.f}) < 1e-6f);
 
     // the angles come back from the rotation they make, which is a rotation
     for (float yaw : {-2.5f, -0.3f, 0.f, 1.2f, 3.f})

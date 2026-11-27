@@ -20,17 +20,6 @@
 
 using namespace hdrview_test;
 
-#ifndef HDRVIEW_GUI_TEST_IMAGE_2
-#error "HDRVIEW_GUI_TEST_IMAGE_2 must be defined by CMake to a small fixture image path"
-#endif
-
-/// Starts from the small fixture alone, whatever an earlier test left loaded.
-static void ensure_image_loaded(ImGuiTestContext *ctx)
-{
-    reset_images(ctx);
-    IM_CHECK_EQ(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE_2}), 1);
-}
-
 void RegisterTests_View(ImGuiTestEngine *engine)
 {
     // "Zoom in"/"Zoom out" step between adjacent powers of two, from fractional zooms as well as exact
@@ -38,7 +27,7 @@ void RegisterTests_View(ImGuiTestEngine *engine)
     ImGuiTest *t = IM_REGISTER_TEST(engine, "view", "zoom_steps_between_powers_of_two");
     t->TestFunc  = [](ImGuiTestContext *ctx)
     {
-        ensure_image_loaded(ctx);
+        IM_CHECK_RETV(load_fixture(ctx), );
         ctx->SetRef("##MainMenuBar");
 
         ctx->MenuClick("View/100%");
@@ -88,7 +77,7 @@ void RegisterTests_View(ImGuiTestEngine *engine)
     t           = IM_REGISTER_TEST(engine, "view", "each view menu item changes its own setting and no other");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
-        ensure_image_loaded(ctx);
+        IM_CHECK_RETV(load_fixture(ctx), );
         auto *app = hdrview();
 
         std::vector<std::string> toggles{"Auto fit display window", "Auto fit data window",
@@ -190,7 +179,7 @@ void RegisterTests_View(ImGuiTestEngine *engine)
     t           = IM_REGISTER_TEST(engine, "view", "the exposure slider sets the exposure");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
-        ensure_image_loaded(ctx);
+        IM_CHECK_RETV(load_fixture(ctx), );
         OnExit restore{[ctx] { reset_view_controls(ctx); }};
 
         // the exposure slider lives in the top edge toolbar, its own floating window whose internal name is

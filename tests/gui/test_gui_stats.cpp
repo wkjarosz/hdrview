@@ -17,18 +17,6 @@
 
 using namespace hdrview_test;
 
-#ifndef HDRVIEW_GUI_TEST_IMAGE_2
-#error "HDRVIEW_GUI_TEST_IMAGE_2 must be defined by CMake to a small fixture image path"
-#endif
-
-/// Starts from the small fixture alone, whatever an earlier test left loaded.
-static bool load_fixture(ImGuiTestContext *ctx)
-{
-    reset_images(ctx);
-    IM_CHECK_SILENT_RETV(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE_2}) == 1, false);
-    return true;
-}
-
 void RegisterTests_Stats(ImGuiTestEngine *engine)
 {
     ImGuiTest *t = IM_REGISTER_TEST(engine, "stats", "the app schedules stats for the current group");

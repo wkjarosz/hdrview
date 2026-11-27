@@ -7,6 +7,7 @@
 #pragma once
 
 #include "app.h"
+#include "clipboard.h"
 #include "edit/commands.h"
 #include "image.h"
 #include "imageio/image_loader.h"
@@ -27,6 +28,10 @@
 #include <optional>
 #include <string>
 #include <vector>
+
+#ifndef HDRVIEW_GUI_TEST_IMAGE_2
+#error "HDRVIEW_GUI_TEST_IMAGE_2 must be defined by CMake to a small fixture image path"
+#endif
 
 namespace hdrview_test
 {
@@ -92,6 +97,32 @@ inline void reset_images(ImGuiTestContext *ctx)
     wait_until(ctx, [] { return hdrview()->num_images() == 0; });
     // and at 100%, which a reshaping edit's refit or a test's zoom would otherwise carry into the next image loaded
     hdrview()->set_zoom(1.f);
+}
+
+/// Starts from the small fixture alone, loaded \p copies times, whatever an earlier test left loaded or selected.
+/**
+    Edits are selection-only by default, so a selection left behind would narrow the next test's; the edit subject
+    and both clipboards, HDRView's and the private stand-in for the system's, are cleared for the same reason.
+*/
+inline bool load_fixture(ImGuiTestContext *ctx, int copies = 1)
+{
+    reset_images(ctx);
+    hdrview()->roi()          = Box2i{};
+    hdrview()->edit_subject() = EditSubject{};
+    hdrview()->set_clipboard(nullptr);
+    use_private_clipboard() = {};
+    IM_CHECK_SILENT_RETV(load_and_wait(ctx, std::vector<std::string>(copies, HDRVIEW_GUI_TEST_IMAGE_2)) == copies,
+                         false);
+    IM_CHECK_SILENT_RETV(hdrview()->current_image() != nullptr, false);
+    return true;
+}
+
+/// Whether the window titled \p name, a dialog say, has closed, as a save dialog does only once it has written.
+inline bool window_closed(ImGuiTestContext *ctx, const std::string &name)
+{
+    ctx->SetRef("");
+    const std::string ref = "//" + escaped(name);
+    return wait_until(ctx, [&] { return ctx->WindowInfo(ref.c_str(), ImGuiTestOpFlags_NoError).Window == nullptr; });
 }
 
 /// Puts the view controls back where a person would leave them, since nothing else resets them between tests.

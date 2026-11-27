@@ -34,26 +34,6 @@ using namespace hdrview_test;
 #include <functional>
 #include <limits>
 
-#ifndef HDRVIEW_GUI_TEST_IMAGE_2
-#error "HDRVIEW_GUI_TEST_IMAGE_2 must be defined by CMake to a small fixture image path"
-#endif
-
-// ImGui::CloseCurrentPopup() takes a couple of frames to take effect (~2 at ImGuiTestRunSpeed_Fast), so
-// poll for the window to disappear
-static void wait_for_window_closed(ImGuiTestContext *ctx, const char *window_name)
-{
-    wait_until(ctx, [&] { return ctx->WindowInfo(window_name, ImGuiTestOpFlags_NoError).Window == nullptr; });
-}
-
-/// Starts from the small fixture alone, loaded \p copies times, whatever an earlier test left loaded.
-static bool load_fixture(ImGuiTestContext *ctx, int copies = 1)
-{
-    reset_images(ctx);
-    const std::vector<std::string> paths(copies, HDRVIEW_GUI_TEST_IMAGE_2);
-    IM_CHECK_SILENT_RETV(load_and_wait(ctx, paths) == copies, false);
-    return true;
-}
-
 void RegisterTests_Dialogs(ImGuiTestEngine *engine)
 {
     ImGuiTest *t = IM_REGISTER_TEST(engine, "dialogs", "image_loading_options_open_close");
@@ -73,8 +53,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         ctx->ItemClick("OK");
 
         ctx->SetRef("");
-        wait_for_window_closed(ctx, "Image loading options...");
-        IM_CHECK(ctx->WindowInfo("Image loading options...", ImGuiTestOpFlags_NoError).Window == nullptr);
+        IM_CHECK(window_closed(ctx, "Image loading options..."));
     };
 
     // The save and edit dialogs are modal, but leave the viewport to be panned and zoomed around them, to look at
@@ -183,8 +162,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             IM_CHECK(!ctx->ItemInfo((at + "#FOLD").c_str())
                           .RectFull.Overlaps(ctx->ItemInfo((at + "#CLOSE").c_str()).RectFull));
             ctx->ItemClick((at + "#CLOSE").c_str());
-            wait_for_window_closed(ctx, dialog);
-            IM_CHECK(ctx->WindowInfo(dialog, ImGuiTestOpFlags_NoError).Window == nullptr);
+            IM_CHECK(window_closed(ctx, dialog));
         };
     }
 
@@ -217,8 +195,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         ctx->ItemClick("Cancel");
 
         ctx->SetRef("");
-        wait_for_window_closed(ctx, "Save as...");
-        IM_CHECK(ctx->WindowInfo("Save as...", ImGuiTestOpFlags_NoError).Window == nullptr);
+        IM_CHECK(window_closed(ctx, "Save as..."));
         // and once it closes, the arrows are the app's again
         ctx->Yield(2);
         IM_CHECK((ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard) == 0);
@@ -273,8 +250,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             ctx->SetRef(dialog);
             ctx->ItemClick("Cancel");
             ctx->SetRef("");
-            wait_for_window_closed(ctx, dialog);
-            IM_CHECK(ctx->WindowInfo(dialog, ImGuiTestOpFlags_NoError).Window == nullptr);
+            IM_CHECK(window_closed(ctx, dialog));
         };
     }
 
@@ -492,7 +468,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             ctx->SetRef(dialog);
             ctx->ItemClick((std::string("Save as ") + gc.format + "...").c_str());
             ctx->SetRef("");
-            wait_for_window_closed(ctx, dialog);
+            IM_CHECK(window_closed(ctx, dialog));
             app->test_save_path().clear();
             IM_CHECK(std::filesystem::exists(path));
 
@@ -575,7 +551,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
                 chosen & (1u << g) ? ctx->ItemCheck(groups[g]) : ctx->ItemUncheck(groups[g]);
             ctx->ItemClick("Reset");
             ctx->SetRef("");
-            wait_for_window_closed(ctx, dialog);
+            IM_CHECK(window_closed(ctx, dialog));
         };
         auto      &status_bar = HelloImGui::GetRunnerParams()->imGuiWindowParams.showStatusBar;
         // the numbers and toggles by JSON pointer, and the theme, font size, recent files and status bar
@@ -681,7 +657,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             ctx->SetRef(prompt);
             ctx->ItemClick("Cancel");
             ctx->SetRef("");
-            wait_for_window_closed(ctx, prompt);
+            IM_CHECK(window_closed(ctx, prompt));
             ctx->Yield(2);
             IM_CHECK(!exiting());
             IM_CHECK(!glfwWindowShouldClose(window));
