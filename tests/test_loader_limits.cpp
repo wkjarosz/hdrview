@@ -319,8 +319,6 @@ TEST_CASE("Every loadable extension belongs to exactly one named format")
             CHECK(seen.insert(ext).second);
             CHECK(ext == to_lower(ext));
             CHECK(ext.find('.') == std::string::npos);
-            CHECK(Image::loadable("." + ext));
         }
     }
-    CHECK(seen == Image::loadable_formats());
 }

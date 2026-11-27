@@ -516,6 +516,8 @@ TEST_CASE("every setting of every writer round-trips each transfer function its 
         INFO("setting = ", std::string{variant.name});
         // the representative transfer function is one every setting offers
         CHECK(variant.offers(representative_tf(variant)));
+        // and what HDRView writes, the open dialog lists as something it reads
+        CHECK(Image::loadable(variant.ext));
 
         for (const auto &tf : tfs)
         {
