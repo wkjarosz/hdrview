@@ -9,14 +9,14 @@
     Every format HDRView writes, at each setting of its options, saved and read back.
 
     k_variants lists the settings and what each promises. Four sweeps hold them to it:
-    - every setting a dialog opens with, against every channel-group layout HDRView can save, compared at every
+    - a representative setting of each format, against every channel-group layout HDRView can save, compared at every
       pixel on straight (unpremultiplied) color so a format that cannot store alpha is judged on the same footing
       as one that can;
     - every setting, against every transfer function its dialog offers, compared at every pixel in code values
       within the quantization step or the lossy codec's error the setting declares, with its alpha, the loader
       that claims the file, the primaries, light levels and white luminance it records, and on macOS as ImageIO
       reads it, which each dialog's caveats must predict;
-    - every setting a dialog opens with, loaded through a channel selector;
+    - the representative settings, loaded through a channel selector;
     - and the same settings' files cut short, which must load cleanly or not at all.
 */
 
@@ -74,15 +74,15 @@ namespace
 
 enum Caps : unsigned
 {
-    Cap_Default       = 1u << 0, ///< the setting the save dialog opens with, which the layout sweep runs
-    Cap_Float         = 1u << 1, ///< stores unbounded values, and is therefore written linear
-    Cap_Alpha         = 1u << 2, ///< can store an alpha channel
-    Cap_Lossy         = 1u << 3, ///< moves samples even at maximum quality
-    Cap_Levels        = 1u << 4, ///< records a PQ or HLG image's content light level and mastering display
-    Cap_White         = 1u << 5, ///< records the luminance the values' (1, 1, 1) stands for
-    Cap_Premultiplied = 1u << 6, ///< quantizes color multiplied by alpha, so straight color moves by step / alpha
-    Cap_Refuses_Cut   = 1u << 7, ///< refuses a file cut short rather than decoding what arrived
-    Cap_Dithers       = 1u << 8, ///< dithers what it quantizes, a step of the depth it stores
+    Cap_Representative = 1u << 0, ///< one of the settings the narrower sweeps run, chosen to cover each format
+    Cap_Float          = 1u << 1, ///< stores unbounded values, and is therefore written linear
+    Cap_Alpha          = 1u << 2, ///< can store an alpha channel
+    Cap_Lossy          = 1u << 3, ///< moves samples even at maximum quality
+    Cap_Levels         = 1u << 4, ///< records a PQ or HLG image's content light level and mastering display
+    Cap_White          = 1u << 5, ///< records the luminance the values' (1, 1, 1) stands for
+    Cap_Premultiplied  = 1u << 6, ///< quantizes color multiplied by alpha, so straight color moves by step / alpha
+    Cap_Refuses_Cut    = 1u << 7, ///< refuses a file cut short rather than decoding what arrived
+    Cap_Dithers        = 1u << 8, ///< dithers what it quantizes, a step of the depth it stores
 };
 
 #if defined(PNG_cICP_SUPPORTED) && defined(PNG_cLLI_SUPPORTED) && defined(PNG_mDCV_SUPPORTED)
@@ -145,32 +145,32 @@ void save_exr(const Image &img, std::ostream &os, TransferFunction)
 // clang-format off
 const Variant k_variants[] = {
     // the default-argument form, which has to fall back to something sized for this image
-    {"exr", ".exr", "OpenEXR", Cap_Default | Cap_Float | Cap_Alpha | Cap_White | Cap_Refuses_Cut, 1e-3f, offers_linear, always,
+    {"exr", ".exr", "OpenEXR", Cap_Representative | Cap_Float | Cap_Alpha | Cap_White | Cap_Refuses_Cut, 1e-3f, offers_linear, always,
      [](const Image &i, std::ostream &o, TransferFunction) { save_exr_image(i, o, "a.exr"); }},
     {"exr float zip", ".exr", "OpenEXR", Cap_Float | Cap_Alpha | Cap_White, 1e-6f, offers_linear, always, save_exr<0, Imf::ZIP_COMPRESSION>},
     {"exr half rle", ".exr", "OpenEXR", Cap_Float | Cap_Alpha | Cap_White, 1e-3f, offers_linear, always, save_exr<1, Imf::RLE_COMPRESSION>},
     {"exr half dwaa", ".exr", "OpenEXR", Cap_Float | Cap_Alpha | Cap_White | Cap_Lossy, 0.02f, offers_linear, always, save_exr<1, Imf::DWAA_COMPRESSION>},
-    {"pfm", ".pfm", "pfm", Cap_Default | Cap_Float, 1e-6f, pfm_offers_tf, never,
+    {"pfm", ".pfm", "pfm", Cap_Representative | Cap_Float, 1e-6f, pfm_offers_tf, never,
      [](const Image &i, std::ostream &o, TransferFunction) { save_pfm_image(i, o, "a.pfm"); }},
-    {"hdr_stb", ".hdr", "stb_image", Cap_Default | Cap_Float, 0.008f, [](TransferFunction t) { return stb_offers_tf(t, true); }, never,
+    {"hdr_stb", ".hdr", "stb_image", Cap_Representative | Cap_Float, 0.008f, [](TransferFunction t) { return stb_offers_tf(t, true); }, never,
      [](const Image &i, std::ostream &o, TransferFunction) { save_stb_hdr(i, o, "a.hdr"); }},
-    {"png8", ".png", k_png_loader, Cap_Default | Cap_Alpha | k_png_levels, k_8bit, png_offers_tf, always,
+    {"png8", ".png", k_png_loader, Cap_Representative | Cap_Alpha | k_png_levels, k_8bit, png_offers_tf, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_png_image(i, o, "a.png", false, false, false, t); }},
     {"png8 interlaced", ".png", k_png_loader, Cap_Alpha | k_png_levels, k_8bit, png_offers_tf, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_png_image(i, o, "a.png", false, true, false, t); }},
     {"png16", ".png", k_png_loader, Cap_Alpha | k_png_levels, 1e-4f, png_offers_tf, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_png_image(i, o, "a.png", false, false, true, t); }},
-    {"png_stb", ".png", k_png_loader, Cap_Default | Cap_Alpha, k_8bit, [](TransferFunction t) { return stb_offers_tf(t, false); }, never,
+    {"png_stb", ".png", k_png_loader, Cap_Representative | Cap_Alpha, k_8bit, [](TransferFunction t) { return stb_offers_tf(t, false); }, never,
      [](const Image &i, std::ostream &o, TransferFunction) { save_stb_png(i, o, "a.png", false); }},
-    {"tga_stb", ".tga", "stb_image", Cap_Default | Cap_Alpha, k_8bit, [](TransferFunction t) { return stb_offers_tf(t, false); }, never,
+    {"tga_stb", ".tga", "stb_image", Cap_Representative | Cap_Alpha, k_8bit, [](TransferFunction t) { return stb_offers_tf(t, false); }, never,
      [](const Image &i, std::ostream &o, TransferFunction) { save_stb_tga(i, o, "a.tga", false); }},
-    {"bmp_stb", ".bmp", "stb_image", Cap_Default, k_8bit, [](TransferFunction t) { return stb_offers_tf(t, false); }, never,
+    {"bmp_stb", ".bmp", "stb_image", Cap_Representative, k_8bit, [](TransferFunction t) { return stb_offers_tf(t, false); }, never,
      [](const Image &i, std::ostream &o, TransferFunction) { save_stb_bmp(i, o, "a.bmp", false); }},
-    {"jpg_stb", ".jpg", k_jpg_loader, Cap_Default | Cap_Lossy, 0.03f, [](TransferFunction t) { return stb_offers_tf(t, false); }, never,
+    {"jpg_stb", ".jpg", k_jpg_loader, Cap_Representative | Cap_Lossy, 0.03f, [](TransferFunction t) { return stb_offers_tf(t, false); }, never,
      [](const Image &i, std::ostream &o, TransferFunction) { save_stb_jpg(i, o, "a.jpg", false); }},
 #if HDRVIEW_ENABLE_LIBTIFF
     // an ICC profile, which lcms reads in float, moves float samples by a few 1e-6
-    {"tiff8 lzw", ".tif", "libtiff", Cap_Default | Cap_Alpha | Cap_Premultiplied | Cap_Dithers, k_8bit_dithered, [](TransferFunction t) { return tiff_offers_tf(t, 0); }, icc_labels,
+    {"tiff8 lzw", ".tif", "libtiff", Cap_Representative | Cap_Alpha | Cap_Premultiplied | Cap_Dithers, k_8bit_dithered, [](TransferFunction t) { return tiff_offers_tf(t, 0); }, icc_labels,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, TIFFCompression_LZW, TIFFSampleType_UInt8); }},
     {"tiff8 none", ".tif", "libtiff", Cap_Alpha | Cap_Premultiplied | Cap_Dithers, k_8bit_dithered, [](TransferFunction t) { return tiff_offers_tf(t, 0); }, icc_labels,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, TIFFCompression_None, TIFFSampleType_UInt8); }},
@@ -183,12 +183,12 @@ const Variant k_variants[] = {
     {"tiff half zip", ".tif", "libtiff", Cap_Float | Cap_Alpha, 1e-3f, [](TransferFunction t) { return tiff_offers_tf(t, 3); }, icc_labels,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, TIFFCompression_ZIP, TIFFSampleType_Float16); }},
 #endif
-    {"qoi", ".qoi", "qoi", Cap_Default | Cap_Alpha, k_8bit, qoi_offers_tf, never,
+    {"qoi", ".qoi", "qoi", Cap_Representative | Cap_Alpha, k_8bit, qoi_offers_tf, never,
      [](const Image &i, std::ostream &o, TransferFunction t)
      { save_qoi_image(i, o, "a.qoi", t.type == TransferFunction::sRGB, false); }},
 #if HDRVIEW_ENABLE_LIBJPEG
     // libjpeg subsamples chroma 4:2:0, which moves the image's corner furthest
-    {"jpg q95", ".jpg", "libjpeg-turbo", Cap_Default | Cap_Lossy, 0.07f, jpg_offers_tf, never,
+    {"jpg q95", ".jpg", "libjpeg-turbo", Cap_Representative | Cap_Lossy, 0.07f, jpg_offers_tf, never,
      [](const Image &i, std::ostream &o, TransferFunction)
      { save_jpg_image(i, o, "a.jpg", false, 95, false); }},
     {"jpg q60 progressive", ".jpg", "libjpeg-turbo", Cap_Lossy, 0.1f, jpg_offers_tf, never,
@@ -197,7 +197,7 @@ const Variant k_variants[] = {
 #endif
 #if HDRVIEW_ENABLE_J2K
     // both syntaxes, every bit depth the dialog offers, and its lossy mode
-    {"jp2 16", ".jp2", "openjpeg", Cap_Default | Cap_Alpha, 1e-4f, [](TransferFunction t) { return j2k_offers_tf(t, J2KContainer::JP2); }, icc_labels,
+    {"jp2 16", ".jp2", "openjpeg", Cap_Representative | Cap_Alpha, 1e-4f, [](TransferFunction t) { return j2k_offers_tf(t, J2KContainer::JP2); }, icc_labels,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_j2k_image(i, o, "a.jp2", true, 16, J2KContainer::JP2, t, false); }},
     {"jp2 12", ".jp2", "openjpeg", Cap_Alpha | Cap_Dithers, k_12bit_dithered, [](TransferFunction t) { return j2k_offers_tf(t, J2KContainer::JP2); }, icc_labels,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_j2k_image(i, o, "a.jp2", true, 12, J2KContainer::JP2, t, true); }},
@@ -213,7 +213,7 @@ const Variant k_variants[] = {
 #endif
 #if HDRVIEW_ENABLE_LIBWEBP
     // lossy WebP is 8-bit 4:2:0, whose error at quality 95 a steep transfer function such as Log 100 amplifies
-    {"webp q95", ".webp", "libwebp", Cap_Default | Cap_Alpha | Cap_Lossy, 0.05f, webp_offers_tf, icc_labels,
+    {"webp q95", ".webp", "libwebp", Cap_Representative | Cap_Alpha | Cap_Lossy, 0.05f, webp_offers_tf, icc_labels,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_webp_image(i, o, "a.webp", 95.f, false, t); }},
     {"webp lossless", ".webp", "libwebp", Cap_Alpha | Cap_Dithers, k_8bit_dithered, webp_offers_tf, icc_labels,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_webp_image(i, o, "a.webp", 100.f, true, t); }},
@@ -221,7 +221,7 @@ const Variant k_variants[] = {
 #if HDRVIEW_ENABLE_LIBJXL && !defined(HDRVIEW_TEST_ASAN) // see test_asan.h
     // a gamma decodes through the ICC profile libjxl synthesizes, whose fixed-point curve moves a lossless
     // file's samples by about 1e-4
-    {"jxl f32 q95", ".jxl", "libjxl", Cap_Default | Cap_Alpha | Cap_Lossy, 0.035f, [](TransferFunction t) { return jxl_offers_tf(t); }, always,
+    {"jxl f32 q95", ".jxl", "libjxl", Cap_Representative | Cap_Alpha | Cap_Lossy, 0.035f, [](TransferFunction t) { return jxl_offers_tf(t); }, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_jxl_image(i, o, "a.jxl", false, 95.f, t, JXL_TYPE_FLOAT); }},
     {"jxl f32 lossless", ".jxl", "libjxl", Cap_Alpha, 3e-4f, [](TransferFunction t) { return jxl_offers_tf(t); }, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_jxl_image(i, o, "a.jxl", true, 100.f, t, JXL_TYPE_FLOAT); }},
@@ -234,13 +234,13 @@ const Variant k_variants[] = {
 #endif
 #if HDRVIEW_ENABLE_LIBHEIF
     // both codecs the dialog offers, since they take different paths through libheif
-    {"heif", ".heif", "libheif", Cap_Default | Cap_Alpha | Cap_Lossy | k_heif_levels, 0.055f, heif_offers_tf, always,
+    {"heif", ".heif", "libheif", Cap_Representative | Cap_Alpha | Cap_Lossy | k_heif_levels, 0.055f, heif_offers_tf, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.heif", 95, false, true, HEIFCodec::HEVC, t); }},
     {"heif lossless 8", ".heif", "libheif", Cap_Alpha | k_heif_levels | Cap_Dithers, k_8bit_dithered, heif_offers_tf, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.heif", 100, true, true, HEIFCodec::HEVC, t, 8); }},
     {"heif lossless 10", ".heif", "libheif", Cap_Alpha | k_heif_levels | Cap_Dithers, k_10bit_dithered, heif_offers_tf, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.heif", 100, true, true, HEIFCodec::HEVC, t, 10); }},
-    {"avif", ".avif", "libheif", Cap_Default | Cap_Alpha | Cap_Lossy | k_heif_levels, 0.055f, heif_offers_tf, always,
+    {"avif", ".avif", "libheif", Cap_Representative | Cap_Alpha | Cap_Lossy | k_heif_levels, 0.055f, heif_offers_tf, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.avif", 95, false, true, HEIFCodec::AV1, t); }},
     {"avif lossless 8", ".avif", "libheif", Cap_Alpha | k_heif_levels | Cap_Dithers, k_8bit_dithered, heif_offers_tf, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.avif", 100, true, true, HEIFCodec::AV1, t, 8); }},
@@ -332,8 +332,8 @@ float3 straight_rgb(const float4 &premultiplied)
 float tolerance(const Variant &v, float alpha)
 { return (v.caps & (Cap_Premultiplied | Cap_Lossy)) ? v.step / alpha : v.step; }
 
-/// The transfer function the save dialog opens \p v with: linear for a float format, sRGB otherwise.
-TransferFunction default_tf(const Variant &v)
+/// The transfer function the narrower sweeps write \p v with: linear for a float format, sRGB otherwise.
+TransferFunction representative_tf(const Variant &v)
 { return TransferFunction{(v.caps & Cap_Float) ? TransferFunction::Linear : TransferFunction::sRGB}; }
 
 /// What \p v writes for \p img under \p tf, or nothing if this build has no encoder for it.
@@ -404,15 +404,15 @@ TEST_CASE("every writer round-trips every channel-group layout as the viewport s
     for (const auto &writer : k_variants)
         for (const auto &layout : k_layouts)
         {
-            if (!(writer.caps & Cap_Default))
+            if (!(writer.caps & Cap_Representative))
                 continue;
             INFO("writer = ", std::string{writer.name}, ", layout = ", std::string{layout.label});
 
             auto img = make_image(layout);
 
             // a float format records no transfer function and is written linear; the integer ones
-            // round-trip theirs and are written sRGB, as the save dialog defaults them
-            const TransferFunction tf = default_tf(writer);
+            // round-trip theirs and are written sRGB
+            const TransferFunction tf = representative_tf(writer);
 
             // PFM stores 1, 3 or 4 channels and has no two-channel form; everything else takes everything
             if (std::string{writer.name} == "pfm" && layout.channels.size() == 2)
@@ -514,8 +514,8 @@ TEST_CASE("every setting of every writer round-trips each transfer function its 
     for (const auto &variant : k_variants)
     {
         INFO("setting = ", std::string{variant.name});
-        // the transfer function the dialog opens with is always offered
-        CHECK(variant.offers(default_tf(variant)));
+        // the representative transfer function is one every setting offers
+        CHECK(variant.offers(representative_tf(variant)));
 
         for (const auto &tf : tfs)
         {
@@ -688,11 +688,11 @@ TEST_CASE("every writer's file loads with a channel selector applied, whichever 
     // channels afterwards
     for (const auto &writer : k_variants)
     {
-        if (!(writer.caps & Cap_Default))
+        if (!(writer.caps & Cap_Representative))
             continue;
         INFO("writer = ", std::string{writer.name});
 
-        const auto bytes = save(writer, *make_image(k_rgba), default_tf(writer));
+        const auto bytes = save(writer, *make_image(k_rgba), representative_tf(writer));
         if (!bytes)
             continue;
         const auto with = [&](const char *selector)
@@ -765,11 +765,11 @@ TEST_CASE("every writer's file, cut short anywhere, loads cleanly or not at all"
 {
     for (const auto &writer : k_variants)
     {
-        if (!(writer.caps & Cap_Default))
+        if (!(writer.caps & Cap_Representative))
             continue;
         INFO("writer = ", std::string{writer.name});
 
-        const auto bytes = save(writer, *make_image(k_rgba), default_tf(writer));
+        const auto bytes = save(writer, *make_image(k_rgba), representative_tf(writer));
         if (!bytes)
             continue;
         const size_t n = bytes->size();
@@ -813,7 +813,7 @@ TEST_CASE("every lossless integer writer quantizes at the depth it stores: value
         if (writer.caps & (Cap_Float | Cap_Lossy))
             continue;
         CAPTURE(std::string(writer.name));
-        const TransferFunction tf = default_tf(writer);
+        const TransferFunction tf = representative_tf(writer);
         REQUIRE(writer.offers(tf));
 
         const auto probe = save(writer, *patch(0.5f, tf), tf);
