@@ -485,7 +485,8 @@ TEST_CASE("PixelStats::calculate applies each blend mode against a reference ima
 {
     // Both channels vary, and cross: the image is below the reference on the left and above it on the right,
     // so a mode that swapped its operands, or a reference read at the wrong pixel, changes the result. The
-    // reference stays positive, so dividing by it is finite.
+    // reference stays positive, so dividing by it is finite. What each mode computes is held to worked values in
+    // test_colorspace.cpp; this checks which samples reach it.
     static constexpr int w = 8, h = 6;
     Channel   img("img", int2{w, h});
     Channel   ref("ref", int2{w, h});

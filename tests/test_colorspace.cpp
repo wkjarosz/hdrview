@@ -472,8 +472,28 @@ TEST_CASE("the image shader's per-pixel steps do what the viewer's controls say"
             }
 }
 
-TEST_CASE("blend()'s overloads agree on every blend mode")
+TEST_CASE("blend() gives each blend mode's value, and its overloads agree on every mode")
 {
+    // Worked out by hand for two pairs, the top above the bottom and below it, so a mode that swaps its operands
+    // or drops a sign is off. The relative modes divide by the bottom plus 0.01.
+    struct Case
+    {
+        float top, bottom;
+        float want[BlendMode_COUNT]; ///< In BlendMode_ order
+    };
+    const Case cases[] = {
+        {0.6f, 0.25f, {0.6f, 0.15f, 2.4f, 0.85f, 0.425f, 0.35f, 0.35f / 0.26f, 0.35f, 0.35f / 0.26f}},
+        {0.15f, 0.8f, {0.15f, 0.12f, 0.1875f, 0.95f, 0.475f, -0.65f, -0.65f / 0.81f, 0.65f, 0.65f / 0.81f}},
+    };
+    static_assert(BlendMode_COUNT == 9, "a new blend mode needs its values worked out above");
+    for (const auto &c : cases)
+        for (int m = 0; m < BlendMode_COUNT; ++m)
+        {
+            CAPTURE(blend_mode_names()[m]);
+            CAPTURE(c.top);
+            CHECK(blend(c.top, c.bottom, BlendMode_(m)) == doctest::Approx(c.want[m]));
+        }
+
     // the three overloads are separate switches over the same enum, so a mode present in one and missing
     // from another blends as whatever its `default:` is. The RGBA one is the image shader's own
     // (src/shared/pipeline.h); its channels differ, so one that reads another's value is caught too.
@@ -499,15 +519,6 @@ TEST_CASE("blend()'s overloads agree on every blend mode")
             // statistics pass wants; every other mode is per-channel arithmetic and must match
             if (mode != BlendMode_Normal)
                 CHECK(v4[c] == doctest::Approx(s));
-
-            // colorspace.h is a header, where only a qualified std::abs is sure to reach the floating-point
-            // overloads: libstdc++ leaves only <stdlib.h>'s integer ::abs at global scope, which would truncate
-            // these differences, of either sign and two of them below 1
-            const float diff = std::fabs(top[c] - bottom[c]);
-            if (mode == BlendMode_Difference)
-                CHECK(s == doctest::Approx(diff));
-            else if (mode == BlendMode_Relative_Difference)
-                CHECK(s == doctest::Approx(diff / (bottom[c] + 0.01f)));
         }
     }
 }
