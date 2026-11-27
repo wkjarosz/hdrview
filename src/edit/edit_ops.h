@@ -53,7 +53,7 @@ std::pair<std::vector<int>, Box2i> resolve_subject(const ConstImagePtr &img, con
     \param extent    How far \p op reaches, which says whether the layer tree is rebuilt and the view refit
 */
 bool modify_image(const EditContext &ctx, const std::string &name, const std::function<void(Image &)> &op,
-                  const UndoFactory &make_undo, EditExtent extent = Extent_Pixels);
+                  const UndoFactory &make_undo, EditExtent extent = EditExtent_Pixels);
 
 /// Apply \p op to every pixel the subject covers, one at a time.
 /**

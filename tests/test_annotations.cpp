@@ -138,7 +138,8 @@ TEST_CASE("Every shape draws within the bounds it declares")
 TEST_CASE("A stroke is a screen width, and a font size an image one, unless set otherwise")
 {
     // either unit can be set for each, and the command stream carries whichever is
-    auto kind = [](bool relative) { return int(relative ? VgCommand::Relative : VgCommand::Absolute); };
+    auto kind = [](bool relative)
+    { return int(relative ? VgCommand::ScaleKind_Relative : VgCommand::ScaleKind_Absolute); };
 
     for (auto shape : all_shapes())
         for (bool stroke_relative : {false, true})
@@ -558,7 +559,7 @@ TEST_CASE("Every shape survives a trip through a session file")
         // default and fails here rather than round-tripping by accident.
         Annotation a            = sample(shape);
         a.fill_color            = float4{0.25f, 0.5f, 0.75f, 0.5f};
-        a.text_align            = VgCommand::AlignRight | VgCommand::AlignBottom;
+        a.text_align            = VgCommand::TextAlign_Right | VgCommand::TextAlign_Bottom;
         a.label                 = "a label of its own";
         a.visible               = false;
         a.locked                = true;
@@ -807,8 +808,9 @@ TEST_CASE("A text annotation is picked up over its glyphs, not just at its ancho
 
     const float2 extent = float2{glyph.x * float(a.text.size()), glyph.y};
 
-    for (int align : {VgCommand::AlignLeft | VgCommand::AlignTop, VgCommand::AlignCenter | VgCommand::AlignMiddle,
-                      VgCommand::AlignRight | VgCommand::AlignBottom})
+    for (int align : {VgCommand::TextAlign_Left | VgCommand::TextAlign_Top,
+                      VgCommand::TextAlign_Center | VgCommand::TextAlign_Middle,
+                      VgCommand::TextAlign_Right | VgCommand::TextAlign_Bottom})
     {
         CAPTURE(align);
         a.text_align = align;
@@ -846,7 +848,7 @@ TEST_CASE("Resizing a text annotation's box scales the size it is drawn at")
         a.font_size          = 20.f;
         a.font_size_relative = relative;
         a.points             = {float2{100.f, 100.f}};
-        a.text_align         = VgCommand::AlignLeft | VgCommand::AlignTop;
+        a.text_align         = VgCommand::TextAlign_Left | VgCommand::TextAlign_Top;
 
         float2    handles[Annotation::MaxHandles];
         const int count = annotation_handles(a, handles, &x);

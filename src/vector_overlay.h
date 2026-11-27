@@ -57,22 +57,24 @@ struct VgCommand
     };
 
     /// Whether a size is in image pixels (and so scales with zoom) or in screen pixels.
-    enum ScaleKind : int
+    using ScaleKind = int;
+    enum ScaleKind_ : ScaleKind
     {
-        Relative = 0,
-        Absolute = 1,
+        ScaleKind_Relative = 0,
+        ScaleKind_Absolute = 1,
     };
 
     /// Bit flags, matching NanoVG's NVG_ALIGN_*.
-    enum TextAlign : int
+    using TextAlign = int;
+    enum TextAlign_ : TextAlign
     {
-        AlignLeft     = 1 << 0,
-        AlignCenter   = 1 << 1,
-        AlignRight    = 1 << 2,
-        AlignTop      = 1 << 3,
-        AlignMiddle   = 1 << 4,
-        AlignBottom   = 1 << 5,
-        AlignBaseline = 1 << 6,
+        TextAlign_Left     = 1 << 0,
+        TextAlign_Center   = 1 << 1,
+        TextAlign_Right    = 1 << 2,
+        TextAlign_Top      = 1 << 3,
+        TextAlign_Middle   = 1 << 4,
+        TextAlign_Bottom   = 1 << 5,
+        TextAlign_Baseline = 1 << 6,
     };
 
     Type               type = Type::Invalid;
@@ -120,7 +122,7 @@ float text_baked_size(float size);
 /**
     Drawing and hit testing both read this, so they cannot disagree about where a string sits.
 */
-float2 aligned_text_pos(float2 anchor, float2 size, int align);
+float2 aligned_text_pos(float2 anchor, float2 size, VgCommand::TextAlign align);
 
 /**
     Execute \p commands into \p draw_list. Unsupported commands are skipped, not approximated.

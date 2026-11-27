@@ -878,7 +878,7 @@ Image::Image(int2 size, const std::vector<std::string> &channel_names) : Image()
     set_default_transparency();
 }
 
-void Image::set_transparency(TransparencyType_ from_file, const std::optional<TransparencyType_> &override_with,
+void Image::set_transparency(TransparencyType from_file, const std::optional<TransparencyType> &override_with,
                              bool assumed)
 {
     transparency_from_file = from_file;

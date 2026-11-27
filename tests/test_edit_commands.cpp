@@ -703,7 +703,7 @@ TEST_CASE("Hue/saturation works on straight color in every group it covers where
 
     auto cmd = find_command("Hue/saturation...");
     REQUIRE(cmd);
-    for (TransparencyType_ t : {TransparencyType_None, TransparencyType_PremultipliedLinear})
+    for (TransparencyType t : {TransparencyType_None, TransparencyType_PremultipliedLinear})
     {
         CAPTURE(t);
         img->set_transparency(t, std::nullopt);

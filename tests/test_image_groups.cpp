@@ -32,7 +32,7 @@ TEST_CASE("finalize() groups alpha by what it means, premultiplies only straight
     auto       stored = [](int c, int x, int y)
     { return c == 3 ? 0.3f + 0.1f * float(x + 3 * y) : 0.8f - 0.2f * float(c) + 0.01f * float(x + 3 * y); };
 
-    for (TransparencyType_ t = TransparencyType_None; t < TransparencyType_Count; ++t)
+    for (TransparencyType t = TransparencyType_None; t < TransparencyType_COUNT; ++t)
     {
         CAPTURE(transparency_type_name(t));
 

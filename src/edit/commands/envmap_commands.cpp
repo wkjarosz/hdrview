@@ -64,7 +64,7 @@ public:
     }
 
     /// How an applied result lands: in the view framing it, while a preview frames one.
-    EditExtent extent() const { return framing() ? Extent_StructureInView : Extent_Structure; }
+    EditExtent extent() const { return framing() ? EditExtent_StructureInView : EditExtent_Structure; }
 
     /// Mark the edit applied, so that closing leaves the view framing its result.
     void applied() { m_applied = true; }

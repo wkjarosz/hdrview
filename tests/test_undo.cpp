@@ -331,7 +331,7 @@ TEST_CASE("Resizing the canvas puts the old samples where the anchor says, cutti
     const int2 changes[] = {{4, 2}, {-2, -2}, {2, -2}};
 
     for (const int2 change : changes)
-        for (int anchor = 0; anchor < Image::Anchor_COUNT; ++anchor)
+        for (int anchor = 0; anchor < Image::CanvasAnchor_COUNT; ++anchor)
         {
             CAPTURE(change.x);
             CAPTURE(change.y);
@@ -342,15 +342,15 @@ TEST_CASE("Resizing the canvas puts the old samples where the anchor says, cutti
             int2 offset{0};
             switch (Image::CanvasAnchor(anchor))
             {
-            case Image::Anchor_TopLeft: offset = {0, 0}; break;
-            case Image::Anchor_TopCenter: offset = {change.x / 2, 0}; break;
-            case Image::Anchor_TopRight: offset = {change.x, 0}; break;
-            case Image::Anchor_MiddleLeft: offset = {0, change.y / 2}; break;
-            case Image::Anchor_MiddleCenter: offset = {change.x / 2, change.y / 2}; break;
-            case Image::Anchor_MiddleRight: offset = {change.x, change.y / 2}; break;
-            case Image::Anchor_BottomLeft: offset = {0, change.y}; break;
-            case Image::Anchor_BottomCenter: offset = {change.x / 2, change.y}; break;
-            case Image::Anchor_BottomRight: offset = {change.x, change.y}; break;
+            case Image::CanvasAnchor_TopLeft: offset = {0, 0}; break;
+            case Image::CanvasAnchor_TopCenter: offset = {change.x / 2, 0}; break;
+            case Image::CanvasAnchor_TopRight: offset = {change.x, 0}; break;
+            case Image::CanvasAnchor_MiddleLeft: offset = {0, change.y / 2}; break;
+            case Image::CanvasAnchor_MiddleCenter: offset = {change.x / 2, change.y / 2}; break;
+            case Image::CanvasAnchor_MiddleRight: offset = {change.x, change.y / 2}; break;
+            case Image::CanvasAnchor_BottomLeft: offset = {0, change.y}; break;
+            case Image::CanvasAnchor_BottomCenter: offset = {change.x / 2, change.y}; break;
+            case Image::CanvasAnchor_BottomRight: offset = {change.x, change.y}; break;
             default: FAIL("an anchor this test does not know");
             }
 

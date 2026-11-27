@@ -19,19 +19,19 @@
 #include <string>
 #include <vector>
 
-using TransparencyType_ = int;
-enum TransparencyType : TransparencyType_
+using TransparencyType = int;
+enum TransparencyType_ : TransparencyType
 {
     TransparencyType_None = 0,
     TransparencyType_PremultipliedLinear,
     TransparencyType_PremultipliedNonLinear, // values are premultiplied in e.g. gamma- or sRGB-encoded space
     TransparencyType_Straight,
-    TransparencyType_Count
+    TransparencyType_COUNT
 };
 
-const char *transparency_type_name(TransparencyType_ at);
+const char *transparency_type_name(TransparencyType at);
 /// Name for the alpha-override combo, which needs to say more than the metadata panel's one-word label.
-const char  *transparency_override_name(TransparencyType_ at);
+const char  *transparency_override_name(TransparencyType at);
 const char **transparency_type_names();
 
 /**
@@ -216,14 +216,14 @@ int              transfer_function_to_CICP(TransferFunction tf);
 std::string color_profile_name(ColorGamut_ gamut, TransferFunction tf);
 std::string color_profile_name(const Chromaticities &chroma, TransferFunction tf);
 
-using AdaptationMethod_ = int;
-enum AdaptationMethod : AdaptationMethod_
+using AdaptationMethod = int;
+enum AdaptationMethod_ : AdaptationMethod
 {
     AdaptationMethod_Identity = 0, ///< Identity CAT
     AdaptationMethod_XYZScaling,   ///< XYZ scaling CAT
     AdaptationMethod_Bradford,     ///< Bradford CAT
     AdaptationMethod_VonKries,     ///< Von Kries CAT
-    AdaptationMethod_Count
+    AdaptationMethod_COUNT
 };
 
 const char *adaptation_method_name(AdaptationMethod method);
@@ -388,11 +388,11 @@ void convert_primaries(float *pixels, int3 size, const Chromaticities &src, cons
 /// The image shader's tonemap step, with the colormap read through Colormap::sample() instead of a texture.
 Color4 tonemap(Color4 color, float gamma, Tonemap_ tonemap_mode, Colormap_ colormap, bool reverse_colormap);
 
-float2 blend(float2 top, float2 bottom, BlendMode_ blend_mode);
+float2 blend(float2 top, float2 bottom, BlendMode blend_mode);
 
 // inline, unlike its float2 sibling: called per pixel from PixelStats::calculate(), in another translation
 // unit, and the project builds without LTO.
-inline float blend(float top, float bottom, BlendMode_ blend_mode)
+inline float blend(float top, float bottom, BlendMode blend_mode)
 {
     using std::abs; // ::abs is the integer one on libstdc++, and would truncate
 

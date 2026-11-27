@@ -42,11 +42,11 @@ TEST_CASE("Relative sizes scale with the image, absolute ones do not")
         return b.max_y - b.min_y; // the drawn thickness
     };
 
-    CHECK(stroked_line(1.f, VgCommand::Relative) == doctest::Approx(4.f).epsilon(0.05f));
-    CHECK(stroked_line(4.f, VgCommand::Relative) == doctest::Approx(16.f).epsilon(0.05f));
+    CHECK(stroked_line(1.f, VgCommand::ScaleKind_Relative) == doctest::Approx(4.f).epsilon(0.05f));
+    CHECK(stroked_line(4.f, VgCommand::ScaleKind_Relative) == doctest::Approx(16.f).epsilon(0.05f));
 
-    CHECK(stroked_line(1.f, VgCommand::Absolute) == doctest::Approx(4.f).epsilon(0.05f));
-    CHECK(stroked_line(4.f, VgCommand::Absolute) == doctest::Approx(4.f).epsilon(0.05f));
+    CHECK(stroked_line(1.f, VgCommand::ScaleKind_Absolute) == doctest::Approx(4.f).epsilon(0.05f));
+    CHECK(stroked_line(4.f, VgCommand::ScaleKind_Absolute) == doctest::Approx(4.f).epsilon(0.05f));
 }
 
 TEST_CASE("A filled circle covers its radius")
@@ -127,9 +127,9 @@ TEST_CASE("Save and Restore bracket changes to the drawing state")
     TestDrawList d;
     draw_vector_overlay(&d.list,
                         {
-                            cmd(VgCommand::Type::StrokeWidth, {2.f, float(VgCommand::Absolute)}),
+                            cmd(VgCommand::Type::StrokeWidth, {2.f, float(VgCommand::ScaleKind_Absolute)}),
                             cmd(VgCommand::Type::Save),
-                            cmd(VgCommand::Type::StrokeWidth, {20.f, float(VgCommand::Absolute)}),
+                            cmd(VgCommand::Type::StrokeWidth, {20.f, float(VgCommand::ScaleKind_Absolute)}),
                             cmd(VgCommand::Type::Restore),
                             cmd(VgCommand::Type::BeginPath),
                             cmd(VgCommand::Type::MoveTo, {0.f, 50.f}),
@@ -186,7 +186,8 @@ TEST_CASE("An overlay leaves the draw list's shared path buffer empty")
     TestDrawList d;
     draw_vector_overlay(&d.list,
                         {
-                            cmd(VgCommand::Type::BeginPath), cmd(VgCommand::Type::MoveTo, {0.f, 0.f}),
+                            cmd(VgCommand::Type::BeginPath),
+                            cmd(VgCommand::Type::MoveTo, {0.f, 0.f}),
                             cmd(VgCommand::Type::LineTo, {10.f, 10.f}),
                             // left unpainted and unclosed
                         },
@@ -215,8 +216,8 @@ TEST_CASE("Scaled-up text moves with its anchor rather than jumping between pixe
     {
         std::vector<VgCommand> program{
             cmd(VgCommand::Type::FillColor, {1.f, 1.f, 1.f, 1.f}),
-            cmd(VgCommand::Type::FontSize, {4.f, float(VgCommand::Relative)}),
-            cmd(VgCommand::Type::TextAlign, {float(VgCommand::AlignLeft | VgCommand::AlignTop)}),
+            cmd(VgCommand::Type::FontSize, {4.f, float(VgCommand::ScaleKind_Relative)}),
+            cmd(VgCommand::Type::TextAlign, {float(VgCommand::TextAlign_Left | VgCommand::TextAlign_Top)}),
             cmd(VgCommand::Type::Text, {anchor_x, 50.f}, "Hjy")};
 
         TestDrawList d;

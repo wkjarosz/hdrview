@@ -28,14 +28,14 @@ void scale_colors_by_alpha(float *pixels, int3 size, F &&factor)
                  });
 }
 
-bool needs_undoing(int3 size, TransparencyType_ transparency)
+bool needs_undoing(int3 size, TransparencyType transparency)
 {
     return transparency == TransparencyType_PremultipliedNonLinear && size.z > 1;
 }
 
 } // namespace
 
-void unpremultiply_before_transfer(float *pixels, int3 size, TransparencyType_ transparency)
+void unpremultiply_before_transfer(float *pixels, int3 size, TransparencyType transparency)
 {
     if (!needs_undoing(size, transparency))
         return;
@@ -44,7 +44,7 @@ void unpremultiply_before_transfer(float *pixels, int3 size, TransparencyType_ t
     scale_colors_by_alpha(pixels, size, [](float a) { return a == 0.f ? 1.f : 1.f / a; });
 }
 
-void repremultiply_after_transfer(float *pixels, int3 size, TransparencyType_ transparency)
+void repremultiply_after_transfer(float *pixels, int3 size, TransparencyType transparency)
 {
     if (!needs_undoing(size, transparency))
         return;

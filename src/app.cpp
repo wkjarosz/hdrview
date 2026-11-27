@@ -569,7 +569,7 @@ json HDRViewApp::user_settings() const
 {
     json j;
     j["recent files"]            = m_image_loader.recent_files();
-    j["background mode"]         = (int)m_bg_mode;
+    j["background mode"]         = m_bg_mode;
     j["background color"]        = m_bg_color.xyz();
     j["draw data window"]        = m_draw_data_window;
     j["draw display window"]     = m_draw_display_window;
@@ -611,8 +611,7 @@ json HDRViewApp::user_settings() const
 void HDRViewApp::apply_user_settings(const json &j)
 {
     m_image_loader.set_recent_files(j.value<vector<string>>("recent files", m_image_loader.recent_files()));
-    m_bg_mode        = (BackgroundMode_)clamp(j.value<int>("background mode", (int)m_bg_mode), (int)BGMode_Black,
-                                              (int)BGMode_COUNT - 1);
+    m_bg_mode        = clamp(j.value<int>("background mode", m_bg_mode), 0, BackgroundMode_COUNT - 1);
     m_bg_color.xyz() = j.value<float3>("background color", m_bg_color.xyz());
 
     m_draw_data_window    = j.value<bool>("draw data window", m_draw_data_window);

@@ -112,9 +112,9 @@ void RegisterTests_Display(ImGuiTestEngine *engine)
     t           = IM_REGISTER_TEST(engine, "display", "pixel_value_follows_the_channel_and_blend_controls");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
-        TonemapState     restore;
-        const Channels_  channel = hdrview()->channel();
-        const BlendMode_ blend   = hdrview()->blend_mode();
+        TonemapState    restore;
+        const Channels_ channel = hdrview()->channel();
+        const BlendMode blend   = hdrview()->blend_mode();
 
         reset_images(ctx);
         IM_CHECK_RETV(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE}) == 1, );
@@ -191,7 +191,7 @@ void RegisterTests_Display(ImGuiTestEngine *engine)
         hdrview()->channel() = Channels_RGBA;
         const float4 top = cur->rgba_pixel(q, Target_Primary), bottom = other->rgba_pixel(q, Target_Secondary);
         const float  alpha = top.w + bottom.w * (1.f - top.w);
-        for (BlendMode_ m : {BlendMode_Normal, BlendMode_Difference})
+        for (BlendMode m : {BlendMode_Normal, BlendMode_Difference})
         {
             hdrview()->blend_mode() = m;
             const float4 got        = hdrview()->pixel_value(q, false, 2);

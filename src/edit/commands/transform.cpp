@@ -80,7 +80,7 @@ public:
         if (!box.has_volume() || box == img->data_window)
             return;
 
-        modify_image(ctx, "Crop to selection", [box](Image &i) { i.crop(box); }, structure_undo, Extent_Structure);
+        modify_image(ctx, "Crop to selection", [box](Image &i) { i.crop(box); }, structure_undo, EditExtent_Structure);
 
         // what was selected is now the whole image
         ctx.set_selection(Box2i{});
@@ -88,10 +88,11 @@ public:
 };
 
 /// Units a size can be given in.
-enum SizeUnits : int
+using SizeUnits = int;
+enum SizeUnits_ : SizeUnits
 {
-    Units_Pixels = 0,
-    Units_Percent
+    SizeUnits_Pixels = 0,
+    SizeUnits_Percent
 };
 
 /**
@@ -103,7 +104,7 @@ enum SizeUnits : int
     \p lower is the smallest value a field may take: one ordinarily, but a size given as a change to the
     current one may be negative, which is how a canvas is trimmed.
 */
-void size_fields(int2 *size, int *units, bool *locked, int2 original, int lower)
+void size_fields(int2 *size, SizeUnits *units, bool *locked, int2 original, int lower)
 {
     // one width for every control in the column, so the labels line up
     const float field  = 9.f * HelloImGui::EmSize();
@@ -127,7 +128,7 @@ void size_fields(int2 *size, int *units, bool *locked, int2 original, int lower)
         rows.take();
     };
 
-    if (*units == Units_Percent)
+    if (*units == SizeUnits_Percent)
     {
         float2 pct{100.f * float(size->x) / float(std::max(1, original.x)),
                    100.f * float(size->y) / float(std::max(1, original.y))};
@@ -217,14 +218,14 @@ public:
     {
         const int2 out = m_size;
         if (m_have_size && out.x > 0 && out.y > 0)
-            modify_image(ctx, "Image size", [out](Image &i) { i.resample(out); }, structure_undo, Extent_Structure);
+            modify_image(ctx, "Image size", [out](Image &i) { i.resample(out); }, structure_undo, EditExtent_Structure);
     }
 
 private:
-    int2 m_size{0, 0};
-    bool m_have_size = false;
-    int  m_units     = Units_Pixels;
-    bool m_locked    = true;
+    int2      m_size{0, 0};
+    bool      m_have_size = false;
+    SizeUnits m_units     = SizeUnits_Pixels;
+    bool      m_locked    = true;
 };
 
 class CanvasSize final : public EditCommand
@@ -309,16 +310,16 @@ public:
         const int2 out = m_relative ? la::max(img->size() + m_size, int2{1}) : la::max(m_size, int2{1});
         const auto a   = m_anchor;
         modify_image(
-            ctx, "Canvas size", [out, a](Image &i) { i.resize_canvas(out, a); }, structure_undo, Extent_Structure);
+            ctx, "Canvas size", [out, a](Image &i) { i.resize_canvas(out, a); }, structure_undo, EditExtent_Structure);
     }
 
 private:
     int2                m_size{0, 0};
     bool                m_have_size = false;
-    int                 m_units     = Units_Pixels;
+    SizeUnits           m_units     = SizeUnits_Pixels;
     bool                m_locked    = false;
     bool                m_relative  = false;
-    Image::CanvasAnchor m_anchor    = Image::Anchor_MiddleCenter;
+    Image::CanvasAnchor m_anchor    = Image::CanvasAnchor_MiddleCenter;
 };
 
 } // namespace

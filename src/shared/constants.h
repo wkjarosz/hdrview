@@ -20,10 +20,9 @@
 
 #define SHARED_ENUM_VALUE(name, value) const int name = value;
 
-#define Channels_       int
-#define Tonemap_        int
-#define BlendMode_      int
-#define BackgroundMode_ int
+#define Channels_ int
+#define Tonemap_  int
+#define BlendMode int
 
 #endif
 
@@ -49,11 +48,11 @@ SHARED_ENUM_VALUE(BlendMode_Relative_Subtract, 6)
 SHARED_ENUM_VALUE(BlendMode_Difference, 7)
 SHARED_ENUM_VALUE(BlendMode_Relative_Difference, 8)
 
-SHARED_ENUM_VALUE(BGMode_Black, 0)
-SHARED_ENUM_VALUE(BGMode_White, 1)
-SHARED_ENUM_VALUE(BGMode_Dark_Checker, 2)
-SHARED_ENUM_VALUE(BGMode_Light_Checker, 3)
-SHARED_ENUM_VALUE(BGMode_Custom_Color, 4)
+SHARED_ENUM_VALUE(BackgroundMode_Black, 0)
+SHARED_ENUM_VALUE(BackgroundMode_White, 1)
+SHARED_ENUM_VALUE(BackgroundMode_Dark_Checker, 2)
+SHARED_ENUM_VALUE(BackgroundMode_Light_Checker, 3)
+SHARED_ENUM_VALUE(BackgroundMode_Custom_Color, 4)
 
 /// The smallest alpha divided by when undoing a premultiply, so that an alpha of 0 leaves a color finite.
 /**

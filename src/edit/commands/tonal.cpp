@@ -164,14 +164,15 @@ public:
 
 private:
     /// What the color's alpha is taken to mean.
-    enum Mode : int
+    using Mode = int;
+    enum Mode_ : Mode
     {
         Mode_Blend = 0, ///< Coverage: lay the color over what is there
         Mode_Replace    ///< Write it outright, alpha channel included
     };
 
     float4 m_color{0.f, 0.f, 0.f, 1.f};
-    int    m_mode = Mode_Blend;
+    Mode   m_mode = Mode_Blend;
 };
 
 } // namespace

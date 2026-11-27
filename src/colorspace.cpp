@@ -484,9 +484,9 @@ static const char *s_transparency_type_names[] = {"None", "Premultiplied Linear"
 static const char *s_transparency_override_names[] = {"None", "Premultiplied, in linear light",
                                                       "Premultiplied, after transfer", "Straight", nullptr};
 
-const char *transparency_type_name(TransparencyType_ at) { return s_transparency_type_names[at]; }
+const char *transparency_type_name(TransparencyType at) { return s_transparency_type_names[at]; }
 
-const char *transparency_override_name(TransparencyType_ at) { return s_transparency_override_names[at]; }
+const char *transparency_override_name(TransparencyType at) { return s_transparency_override_names[at]; }
 
 const char **transparency_type_names() { return s_transparency_type_names; }
 
@@ -939,7 +939,7 @@ Color4 tonemap(Color4 color, float gamma, Tonemap_ tonemap_mode, Colormap_ color
     return shader::tonemap(color, tonemap_mode, gamma, colormap_sRGB);
 }
 
-float2 blend(float2 top, float2 bottom, BlendMode_ blend_mode)
+float2 blend(float2 top, float2 bottom, BlendMode blend_mode)
 {
     float diff  = top.x - bottom.x;
     float alpha = top.y + bottom.y * (1.f - top.y);

@@ -496,20 +496,20 @@ public:
     */
     void set_mouse_mode(MouseMode m);
 
-    float      &gamma_live() { return m_gamma_live; }
-    float      &gamma() { return m_gamma; }
-    float      &exposure_live() { return m_exposure_live; }
-    float      &exposure() { return m_exposure; }
-    float      &offset_live() { return m_offset_live; }
-    float      &offset() { return m_offset; }
-    Tonemap_   &tonemap() { return m_tonemap; }
-    Colormap_   colormap() { return m_colormaps[m_colormap_index]; }
-    bool       &reverse_colormap() { return m_reverse_colormap; }
-    BlendMode_ &blend_mode() { return m_blend_mode; }
-    Channels_  &channel() { return m_channel; }
-    bool       &clamp_to_LDR() { return m_clamp_to_LDR; }
-    bool       &dithering_on() { return m_dither; }
-    bool       &draw_grid_on() { return m_draw_grid; }
+    float     &gamma_live() { return m_gamma_live; }
+    float     &gamma() { return m_gamma; }
+    float     &exposure_live() { return m_exposure_live; }
+    float     &exposure() { return m_exposure; }
+    float     &offset_live() { return m_offset_live; }
+    float     &offset() { return m_offset; }
+    Tonemap_  &tonemap() { return m_tonemap; }
+    Colormap_  colormap() { return m_colormaps[m_colormap_index]; }
+    bool      &reverse_colormap() { return m_reverse_colormap; }
+    BlendMode &blend_mode() { return m_blend_mode; }
+    Channels_ &channel() { return m_channel; }
+    bool      &clamp_to_LDR() { return m_clamp_to_LDR; }
+    bool      &dithering_on() { return m_dither; }
+    bool      &draw_grid_on() { return m_draw_grid; }
     /// Whether the image list shows only the unique portion of each file name.
     bool      &short_names() { return m_short_names; }
     /// Whether the image list left-aligns file names, cutting long ones short at the back instead of the front.
@@ -548,7 +548,8 @@ public:
     DisplayGamut display_gamut() const { return ::display_gamut(m_display_cs, m_float_buffer); }
 
     /// Where the highlight rolloff takes the content's peak from.
-    enum PeakSource : int
+    using PeakSource = int;
+    enum PeakSource_ : PeakSource
     {
         PeakSource_Auto = 0, ///< The file's light-level metadata if it agrees with the pixels, else the measured peak
         PeakSource_Metadata,
@@ -558,7 +559,8 @@ public:
     };
 
     /// Where the highlight rolloff's ceiling sits.
-    enum RolloffCeiling : int
+    using RolloffCeiling = int;
+    enum RolloffCeiling_ : RolloffCeiling
     {
         RolloffCeiling_SDRWhite = 0,
         RolloffCeiling_Display, ///< The display's headroom, as it reports it each frame
@@ -577,7 +579,8 @@ public:
     };
 
     /// The highlight rolloff's presets: two fixed ones, and one the user's own changes go into.
-    enum RolloffPreset : int
+    using RolloffPreset = int;
+    enum RolloffPreset_ : RolloffPreset
     {
         RolloffPreset_SDRWhite = 0,
         RolloffPreset_Display,
@@ -628,7 +631,8 @@ public:
     /// The chosen highlight mode's name, as the settings list it.
     const char *highlight_mode_name() const;
     /// What a save writes: the image's own data, or a rendition of the view.
-    enum SaveMode : int
+    using SaveMode = int;
+    enum SaveMode_ : SaveMode
     {
         SaveMode_Data = 0,
         SaveMode_Rendition
@@ -961,12 +965,11 @@ private:
         Colormap_Viridis, Colormap_Plasma,   Colormap_Inferno,  Colormap_Hot,      Colormap_Cool,    Colormap_Pink,
         Colormap_Jet,     Colormap_Spectral, Colormap_Turbo,    Colormap_Twilight, Colormap_RdBu,    Colormap_BrBG,
         Colormap_PiYG,    Colormap_IceFire,  Colormap_CoolWarm, Colormap_Greys,    Colormap_AbsGreys};
-    int             m_colormap_index   = 1;
-    bool            m_reverse_colormap = false;
-    BlendMode_      m_blend_mode = BlendMode_::BlendMode_Normal; ///< How to blend the current and reference images
-    BackgroundMode_ m_bg_mode =
-        BackgroundMode_::BGMode_Dark_Checker;     ///< How the background around the image should be rendered
-    float4 m_bg_color = {0.3f, 0.3f, 0.3f, 1.0f}; ///< The background color if m_bg_mode == BGMode_Custom_Color
+    int            m_colormap_index   = 1;
+    bool           m_reverse_colormap = false;
+    BlendMode      m_blend_mode       = BlendMode_Normal;   ///< How to blend the current and reference images
+    BackgroundMode m_bg_mode = BackgroundMode_Dark_Checker; ///< How the background around the image should be rendered
+    float4 m_bg_color = {0.3f, 0.3f, 0.3f, 1.0f}; ///< The background color if m_bg_mode == BackgroundMode_Custom_Color
 
     //-----------------------------------------------------------------------------
     // Pan/zoom/flip and the viewport's on-screen extent

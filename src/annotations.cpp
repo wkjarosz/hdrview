@@ -212,8 +212,9 @@ void append_vg_commands(std::vector<VgCommand> &out, const Annotation &a, float 
     {
         // The interpreter draws text in the *fill* color, so the one color the user picked goes there.
         out.push_back(cmd(VgCommand::Type::FontFace, {}, a.font_face));
-        out.push_back(cmd(VgCommand::Type::FontSize,
-                          {a.font_size, float(a.font_size_relative ? VgCommand::Relative : VgCommand::Absolute)}));
+        out.push_back(
+            cmd(VgCommand::Type::FontSize, {a.font_size, float(a.font_size_relative ? VgCommand::ScaleKind_Relative
+                                                                                    : VgCommand::ScaleKind_Absolute)}));
         out.push_back(cmd(VgCommand::Type::TextAlign, {float(a.text_align)}));
         out.push_back(cmd(VgCommand::Type::FillColor, color_floats(a.stroke_color)));
         out.push_back(cmd(VgCommand::Type::Text, {a.p0().x, a.p0().y}, a.text));
@@ -221,7 +222,8 @@ void append_vg_commands(std::vector<VgCommand> &out, const Annotation &a, float 
     }
 
     out.push_back(cmd(VgCommand::Type::StrokeWidth,
-                      {a.stroke_width, float(a.stroke_width_relative ? VgCommand::Relative : VgCommand::Absolute)}));
+                      {a.stroke_width, float(a.stroke_width_relative ? VgCommand::ScaleKind_Relative
+                                                                     : VgCommand::ScaleKind_Absolute)}));
     out.push_back(cmd(VgCommand::Type::StrokeColor, color_floats(a.stroke_color)));
 
     if (a.shape == Annotation::Shape::Arrow)
@@ -316,20 +318,20 @@ float distance_to_segment(float2 p, float2 a, float2 b)
 /**
     The inverse of what aligned_text_pos() subtracts, so an anchor can be recovered from a box.
 */
-float2 text_anchor_offset(int align, float2 extent)
+float2 text_anchor_offset(VgCommand::TextAlign align, float2 extent)
 {
     float x = 0.f;
-    if (align & VgCommand::AlignCenter)
+    if (align & VgCommand::TextAlign_Center)
         x = extent.x * 0.5f;
-    else if (align & VgCommand::AlignRight)
+    else if (align & VgCommand::TextAlign_Right)
         x = extent.x;
 
     float y = 0.f;
-    if (align & VgCommand::AlignMiddle)
+    if (align & VgCommand::TextAlign_Middle)
         y = extent.y * 0.5f;
-    else if (align & VgCommand::AlignBottom)
+    else if (align & VgCommand::TextAlign_Bottom)
         y = extent.y;
-    else if (align & VgCommand::AlignBaseline)
+    else if (align & VgCommand::TextAlign_Baseline)
         y = extent.y * 0.8f;
 
     return float2{x, y};

@@ -125,8 +125,8 @@ TEST_CASE("What a TIFF declares about its fourth sample, and what an override do
     struct Case
     {
         std::optional<uint16_t>          declared; // EXTRASAMPLES, or nothing
-        std::optional<TransparencyType_> override_with;
-        TransparencyType_                from_file;
+        std::optional<TransparencyType>  override_with;
+        TransparencyType                 from_file;
         bool                             assumed;
     };
 

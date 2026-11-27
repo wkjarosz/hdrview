@@ -221,10 +221,10 @@ TEST_CASE("PixelStats::calculate takes its bin count from the channel's bit dept
     static_assert(PixelStats::MAX_BINS == 512, "the counts below assume 512 bins of storage");
     const std::pair<int, int> counts[] = {{1, 2},    {2, 4},    {8, 256},  {9, 512}, {10, 512}, {12, 512},
                                           {14, 512}, {16, 512}, {32, 512}, {0, 512}, {-1, 512}, {64, 512}};
-    for (const auto &[bits, want] : counts)
+    for (const auto &count : counts)
     {
-        CAPTURE(bits);
-        CHECK(PixelStats::bins_for_bit_depth(bits) == want);
+        CAPTURE(count.first);
+        CHECK(PixelStats::bins_for_bit_depth(count.first) == count.second);
     }
 
     for (int bits = -1; bits <= 64; ++bits)

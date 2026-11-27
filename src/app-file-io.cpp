@@ -46,11 +46,12 @@ const char *const g_blend_mode_ids[BlendMode_COUNT] = {
     "difference", "relative_difference"};
 const char *const g_tonemap_ids[Tonemap_COUNT]  = {"gamma", "false_color", "positive_negative"};
 const char *const g_channel_ids[Channels_COUNT] = {"rgba", "rgb", "red", "green", "blue", "alpha", "y"};
-const char *const g_bg_mode_ids[BGMode_COUNT]   = {"black", "white", "dark_checker", "light_checker", "custom_color"};
+const char *const g_bg_mode_ids[BackgroundMode_COUNT] = {"black", "white", "dark_checker", "light_checker",
+                                                         "custom_color"};
 // A session records the alpha override the user chose, not the interpretation it produced: with no override
 // the file is read afresh, so a corrected loader or an edited file is picked up. The trailing entry is that
 // "no override" case, which is why this table is one longer than the enum.
-const char *const g_transparency_type_ids[TransparencyType_Count + 1] = {"none", "premultiplied-linear",
+const char *const g_transparency_type_ids[TransparencyType_COUNT + 1] = {"none", "premultiplied-linear",
                                                                          "premultiplied-nonlinear", "straight", ""};
 
 template <typename Enum, size_t N>
@@ -74,11 +75,10 @@ Enum id_to_enum(const json &j, const char *key, const char *const (&ids)[N], Enu
 }
 
 // The alpha override an image entry asks for, empty when it uses the file's own interpretation.
-optional<TransparencyType_> transparency_override_from_id(const json &j)
+optional<TransparencyType> transparency_override_from_id(const json &j)
 {
-    auto at =
-        id_to_enum(j, "transparency_override", g_transparency_type_ids, (TransparencyType_)TransparencyType_Count);
-    return at == TransparencyType_Count ? optional<TransparencyType_>{} : at;
+    auto at = id_to_enum(j, "transparency_override", g_transparency_type_ids, TransparencyType_COUNT);
+    return at == TransparencyType_COUNT ? optional<TransparencyType>{} : at;
 }
 
 // Checks "type"/"version" on a parsed session manifest (`source_name` is a filename or zip archive name,
@@ -1329,7 +1329,7 @@ struct HDRViewApp::LoadingSession
     {
         fs::path                    path;
         string                      channel_selector;
-        optional<TransparencyType_> transparency_override; ///< Empty when the file's own interpretation was used
+        optional<TransparencyType>  transparency_override; ///< Empty when the file's own interpretation was used
         int                         selected_group = 0, reference_group = 0;
         vector<string>              selected_channels; ///< The multi-selection, by channel name; see Channel::selected
         vector<Annotation>          annotations;       ///< The user's markup over this image, in draw order
@@ -1337,13 +1337,13 @@ struct HDRViewApp::LoadingSession
     };
     vector<Entry> entries;                                  ///< One per saved "images" entry, in file order
     int           current_index = -1, reference_index = -1; ///< Index into entries, or -1 if unset
-    BlendMode_    blend_mode;
+    BlendMode     blend_mode;
     json          view; ///< The session file's "view" sub-object, applied verbatim once loading completes
 
     // An arrival fills the earliest entry sharing its load options. Entries sharing a key ask for identical
     // content, so any one-to-one assignment is right whatever order the loads finish in.
     using Key =
-        std::tuple<fs::path, string, optional<TransparencyType_>>; ///< path, channel_selector, transparency_override
+        std::tuple<fs::path, string, optional<TransparencyType>>; ///< path, channel_selector, transparency_override
     map<Key, deque<int>> unresolved;
 };
 

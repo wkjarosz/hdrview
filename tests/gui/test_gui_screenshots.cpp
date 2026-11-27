@@ -370,7 +370,7 @@ void annotate_subject()
     caption.text   = "look here";
     // anchored to the right of the words and centered on them, so they sit beside the arrow's tail instead
     // of across the shaft
-    caption.text_align = VgCommand::AlignRight | VgCommand::AlignMiddle;
+    caption.text_align = VgCommand::TextAlign_Right | VgCommand::TextAlign_Middle;
     // in image pixels, so the caption keeps its size relative to what it names, and a fraction of the
     // height because the subject's resolution is not known here
     caption.font_size          = 0.05f * extent.y;

@@ -322,7 +322,8 @@ void PlotMultiHistograms(const char *label, int num_hists, const char **names, c
     Displayed32/8/Hex read its `displayed` array, already run through the app's exposure/tonemap/gamma/sRGB
     pipeline.
 */
-enum ChannelDisplayMode_ : int
+using ChannelDisplayMode = int;
+enum ChannelDisplayMode_ : ChannelDisplayMode
 {
     ChannelDisplayMode_Raw = 0,
     ChannelDisplayMode_ExposureAdjusted,

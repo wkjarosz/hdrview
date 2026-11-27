@@ -29,7 +29,7 @@ struct ImageLoadOptions
 
     bool override_transparency = false;
     /// Override what the file says about its alpha and interpret it this way instead. See Image::transparency.
-    TransparencyType_ transparency_override = TransparencyType_Straight;
+    TransparencyType transparency_override = TransparencyType_Straight;
 
     bool override_profile = false;
     /// Override any metadata in the file and decode pixel values using this color gamut.

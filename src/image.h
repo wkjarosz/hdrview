@@ -113,13 +113,13 @@ struct PixelStats
 
     struct Settings
     {
-        float      exposure   = 0.f;
-        AxisScale  x_scale    = AxisScale_Linear;
-        AxisScale  y_scale    = AxisScale_Linear;
-        Box2i      roi        = Box2i{int2{0}};
-        BlendMode_ blend_mode = BlendMode_Normal;
-        int        ref_id     = -1;
-        int        ref_group  = -1;
+        float     exposure   = 0.f;
+        AxisScale x_scale    = AxisScale_Linear;
+        AxisScale y_scale    = AxisScale_Linear;
+        Box2i     roi        = Box2i{int2{0}};
+        BlendMode blend_mode = BlendMode_Normal;
+        int       ref_id     = -1;
+        int       ref_group  = -1;
 
         /// Image::content_version of the measured image, and of the reference when one is blended in.
         /**
@@ -509,7 +509,7 @@ struct ImageMetadata
     /**
         Empty when the file's own interpretation was used, which is then re-derived on reload.
     */
-    std::optional<TransparencyType_> transparency_override;
+    std::optional<TransparencyType>  transparency_override;
     Box2i                            data_window;
     Box2i                            display_window;
     std::optional<Chromaticities>    chromaticities;             ///< The chromaticities of the file
@@ -526,9 +526,9 @@ struct ImageMetadata
         channel out of an alpha-bearing group, so nothing is multiplied by it. Read by finalize(), so set
         it before calling. Equal to transparency_from_file unless transparency_override replaced it.
     */
-    TransparencyType_ transparency = TransparencyType_None;
+    TransparencyType transparency = TransparencyType_None;
     /// What the loader concluded before any override, so the override can say what it displaced.
-    TransparencyType_ transparency_from_file = TransparencyType_None;
+    TransparencyType transparency_from_file = TransparencyType_None;
     /// True when nothing in the file stated the alpha kind and the loader picked a default.
     bool                 transparency_assumed = false;
     json                 metadata             = json::object();
@@ -653,7 +653,7 @@ public:
         premultiplication decisions they have to make while the samples are still encoded. Pass
         `assumed` when nothing in the file stated the kind.
     */
-    void set_transparency(TransparencyType_ from_file, const std::optional<TransparencyType_> &override_with,
+    void set_transparency(TransparencyType from_file, const std::optional<TransparencyType> &override_with,
                           bool assumed = false);
 
     /// Set transparency from the channel names alone, for an image not built from a file.
@@ -819,19 +819,20 @@ public:
         Nothing is resampled: the image gains empty margins or loses what falls outside. New samples are
         zero.
     */
-    enum CanvasAnchor : int
+    using CanvasAnchor = int;
+    enum CanvasAnchor_ : CanvasAnchor
     {
-        Anchor_TopLeft = 0,
-        Anchor_TopCenter,
-        Anchor_TopRight,
-        Anchor_MiddleLeft,
-        Anchor_MiddleCenter,
-        Anchor_MiddleRight,
-        Anchor_BottomLeft,
-        Anchor_BottomCenter,
-        Anchor_BottomRight,
+        CanvasAnchor_TopLeft = 0,
+        CanvasAnchor_TopCenter,
+        CanvasAnchor_TopRight,
+        CanvasAnchor_MiddleLeft,
+        CanvasAnchor_MiddleCenter,
+        CanvasAnchor_MiddleRight,
+        CanvasAnchor_BottomLeft,
+        CanvasAnchor_BottomCenter,
+        CanvasAnchor_BottomRight,
 
-        Anchor_COUNT
+        CanvasAnchor_COUNT
     };
     void resize_canvas(int2 size, CanvasAnchor anchor);
 

@@ -309,7 +309,7 @@ public:
                         break;
                     }
             },
-            structure_undo, Extent_Structure);
+            structure_undo, EditExtent_Structure);
     }
 };
 
