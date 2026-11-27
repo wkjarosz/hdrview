@@ -470,15 +470,17 @@ TEST_CASE("A cube map's faces join up, so a read at a face edge continues onto t
 
 TEST_CASE("Every edge of a mapping's image is read as the sphere continues past it")
 {
-    // An output sample moved within its own chart, the image or a cube face, lands where the mapping puts the point it
-    // was moved to; moved past the chart, it continues onto the sphere, which the reconstruction below holds the
-    // output's edges to as it holds the source's.
+    // A cube layout's sample moved within its face, across the plane of the face, lands where the layout puts the
+    // point it was moved to. The other mappings move a sample across the image itself, which inside it is the
+    // mapping's own function by definition; what they do past an edge is held below, by the reconstruction.
     for (int m = 0; m < EnvMapping_COUNT; ++m)
     {
+        if (!shader::envmap_is_cube(m))
+            continue;
         CAPTURE(std::string(name_of(m)));
         const int2 size  = size_for(m, 72);
-        const int  face  = shader::envmap_is_cube(m) ? shader::envmap_face_size(m, size) : 0;
-        const auto chart = [&](float2 q) { return face ? int2(la::floor(q / float(face))) : int2{0}; };
+        const int  face  = shader::envmap_face_size(m, size);
+        const auto chart = [&](float2 q) { return int2(la::floor(q / float(face))); };
         float      worst = 0.f;
         for (int y = 0; y < size.y; y += 3)
             for (int x = 0; x < size.x; x += 3)
