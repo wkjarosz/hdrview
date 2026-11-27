@@ -52,7 +52,7 @@ TEST_CASE("The alpha pair divides out and restores post-transfer premultiplicati
     const int2  size{3, 2};
     const float alphas[] = {0.5f, 0.f, 0.8f, 0.25f, 1.f, 0.f};
 
-    for (TransparencyType_ t = TransparencyType_None; t < TransparencyType_Count; ++t)
+    for (TransparencyType t = TransparencyType_None; t < TransparencyType_COUNT; ++t)
         for (int n = 1; n <= 4; ++n)
         {
             CAPTURE(transparency_type_name(t));
@@ -178,7 +178,7 @@ TEST_CASE("Every loader reports the alpha kind its format settles")
     {
         const char                                        *name;
         std::function<void(const Image &, std::ostream &)> save;
-        TransparencyType_                                  from_file;
+        TransparencyType                                   from_file;
     };
 
     const std::vector<Case> cases = {

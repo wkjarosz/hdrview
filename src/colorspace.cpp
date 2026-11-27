@@ -484,9 +484,9 @@ static const char *s_transparency_type_names[] = {"None", "Premultiplied Linear"
 static const char *s_transparency_override_names[] = {"None", "Premultiplied, in linear light",
                                                       "Premultiplied, after transfer", "Straight", nullptr};
 
-const char *transparency_type_name(TransparencyType_ at) { return s_transparency_type_names[at]; }
+const char *transparency_type_name(TransparencyType at) { return s_transparency_type_names[at]; }
 
-const char *transparency_override_name(TransparencyType_ at) { return s_transparency_override_names[at]; }
+const char *transparency_override_name(TransparencyType at) { return s_transparency_override_names[at]; }
 
 const char **transparency_type_names() { return s_transparency_type_names; }
 

@@ -421,7 +421,7 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
                                            const std::vector<uint8_t> &handle_level_icc_profile,
                                            const ImageLoadOptions &opts, int3 &size, int cpp, int num_planes,
                                            const heif_channel out_planes[], const string &partname,
-                                           TransparencyType_ transparency)
+                                           TransparencyType transparency)
 {
     int img_w = heif_image_get_width(himage, out_planes[0]);
     int img_h = heif_image_get_height(himage, out_planes[0]);
@@ -882,12 +882,12 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                 // MIAF marks premultiplied alpha with a 'prem' reference from the master item to the alpha
                 // one; its absence means straight, so only its presence is something the file stated
                 const bool              premultiplied = heif_image_handle_is_premultiplied_alpha(ihandle.get());
-                const TransparencyType_ from_file =
+                const TransparencyType  from_file =
                     !has_alpha ? TransparencyType_None
                                : (premultiplied ? TransparencyType_PremultipliedLinear : TransparencyType_Straight);
 
                 // resolved before decoding, since the color management below brackets itself with it
-                const TransparencyType_ transparency = transparency_override_of(opts).value_or(from_file);
+                const TransparencyType transparency = transparency_override_of(opts).value_or(from_file);
 
                 // create Image from decoded heif_image; process_decoded_heif_image will create and fill pixel data
                 ImagePtr image = process_decoded_heif_image(himage.get(), handle_level_nclx.get(),

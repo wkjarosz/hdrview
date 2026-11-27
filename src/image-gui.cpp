@@ -540,7 +540,7 @@ void Image::draw_info()
                                 changed = true;
                             }
 
-                            for (TransparencyType_ a = 0; a < TransparencyType_Count; ++a)
+                            for (TransparencyType a = 0; a < TransparencyType_COUNT; ++a)
                                 if (ImGui::Selectable(transparency_override_name(a),
                                                       transparency_override && *transparency_override == a))
                                 {

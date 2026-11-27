@@ -632,7 +632,7 @@ void Image::draw_colorspace()
                                                     ImGuiComboFlags_HeightLargest);
                 if (open_combo)
                 {
-                    for (AdaptationMethod_ n = 0; n < AdaptationMethod_Count; ++n)
+                    for (AdaptationMethod n = 0; n < AdaptationMethod_COUNT; ++n)
                     {
                         auto       am          = (AdaptationMethod)n;
                         const bool is_selected = (adaptation_method == am);

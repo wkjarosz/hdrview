@@ -91,7 +91,7 @@ public:
 
         if (ImGui::BeginCombo("Adaptation", adaptation_method_name(AdaptationMethod(m_method))))
         {
-            for (int n = 0; n < AdaptationMethod_Count; ++n)
+            for (int n = 0; n < AdaptationMethod_COUNT; ++n)
                 if (ImGui::Selectable(adaptation_method_name(AdaptationMethod(n)), m_method == n))
                     m_method = n;
             ImGui::EndCombo();

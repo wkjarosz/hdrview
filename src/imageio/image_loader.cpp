@@ -927,7 +927,7 @@ void draw_load_image_options_dialog(bool &open)
             ImGui::PushItemWidth(ImGui::CalcItemWidth() - ImGui::GetStyle().IndentSpacing);
             if (ImGui::BeginCombo("Transparency", transparency_override_name(s_opts.transparency_override)))
             {
-                for (TransparencyType_ a = 0; a < TransparencyType_Count; ++a)
+                for (TransparencyType a = 0; a < TransparencyType_COUNT; ++a)
                 {
                     const bool is_selected = s_opts.transparency_override == a;
                     if (ImGui::Selectable(transparency_override_name(a), is_selected))
