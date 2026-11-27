@@ -73,6 +73,10 @@ EM_JS(void, hdrview_clipboard_listen, (), {
     // comes too late. During each click and key press, the GLFW port requests an animation frame callback, which
     // Safari counts as part of the press, and runs the actions deferred to it there, as it does for its own text
     // clipboard. The extra request here runs an action queued with no press pending, which Chrome and Firefox allow.
+    // The port requests one only for mouse and key events, and a tap sends no mouse events, since the port cancels
+    // the touch's default handling; so a lifted finger requests one too.
+    if (typeof GLFW3 != 'undefined')
+        document.addEventListener('touchend', function() { requestAnimationFrame(GLFW3.executeDeferredActions); });
     globalThis.hdrview_clipboard_soon = function(action)
     {
         if (typeof GLFW3 == 'undefined')
