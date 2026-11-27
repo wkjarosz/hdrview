@@ -323,23 +323,6 @@ TEST_CASE("A fourth component is alpha or ink depending on what the color space 
             CHECK(cmyk->channels[c](i) == doctest::Approx(comps[c].samples[i] / 255.).epsilon(1e-5));
 }
 
-TEST_CASE("Both JPEG 2000 syntaxes decode to the same pixels")
-{
-    std::vector<int32_t> wrote;
-    const auto           jp2 = ramp_codestream(12, false, 8, 4, wrote, OPJ_CODEC_JP2);
-    const auto           j2k = ramp_codestream(12, false, 8, 4, wrote, OPJ_CODEC_J2K);
-
-    const auto from_jp2 = load_bytes(load_j2k_image, jp2, "ramp.jp2", raw_load_options());
-    const auto from_j2k = load_bytes(load_j2k_image, j2k, "ramp.j2k", raw_load_options());
-    REQUIRE(from_jp2);
-    REQUIRE(from_j2k);
-    CHECK(samples(from_jp2) == samples(from_j2k));
-
-    // only the boxed syntax records a brand, and only it can carry a color space or metadata
-    CHECK(from_jp2->metadata["header"].contains("Brand"));
-    CHECK_FALSE(from_j2k->metadata["header"].contains("Brand"));
-}
-
 TEST_CASE("A bit depth the writer does not offer is refused, not quietly changed")
 {
     // the depths the dialog does offer are each a setting of test_export_roundtrip.cpp's sweeps
@@ -398,6 +381,15 @@ TEST_CASE("The sniff accepts both JPEG 2000 syntaxes and nothing else")
     {
         std::istringstream in(other, std::ios::binary);
         CHECK_FALSE(is_j2k_image(in));
+    }
+
+    // only the boxed syntax records a brand, and only it can carry a color space or metadata; the export round trip
+    // holds both syntaxes' pixels
+    for (const auto codec : {OPJ_CODEC_JP2, OPJ_CODEC_J2K})
+    {
+        const auto img = load_bytes(load_j2k_image, ramp_codestream(8, false, 4, 4, wrote, codec), "ramp");
+        REQUIRE(img);
+        CHECK(img->metadata["header"].contains("Brand") == (codec == OPJ_CODEC_JP2));
     }
 }
 
