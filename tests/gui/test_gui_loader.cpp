@@ -75,13 +75,13 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         IM_CHECK_EQ(hdrview()->num_images(), 1);
         IM_CHECK(is_watched(watch_dir));
 
-        hdrview()->close_image(0);
+        on_main_thread(ctx, [] { hdrview()->close_image(0); });
         IM_CHECK_EQ(hdrview()->num_images(), 0);
         IM_CHECK(is_watched(watch_dir));
 
         // nor may closing everything: the folder was asked for in its own right
         load_and_wait(ctx, {image.u8string()});
-        hdrview()->close_all_images();
+        on_main_thread(ctx, [] { hdrview()->close_all_images(); });
         IM_CHECK(is_watched(watch_dir));
 
         // the X button beside it in the watched-folders table removes it, and must still work
@@ -95,7 +95,7 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         wait_for_loads(ctx);
         IM_CHECK_EQ(hdrview()->num_images(), 1);
         IM_CHECK(is_watched(image_dir));
-        hdrview()->close_image(0);
+        on_main_thread(ctx, [] { hdrview()->close_image(0); });
         IM_CHECK(!is_watched(image_dir));
 
         std::error_code ec;
@@ -160,7 +160,7 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         IM_CHECK(hdrview()->image(0) != original);
         IM_CHECK(hdrview()->image(0)->path == fs::path(file));
 
-        reset_images(ctx);
+        reset_images(ctx, original);
         std::error_code ec;
         fs::remove_all(dir, ec);
     };
@@ -256,7 +256,7 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         IM_CHECK_EQ(hdrview()->num_images(), 1);
 
         hdrview()->reload_image(hdrview()->image(0));
-        hdrview()->close_image(0);
+        on_main_thread(ctx, [] { hdrview()->close_image(0); });
         IM_CHECK_EQ(hdrview()->num_images(), 0);
 
         wait_for_loads(ctx);

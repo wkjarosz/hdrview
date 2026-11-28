@@ -47,7 +47,7 @@ void RegisterTests_Lifetime(ImGuiTestEngine *engine)
         for (int c = 0; c < group.num_channels; ++c)
             img->channels[group.channels[c]].update_stats(c, hdrview()->current_image(), hdrview()->reference_image());
 
-        hdrview()->close_image(1);
+        on_main_thread(ctx, [] { hdrview()->close_image(1); });
 
         // a soak, not a wait: there is no state to wait for, only a window in which the worker may touch
         // channels it no longer owns, and the sanitizer job is what catches that

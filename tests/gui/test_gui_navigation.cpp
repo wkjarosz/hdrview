@@ -199,7 +199,7 @@ void RegisterTests_Navigation(ImGuiTestEngine *engine)
     {
         ctx->SetRef("Images");
         ctx->ItemInputValue("##file filter", "");
-        hdrview()->close_all_images();
+        on_main_thread(ctx, [] { hdrview()->close_all_images(); });
 
         // three rows, so the range has a middle that a chord selecting only its ends would miss
         hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE, HDRVIEW_GUI_TEST_IMAGE_2, HDRVIEW_GUI_TEST_IMAGE});

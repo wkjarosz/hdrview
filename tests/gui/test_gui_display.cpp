@@ -202,6 +202,6 @@ void RegisterTests_Display(ImGuiTestEngine *engine)
 
         hdrview()->channel()    = channel;
         hdrview()->blend_mode() = blend;
-        reset_images(ctx);
+        reset_images(ctx, img, cur, other);
     };
 }

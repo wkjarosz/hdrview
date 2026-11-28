@@ -532,7 +532,12 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         // edits is withdrawn, the command palette and the keyboard chords reaching the same actions, but reading
         // the image is not editing it.
         img->is_live = true;
-        OnExit restore{[img] { img->is_live = false; }};
+        // weakly, so the cleanup does not outlive the image and leave the test holding the last reference to it
+        OnExit restore{[w = std::weak_ptr<Image>(img)]
+                       {
+                           if (auto live = w.lock())
+                               live->is_live = false;
+                       }};
         ctx->Yield();
         for (const auto &cmd : all_edit_commands())
         {
@@ -550,7 +555,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK_EQ(app->action("Paste").enabled(), false);
 
         app->set_clipboard(nullptr);
-        reset_images(ctx);
+        reset_images(ctx, img);
     };
 
     // Copy puts the image's own values on the system clipboard, as a half-float TIFF and a PQ PNG, and Copy as SDR
@@ -725,7 +730,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         }
 
         // with no image open, Paste opens the clipboard's image, as File > From clipboard does beside open images
-        reset_images(ctx);
+        reset_images(ctx, img);
         app->set_clipboard(nullptr);
         ctx->Yield();
         IM_CHECK_EQ(app->action("Paste").enabled(), true);
@@ -841,7 +846,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
             for (int i = 0; i < 5; ++i) IM_CHECK_EQ(part->channels[c](i, i), original->channels[c](at.x + i, at.y + i));
 
         hdrview()->set_selection(Box2i{});
-        reset_images(ctx);
+        reset_images(ctx, original, copy, part);
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "the history panel lists every state and moves between them");
@@ -887,7 +892,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         ctx->Yield(2);
         IM_CHECK(snapshot(img) == rotated);
 
-        reset_images(ctx);
+        reset_images(ctx, img);
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "each blur mode is reachable and brings its own controls");
@@ -1277,6 +1282,6 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         menu_click(ctx, "Edit/Undo");
         IM_CHECK(img->size() == original);
 
-        reset_images(ctx);
+        reset_images(ctx, img);
     };
 }

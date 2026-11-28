@@ -29,7 +29,7 @@ void RegisterTests_Info(ImGuiTestEngine *engine)
         IM_CHECK(hdrview()->action("Reload image").enabled());
         IM_CHECK(hdrview()->action("Reload all images").enabled());
 
-        hdrview()->close_all_images();
+        hdrview_test::on_main_thread(ctx, [] { hdrview()->close_all_images(); });
         ctx->Yield();
         IM_CHECK(!hdrview()->action("Reload image").enabled());
         IM_CHECK(!hdrview()->action("Reload all images").enabled());
