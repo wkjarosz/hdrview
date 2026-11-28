@@ -57,12 +57,12 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
 
         // loading the session once is what puts it in the recent list, through the call the GLFW drop callback,
         // CLI args and Finder "Open With" all funnel through
-        hdrview()->close_all_images();
+        on_main_thread(ctx, [] { hdrview()->close_all_images(); });
         hdrview()->load_images({session_path.string()});
         wait_for_loads(ctx);
         IM_CHECK_EQ(hdrview()->num_images(), 1);
 
-        hdrview()->close_all_images();
+        on_main_thread(ctx, [] { hdrview()->close_all_images(); });
         ctx->Yield();
         IM_CHECK_EQ(hdrview()->num_images(), 0);
 
@@ -101,7 +101,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
             session_manifest({fixture_entry({{"selected_group", 0}}), fixture_entry({{"reference_group", 1}})}, 1),
             "hdrview_test_duplicate.hsess");
 
-        hdrview()->close_all_images();
+        on_main_thread(ctx, [] { hdrview()->close_all_images(); });
         // load_session(const string&) is the non-dialog overload load_images() dispatches .hsess paths to
         hdrview()->load_session(session_path.string());
         wait_for_loads(ctx);
@@ -160,7 +160,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         const fs::path session_path =
             write_temp_session(session_manifest({fixture_entry(), missing}, 1), "hdrview_test_missing.hsess");
 
-        hdrview()->close_all_images();
+        on_main_thread(ctx, [] { hdrview()->close_all_images(); });
         hdrview()->load_session(session_path.string());
         wait_for_loads(ctx);
 
@@ -188,7 +188,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         const fs::path session_path =
             write_temp_session(session_manifest({entry}, -1, view), "hdrview_test_out_of_range.hsess");
 
-        hdrview()->close_all_images();
+        on_main_thread(ctx, [] { hdrview()->close_all_images(); });
         hdrview()->load_session(session_path.string());
         wait_for_loads(ctx);
 

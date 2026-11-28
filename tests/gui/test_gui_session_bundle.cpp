@@ -62,7 +62,7 @@ void RegisterTests_SessionBundle(ImGuiTestEngine *engine)
         for (bool explicitly : {false, true})
         {
             ctx->LogInfo("through %s", explicitly ? "load_session()" : "load_images()");
-            hdrview()->close_all_images();
+            on_main_thread(ctx, [] { hdrview()->close_all_images(); });
             hdrview()->blend_mode() = BlendMode_Normal;
             if (explicitly)
                 hdrview()->load_session(zip_path.string());
@@ -89,7 +89,7 @@ void RegisterTests_SessionBundle(ImGuiTestEngine *engine)
 
         // "Load session..." on it loads nothing, rather than falling back to its images; drained first, so a
         // fallback would have landed by the time the list is read
-        hdrview()->close_all_images();
+        on_main_thread(ctx, [] { hdrview()->close_all_images(); });
         hdrview()->load_session(zip_path.string());
         wait_for_loads(ctx);
         ctx->Yield(2);

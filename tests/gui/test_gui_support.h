@@ -21,6 +21,7 @@
 #include "imgui_test_engine/imgui_te_context.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -93,11 +94,44 @@ inline std::string edit_menu_item(const std::string &name, const std::string &la
            escaped(label.empty() ? name : label);
 }
 
-/// Closes everything without prompting and waits for the list to empty, so a test starts from a known state.
-inline void reset_images(ImGuiTestContext *ctx)
+/// Runs \p f on the main thread and waits for it, for work a test may not do on its own thread.
+/**
+    Anything that destroys an image belongs here: Image's destructor deletes its textures, and the GL context is
+    current on the main thread alone, so the same call from the Test Engine's coroutine thread deletes them with no
+    context and faults.
+*/
+inline void on_main_thread(ImGuiTestContext *ctx, std::function<void()> f)
 {
-    hdrview()->close_all_images_immediately();
-    wait_until(ctx, [] { return hdrview()->num_images() == 0; });
+    auto done = std::make_shared<std::atomic_bool>(false);
+    hdrview()->post_to_main_thread(
+        [f = std::move(f), done]
+        {
+            f();
+            done->store(true);
+        });
+    hdrview()->wake_event_loop();
+    wait_until(ctx, [done] { return done->load(); });
+}
+
+/// Closes everything without prompting and waits for the list to empty, so a test starts from a known state.
+/**
+    An image's destructor deletes its textures, which is a GL call, and the context is current on the main thread
+    alone, so both the close and the release of every \p held reference the test still owns happen there. A test
+    that keeps an image across this call must hand it over here, since once the list is closed the test holds the
+    last reference and would otherwise destroy it on the Test Engine's coroutine thread.
+*/
+template <typename... Held> void reset_images(ImGuiTestContext *ctx, Held &...held)
+{
+    auto keep = std::make_shared<std::vector<ConstImagePtr>>();
+    keep->reserve(sizeof...(held));
+    (keep->push_back(std::move(held)), ...);
+    // waiting on the close itself, not on an empty list, which an earlier close may already have left behind
+    on_main_thread(ctx,
+                   [keep]
+                   {
+                       hdrview()->close_all_images_immediately();
+                       keep->clear();
+                   });
     // and at 100%, which a reshaping edit's refit or a test's zoom would otherwise carry into the next image loaded
     hdrview()->set_zoom(1.f);
 }

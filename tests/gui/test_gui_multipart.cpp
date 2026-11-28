@@ -25,7 +25,7 @@ using namespace hdrview_test;
 // current_image_index() pointing at no particular part, so this pins it to 0.
 static void load_multipart(ImGuiTestContext *ctx)
 {
-    hdrview()->close_all_images();
+    on_main_thread(ctx, [] { hdrview()->close_all_images(); });
     hdrview()->load_images({std::string(HDRVIEW_TEST_OPENEXR_DIR) + "/multipart.0001.exr"});
 
     // every part arrives from one background load, so an empty queue means all of them have
