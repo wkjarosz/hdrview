@@ -26,15 +26,15 @@ struct ClipboardFile
 
 /// Replace what the system clipboard holds with \p files, encodings of one image, returning whether that worked.
 /**
-    Other applications choose among the encodings; where a copy can hold only one, as on Wayland and the web, it holds
-    the PNG. On the web, the write has only started when this returns.
+    Other applications choose among the encodings. Where a copy holds only one, it holds the EXR, which carries the
+    samples as they are; the browsers take only the PNG. On the web, the write has only started when this returns.
 */
 bool set_clipboard_files(const std::vector<ClipboardFile> &files);
 
 /// Whether a copy can put a file of MIME type \p type on the system clipboard.
 /**
-    Windows has no name for TIFF that other applications read, and Wayland's GLFW fork and the browsers hold one file
-    per copy, the PNG.
+    Windows has no name for TIFF or EXR that other applications read, Wayland's GLFW fork holds one file per copy,
+    the EXR, and the browsers one too, the PNG.
 */
 bool clipboard_carries(const std::string &type);
 
@@ -62,8 +62,10 @@ void read_clipboard_image(std::function<void(ClipboardRead)> done);
 
 /// Whether \p file is one of the encodings set_clipboard_files() last put on the system clipboard.
 /**
-    Browsers re-encode the images a page writes, so on the web this asks instead whether this page copied last and
-    has kept the focus since: another application can copy only while it has the focus.
+    Recognized by its bytes, not by the format it came back as, since Wayland's GLFW fork hands HDRView's own copy
+    back whatever format is asked for. Browsers re-encode the images a page writes, so on the web this asks instead
+    whether this page copied last and has kept the focus since: another application can copy only while it has the
+    focus.
 */
 bool is_own_clipboard_file(const ClipboardFile &file);
 
@@ -85,7 +87,7 @@ void watch_clipboard();
 
 /// Keep the clipboard in memory, apart from the system's, as the GUI tests do, returning its encodings to fill.
 /**
-    A read takes a TIFF before a PNG, as the system clipboard's does. Whatever a test writes there directly reads as
-    another application's copy, since set_clipboard_files() did not write it.
+    A read prefers the encoding of widest range, as the system clipboard's does. Whatever a test writes there
+    directly reads as another application's copy, since set_clipboard_files() did not write it.
 */
 std::vector<ClipboardFile> &use_private_clipboard();

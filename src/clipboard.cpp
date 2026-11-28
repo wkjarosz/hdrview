@@ -20,9 +20,12 @@ namespace
 {
 
 /// One of the encodings set_clipboard_files() last wrote, to recognize it when it is read back.
+/**
+    Its bytes alone, since Wayland's GLFW fork hands HDRView's own copy back whatever format is asked for, and two
+    encodings of one image never share them anyway.
+*/
 struct OwnFile
 {
-    string type;
     size_t size = 0;
     size_t hash = 0;
 };
@@ -35,10 +38,10 @@ vector<ClipboardFile> s_private;
 
 bool s_holds_image = false; ///< See clipboard_holds_image(), for a clipboard that can be asked
 
-/// The file among \p files that a read takes: a TIFF, since it can hold floats, then a PNG, then any other.
+/// The file among \p files that a read takes, widest range first, then any other.
 optional<ClipboardFile> preferred_file(const vector<ClipboardFile> &files)
 {
-    for (const char *type : {"image/tiff", "image/png"})
+    for (const char *type : {"image/tiff", "image/png", "image/x-exr", "image/exr"})
         for (const auto &f : files)
             if (f.type == type && !f.bytes.empty())
                 return f;
@@ -64,7 +67,7 @@ bool set_clipboard_files(const vector<ClipboardFile> &files)
         return false;
 
     s_own.clear();
-    for (const auto &f : files) s_own.push_back({f.type, f.bytes.size(), hash_bytes(f.bytes)});
+    for (const auto &f : files) s_own.push_back({f.bytes.size(), hash_bytes(f.bytes)});
     s_holds_image = true;
     return true;
 }
@@ -89,7 +92,7 @@ bool is_own_clipboard_file(const ClipboardFile &file)
         if (const auto own = platform::own_copy(file))
             return *own;
     for (const auto &own : s_own)
-        if (file.type == own.type && file.bytes.size() == own.size && hash_bytes(file.bytes) == own.hash)
+        if (file.bytes.size() == own.size && hash_bytes(file.bytes) == own.hash)
             return true;
     return false;
 }

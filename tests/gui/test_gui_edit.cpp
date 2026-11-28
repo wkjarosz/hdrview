@@ -15,6 +15,7 @@
 #include "edit/preview.h"
 #include "fonts.h"
 #include "image.h"
+#include "imageio/exr.h"
 #include "imageio/image_loader.h"
 #include "imageio/png.h"
 #include "imageio/streams.h"
@@ -605,7 +606,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         // out, as the selection's own values in each encoding, taken back to the image's primaries: within half's
         // precision and PQ's, where the view, an exposure away, is off by double
         menu_click(ctx, "Edit/Copy");
-        IM_CHECK_EQ(system.size(), size_t(2));
+        IM_CHECK_EQ(system.size(), size_t(3));
         for (const auto &file : system)
         {
             const auto got = decode(file);
@@ -615,12 +616,20 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
             float3x3 M{la::identity};
             color_conversion_matrix(M, got->chromaticities.value_or(Chromaticities{}),
                                     img->chromaticities.value_or(Chromaticities{}));
+            // by name, since OpenEXR stores its channels alphabetically, putting alpha first
+            const Channel *rgb[3] = {nullptr, nullptr, nullptr};
+            for (const auto &ch : got->channels)
+                for (int c = 0; c < 3; ++c)
+                    if (Channel::tail(ch.name) == string(1, "RGB"[c]))
+                        rgb[c] = &ch;
+            IM_CHECK_NO_RET(rgb[0] && rgb[1] && rgb[2]);
+            if (!rgb[0] || !rgb[1] || !rgb[2])
+                continue;
             float worst = 0.f;
             for (int y = 0; y < copied.size().y; ++y)
                 for (int x = 0; x < copied.size().x; ++x)
                 {
-                    const float3 v = mul(M, float3{got->channels[0](x, y), got->channels[1](x, y),
-                                                   got->channels[2](x, y)});
+                    const float3 v = mul(M, float3{(*rgb[0])(x, y), (*rgb[1])(x, y), (*rgb[2])(x, y)});
                     for (int c = 0; c < 3; ++c)
                     {
                         const float want = img->channels[c](copied.min - o + int2{x, y});
@@ -670,19 +679,47 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         // once another application copies an image, Paste pastes that one instead, and is offered even when HDRView
         // has copied nothing itself
-        // offered as a TIFF and a smaller PNG, of which a paste takes the TIFF, which can hold floats
+        // offered in three encodings, each a different size, of which a paste takes the TIFF: it holds floats where
+        // the PNG stops at 16-bit integers, and an EXR comes last, since an application that renders every format
+        // from one 8-bit image puts linear 8-bit values in it
+        for (int c = 0; c < 3; ++c) img->channels[c](copied.min - o) = bright;
+        const auto other_exr = [&]
+        {
+            std::ostringstream exr;
+            save_exr_image(*img->duplicate(Box2i{copied.min, copied.min + int2{7, 6}}), exr, "other.exr");
+            return exr.str();
+        }();
         {
             std::ostringstream tiff, png;
-            save_tiff_image(*img->duplicate(Box2i{o, o + int2{5, 4}}), tiff, "other.tif", TransferFunction::Linear,
-                            TIFFCompression_None, TIFFSampleType_Float32);
-            save_png_image(*img->duplicate(Box2i{o, o + int2{3, 2}}), png, "other.png", false);
-            system = {{"image/png", png.str()}, {"image/tiff", tiff.str()}};
+            save_tiff_image(*img->duplicate(Box2i{copied.min, copied.min + int2{5, 4}}), tiff, "other.tif",
+                            TransferFunction::Linear, TIFFCompression_None, TIFFSampleType_Float32);
+            save_png_image(*img->duplicate(Box2i{copied.min, copied.min + int2{3, 2}}), png, "other.png", false);
+            system = {{"image/x-exr", other_exr}, {"image/png", png.str()}, {"image/tiff", tiff.str()}};
         }
         app->set_clipboard(nullptr);
         ctx->Yield();
         IM_CHECK_EQ(app->action("Paste").enabled(), true);
         menu_click(ctx, "Edit/Paste");
         IM_CHECK(app->clipboard() != nullptr && app->clipboard()->size() == int2(5, 4));
+
+        // an EXR alone is read, under either spelling, and carries its highlight above SDR white intact
+        for (const char *type : {"image/x-exr", "image/exr"})
+        {
+            system = {{type, other_exr}};
+            app->set_clipboard(nullptr);
+            ctx->Yield();
+            menu_click(ctx, "Edit/Paste");
+            IM_CHECK(app->clipboard() != nullptr && app->clipboard()->size() == int2(7, 6));
+            if (auto pasted = app->clipboard())
+            {
+                // by name, since OpenEXR stores its channels alphabetically, putting alpha first
+                const auto red = std::find_if(pasted->channels.begin(), pasted->channels.end(),
+                                              [](const Channel &c) { return Channel::tail(c.name) == "R"; });
+                IM_CHECK(red != pasted->channels.end());
+                if (red != pasted->channels.end())
+                    IM_CHECK_LE(std::abs((*red)(int2{0, 0}) - bright) / bright, 2e-3f);
+            }
+        }
 
         // one in another color space asks first: converted, it looks as it did; not converted, it keeps its numbers
         {

@@ -46,15 +46,24 @@ struct Format
     const char *mime;
     const char *native;
 };
-// TIFF first where the platform names one, since it can hold floats, where PNG stops at 16-bit integers
+// A read takes them in this order: a TIFF can hold floats, a PNG is at most 16-bit but is the one every
+// application labels correctly, and an EXR comes last. An EXR holds floats too, but an application that renders
+// every format it offers from one 8-bit image -- Krita does -- puts linear 8-bit values in it, which quantize the
+// shadows far more coarsely than the same 8 bits through the PNG's sRGB curve.
+// Qt's and gdk-pixbuf's readers both ask for "image/x-exr", the registered type; Krita offers an EXR under
+// "image/exr", its own spelling, which only a read has to recognize.
 #if defined(__APPLE__)
-const Format k_formats[] = {{"image/tiff", "public.tiff"}, {"image/png", "public.png"}};
+const Format k_formats[] = {
+    {"image/tiff", "public.tiff"}, {"image/png", "public.png"}, {"image/x-exr", "com.ilm.openexr-image"}};
 #elif defined(_WIN32)
 // the name every Windows application registers for PNG data; TIFF has only a predefined format, which clip cannot
-// address by name
+// address by name, and no application registers one for EXR
 const Format k_formats[] = {{"image/png", "PNG"}};
 #else
-const Format k_formats[] = {{"image/tiff", "image/tiff"}, {"image/png", "image/png"}};
+const Format k_formats[] = {{"image/tiff", "image/tiff"},
+                            {"image/png", "image/png"},
+                            {"image/x-exr", "image/x-exr"},
+                            {"image/exr", "image/exr"}};
 #endif
 
 const char *native_name(const string &mime)
@@ -200,11 +209,20 @@ void read(function<void(ClipboardRead)> done)
 #if defined(__linux__)
     if (on_wayland())
     {
-        size_t        length = 0;
-        const char   *data   = glfwGetWaylandClipboardData("image/png", &length);
+        // The GLFW fork cannot list what another application offered, so each format is asked for in turn and the
+        // one that answers wins. It hands back HDRView's own copy whatever format is asked for, which is why
+        // is_own_clipboard_file() recognizes a copy by its bytes rather than by the format it came back as.
         ClipboardRead read;
-        if (data && length)
-            read.file = ClipboardFile{"image/png", string(data, length)};
+        for (const auto &f : k_formats)
+        {
+            size_t      length = 0;
+            const char *data   = glfwGetWaylandClipboardData(f.mime, &length);
+            if (data && length)
+            {
+                read.file = ClipboardFile{f.mime, string(data, length)};
+                break;
+            }
+        }
         return done(std::move(read));
     }
 #endif
@@ -237,7 +255,7 @@ bool holds_image()
     return false;
 }
 
-bool carries(const string &type) { return on_wayland() ? type == "image/png" : native_name(type) != nullptr; }
+bool carries(const string &type) { return on_wayland() ? type == "image/x-exr" : native_name(type) != nullptr; }
 
 bool keeps_hdr() { return true; }
 
