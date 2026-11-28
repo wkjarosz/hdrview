@@ -11,6 +11,7 @@
 #include "edit/filters.h"
 #include "fonts.h"
 #include "image.h"
+#include "imageio/exr.h"
 #include "imageio/image_loader.h"
 #include "imageio/png.h"
 #include "imageio/streams.h"
@@ -160,15 +161,22 @@ namespace
 /// eighth larger.
 constexpr int k_clipboard_png_level = 1;
 
-/// The image's own values, as a half-float TIFF and a PQ PNG, among which other applications choose.
+/// The image's own values, in each encoding the clipboard carries, among which other applications choose.
 /**
-    Photoshop takes the TIFF, as does HDRView's own paste, and Preview the PNG, which both show as HDR; applications
-    that show only SDR read the PNG's PQ correctly too. Where the clipboard would not keep the PQ PNG's values, the
-    PNG is 8-bit sRGB instead, clipped at SDR white.
+    The EXR and the TIFF hold the samples as they are, in the image's own primaries: Photoshop takes the TIFF, as
+    does HDRView's own paste, and a clipboard with room for one file carries the EXR. Preview takes the PQ PNG,
+    which shows as HDR, and applications that show only SDR read its PQ correctly too. Where the clipboard would not
+    keep the PQ PNG's values, the PNG is 8-bit sRGB instead, clipped at SDR white.
 */
 std::vector<ClipboardFile> encode_data(const Image &img)
 {
     std::vector<ClipboardFile> files;
+    if (clipboard_carries("image/x-exr"))
+    {
+        std::ostringstream exr;
+        save_exr_image(img, exr, "clipboard.exr");
+        files.push_back({"image/x-exr", exr.str()});
+    }
     if (clipboard_carries("image/tiff"))
     {
         std::ostringstream tiff;
@@ -177,17 +185,22 @@ std::vector<ClipboardFile> encode_data(const Image &img)
         files.push_back({"image/tiff", tiff.str()});
     }
 
-    std::ostringstream png;
-    if (clipboard_keeps_hdr())
+    if (clipboard_carries("image/png"))
     {
-        // in BT.2020's primaries, which PQ files conventionally use
-        const auto bt2020 = visible_group_in(img, gamut_chromaticities(ColorGamut_BT2020_2100), img.adaptation_method);
-        save_png_image(*bt2020, png, "clipboard.png", false, false, true, TransferFunction::BT2100_PQ,
-                       k_clipboard_png_level);
+        std::ostringstream png;
+        if (clipboard_keeps_hdr())
+        {
+            // in BT.2020's primaries, which PQ files conventionally use
+            const auto bt2020 =
+                visible_group_in(img, gamut_chromaticities(ColorGamut_BT2020_2100), img.adaptation_method);
+            save_png_image(*bt2020, png, "clipboard.png", false, false, true, TransferFunction::BT2100_PQ,
+                           k_clipboard_png_level);
+        }
+        else
+            save_png_image(img, png, "clipboard.png", true, false, false, TransferFunction::sRGB,
+                           k_clipboard_png_level);
+        files.push_back({"image/png", png.str()});
     }
-    else
-        save_png_image(img, png, "clipboard.png", true, false, false, TransferFunction::sRGB, k_clipboard_png_level);
-    files.push_back({"image/png", png.str()});
     return files;
 }
 

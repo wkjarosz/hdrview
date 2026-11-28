@@ -49,13 +49,13 @@ bool keeps_hdr();
 */
 std::optional<bool> own_copy(const ClipboardFile &file);
 
-/// The PNG among \p files, for a clipboard that holds one file per copy, or else the first.
+/// The PNG among \p files, for the browsers, which take one file per copy and only that one.
 inline const ClipboardFile *single_file(const std::vector<ClipboardFile> &files)
 {
     for (const auto &f : files)
         if (f.type == "image/png")
             return &f;
-    return files.empty() ? nullptr : &files.front();
+    return nullptr;
 }
 
 } // namespace clipboard_platform

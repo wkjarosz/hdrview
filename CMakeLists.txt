@@ -670,7 +670,8 @@ else()
     list(APPEND HDRVIEW_DEPENDENCIES "PkgConfig::DBUS")
   endif()
 
-  # The system clipboard on Windows, macOS and X11; Wayland's goes through the GLFW fork. HDRView passes encoded
+  # The system clipboard on Windows, macOS and X11; Wayland's is HDRView's own wl_data_source, in
+  # clipboard_wayland.cpp, which needs only core protocol and the display GLFW opened. HDRView passes encoded
   # files through clip's custom formats, and uses its image support only to read a Windows bitmap.
   CPMAddPackage(
     NAME clip
@@ -688,6 +689,9 @@ else()
   endif()
   list(APPEND HDRVIEW_DEPENDENCIES "clip")
   list(APPEND EXTRA_SOURCES src/clipboard_native.cpp)
+  if(LINUX)
+    list(APPEND EXTRA_SOURCES src/clipboard_wayland.cpp)
+  endif()
 
 endif()
 
