@@ -49,18 +49,13 @@ bool keeps_hdr();
 */
 std::optional<bool> own_copy(const ClipboardFile &file);
 
-/// The file among \p files that a clipboard holding one per copy takes, or else the first.
-/**
-    The EXR, which carries the image's own half-float values in its own primaries, where the PQ PNG re-encodes
-    them into BT.2020. The browsers take only the PNG, and clipboard_web.cpp's carries() leaves the rest out.
-*/
+/// The PNG among \p files, for the browsers, which take one file per copy and only that one.
 inline const ClipboardFile *single_file(const std::vector<ClipboardFile> &files)
 {
-    for (const char *type : {"image/x-exr", "image/tiff", "image/png"})
-        for (const auto &f : files)
-            if (f.type == type)
-                return &f;
-    return files.empty() ? nullptr : &files.front();
+    for (const auto &f : files)
+        if (f.type == "image/png")
+            return &f;
+    return nullptr;
 }
 
 } // namespace clipboard_platform

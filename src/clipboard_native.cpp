@@ -10,12 +10,13 @@
     The system clipboard on macOS, Windows and Linux: see clipboard_platform.h.
 
     dacap/clip reaches it on macOS, Windows and X11, passing each encoded file as a custom format under the name the
-    platform gives that file type. On Wayland, clip has no access, and the GLFW fork's own clipboard calls carry one
-    file per copy.
+    platform gives that file type. On Wayland, where clip has no access, clipboard_wayland.cpp owns a data source of
+    HDRView's own, which carries every encoding at once and can say what another application offered.
 */
 
 #include "clipboard_platform.h"
 
+#include <algorithm>
 #include <clip.h>
 #include <spdlog/spdlog.h>
 
@@ -30,6 +31,7 @@
 #endif
 
 #if defined(__linux__)
+#include "clipboard_wayland.h"
 #include <GLFW/glfw3.h>
 #define GLFW_EXPOSE_NATIVE_WAYLAND
 #include <GLFW/glfw3native.h>
@@ -76,6 +78,16 @@ const char *native_name(const string &mime)
 
 #if defined(__linux__)
 bool on_wayland() { return glfwGetPlatform() == GLFW_PLATFORM_WAYLAND; }
+
+/// The first of k_formats the Wayland selection offers, or nothing when it offers none of them.
+const Format *offered_format()
+{
+    const auto offered = clipboard_wayland::offered_types();
+    for (const auto &f : k_formats)
+        if (std::find(offered.begin(), offered.end(), f.mime) != offered.end())
+            return &f;
+    return nullptr;
+}
 #else
 constexpr bool on_wayland() { return false; }
 #endif
@@ -169,19 +181,20 @@ ClipboardRead read_through_clip()
 namespace clipboard_platform
 {
 
-void start() {}
+void start()
+{
+#if defined(__linux__)
+    if (on_wayland())
+        clipboard_wayland::start();
+#endif
+}
 
 bool write(const vector<ClipboardFile> &files)
 {
 #if defined(__linux__)
+    // every encoding at once, so each application takes the one it reads
     if (on_wayland())
-    {
-        const ClipboardFile *file = single_file(files);
-        if (!file)
-            return false;
-        glfwSetWaylandClipboardData(file->bytes.data(), file->type.c_str(), file->bytes.size());
-        return true;
-    }
+        return clipboard_wayland::write(files);
 #endif
     try
     {
@@ -209,31 +222,25 @@ void read(function<void(ClipboardRead)> done)
 #if defined(__linux__)
     if (on_wayland())
     {
-        // The GLFW fork cannot list what another application offered, so each format is asked for in turn and the
-        // one that answers wins. It hands back HDRView's own copy whatever format is asked for, which is why
-        // is_own_clipboard_file() recognizes a copy by its bytes rather than by the format it came back as.
+        // the best of what the selection offers, which it names before any of it is asked for
         ClipboardRead read;
-        for (const auto &f : k_formats)
-        {
-            size_t      length = 0;
-            const char *data   = glfwGetWaylandClipboardData(f.mime, &length);
-            if (data && length)
-            {
-                read.file = ClipboardFile{f.mime, string(data, length)};
-                break;
-            }
-        }
+        if (const Format *f = offered_format())
+            read.file = clipboard_wayland::read(f->mime);
         return done(std::move(read));
     }
 #endif
     done(read_through_clip());
 }
 
-// the GLFW fork cannot list what another application offered on Wayland
-bool can_ask() { return !on_wayland(); }
+// every platform can now say what the clipboard holds without reading it
+bool can_ask() { return true; }
 
 bool holds_image()
 {
+#if defined(__linux__)
+    if (on_wayland())
+        return offered_format() != nullptr;
+#endif
     // Asking waits on whichever application copied last on X11, and on Windows opens the clipboard, keeping every
     // other application out of it meanwhile; clipboard.cpp asks only as the window regains focus.
     try
@@ -255,7 +262,7 @@ bool holds_image()
     return false;
 }
 
-bool carries(const string &type) { return on_wayland() ? type == "image/x-exr" : native_name(type) != nullptr; }
+bool carries(const string &type) { return native_name(type) != nullptr; }
 
 bool keeps_hdr() { return true; }
 
